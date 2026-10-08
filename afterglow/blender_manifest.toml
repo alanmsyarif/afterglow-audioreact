@@ -1,0 +1,14 @@
+schema_version = "1.0.0"
+
+id = "afterglow"
+version = "0.7.0"
+name = "Afterglow"
+tagline = "Audio-reactive emission for every object in a collection"
+maintainer = "alanmaulanasyarif@gmail.com"
+type = "add-on"
+blender_version_min = "5.2.0"
+license = ["SPDX:GPL-3.0-or-later"]
+tags = ["Animation", "Material"]
+
+[build]
+paths_exclude_pattern = ["__pycache__/"]
