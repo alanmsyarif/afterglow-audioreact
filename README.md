@@ -1,8 +1,8 @@
-# Afterglow — Environment Effects (v0.8.2)
+# Afterglow Environment Effects (v0.8.2)
 
 Audio-only environment effects for the whole venue: independent, stackable light
 layers triggered by onsets in the track. Generated effects are **real lights only**
-(point/spot lamps with keyed energy, location and rotation) — no meshes, materials
+(point/spot lamps with keyed energy, location and rotation) no meshes, materials
 or other geometry are ever added, so your venue stays exactly as you built it and
 the look comes from real light spill on your existing objects. No weather, no
 network — everything comes from the sound file you already picked in the Afterglow
@@ -29,10 +29,10 @@ you can bring layers in gradually as the track builds (e.g. keyframe Weight 0 �
 `Venue Shape` genuinely routes emitters in world space over the shared venue bounds
 (fitted to the Afterglow collection, never per-object):
 
-- **Circular** — trails ride a circle; spawns fill the disc.
-- **Square** — trails ride a square rim; spawns fill the square.
-- **Rectangular** — trails ride the venue bounds' own rectangle.
-- **Triangular** — trails ride a triangle; spawns fill the triangle.
+- **Circular** trails ride a circle; spawns fill the disc.
+- **Square** trails ride a square rim; spawns fill the square.
+- **Rectangular** trails ride the venue bounds' own rectangle.
+- **Triangular** trails ride a triangle; spawns fill the triangle.
 
 ## Usage
 
