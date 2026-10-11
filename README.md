@@ -81,8 +81,7 @@ ffmpeg -i <OUT>/frames/%04d.png -vf "select='not(mod(n,8))',scale=320:-1,tile=4x
   geometry/volumetric look). Downward Trails read as a smooth cascade of falling
   points of light instead; Strikes and Gun Bursts read as aimed spots.
 - The effect timing and placement are an **interpretation** of the reference
-  video's look (cool selective light in a dark venue). Exact TITAN add-on motion is
-  not verified or claimed.
+  video's look (cool selective light in a dark venue).
 - Effect lights have shadows disabled (dozens of shadow-casting lights would crawl);
   they provide environmental spill only.
 - Keyframed layer controls are sampled **per event at Build time** — re-Build after
