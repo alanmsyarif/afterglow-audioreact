@@ -2,7 +2,7 @@ import bpy
 from bpy.props import StringProperty
 from bpy_extras.io_utils import ImportHelper
 
-from . import bake, core, nodes, tempo
+from . import bake, core, effects, nodes, tempo
 
 
 class AFTERGLOW_OT_load_sound(bpy.types.Operator, ImportHelper):
@@ -130,6 +130,81 @@ class AFTERGLOW_OT_remove(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class AFTERGLOW_OT_build_effects(bpy.types.Operator):
+    bl_idname = "afterglow.build_effects"
+    bl_label = "Build Effects"
+    bl_description = ("Analyse the sound once and key the enabled environment-effect layers "
+                      "over the venue as pooled geometry and real lights")
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        import time
+        t0 = time.perf_counter()
+        try:
+            counts = effects.build(context.scene)
+        except ValueError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+        total = sum(counts.values())
+        self.report({"INFO"}, f"{total} events on {len(counts)} layers "
+                              f"in {time.perf_counter() - t0:.1f} s")
+        return {"FINISHED"}
+
+
+class AFTERGLOW_OT_remove_effects(bpy.types.Operator):
+    bl_idname = "afterglow.remove_effects"
+    bl_label = "Remove Effects"
+    bl_description = "Delete the Afterglow Effects collection and every datablock it owns"
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        n = effects.remove(context.scene)
+        self.report({"INFO"}, f"Removed {n} effect objects")
+        return {"FINISHED"}
+
+
+class AFTERGLOW_PT_effects(bpy.types.Panel):
+    bl_label = "Afterglow Environment Effects"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Afterglow"
+    bl_options = {"DEFAULT_CLOSED"}
+
+    def draw(self, context):
+        fx = context.scene.afterglow.effects
+        col = self.layout.column()
+        row = col.row(align=True)
+        row.prop(fx, "venue_shape", text="Shape")
+        row.prop(fx, "seed")
+        row = col.row(align=True)
+        row.prop(fx, "height")
+        row.prop(fx, "margin")
+        for name in effects.LAYERS:
+            layer = getattr(fx, name)
+            box = col.box()
+            head = box.row(align=True)
+            head.prop(layer, "enabled", text="")
+            head.label(text=fx.bl_rna.properties[name].name, icon="OUTLINER_OB_LIGHT")
+            if layer.enabled:
+                body = box.column(align=True)
+                body.prop(layer, "trigger_band")
+                r = body.row(align=True)
+                r.prop(layer, "weight")
+                r.prop(layer, "intensity")
+                r = body.row(align=True)
+                r.prop(layer, "timing")
+                r.prop(layer, "color", text="")
+        if effects.outdated(context.scene):
+            warn = col.row(align=True)
+            warn.alert = True
+            warn.label(text="Build outdated: settings changed", icon="ERROR")
+        row = col.row(align=True)
+        row.operator("afterglow.build_effects")
+        row.operator("afterglow.remove_effects")
+        col.label(text="Weight/Intensity/Timing are keyframeable:", icon="INFO")
+        col.label(text="Build samples their animation per event")
+
+
 class AFTERGLOW_PT_panel(bpy.types.Panel):
     bl_label = "Afterglow"
     bl_space_type = "VIEW_3D"
@@ -197,7 +272,8 @@ class AFTERGLOW_PT_panel(bpy.types.Panel):
 
 
 CLASSES = (AFTERGLOW_OT_load_sound, AFTERGLOW_OT_apply, AFTERGLOW_OT_respread,
-           AFTERGLOW_OT_calibrate, AFTERGLOW_OT_bake, AFTERGLOW_OT_remove, AFTERGLOW_PT_panel)
+           AFTERGLOW_OT_calibrate, AFTERGLOW_OT_bake, AFTERGLOW_OT_remove, AFTERGLOW_PT_panel,
+           AFTERGLOW_OT_build_effects, AFTERGLOW_OT_remove_effects, AFTERGLOW_PT_effects)
 
 
 def register():

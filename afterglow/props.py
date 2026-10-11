@@ -1,7 +1,8 @@
 import bpy
-from bpy.props import BoolProperty, EnumProperty, FloatProperty, IntProperty, PointerProperty
+from bpy.props import (BoolProperty, EnumProperty, FloatProperty, FloatVectorProperty,
+                       IntProperty, PointerProperty)
 
-from . import bake, core, materials, nodes, tempo
+from . import bake, core, effects, materials, nodes, tempo
 
 
 def _sync(self, context):
@@ -31,6 +32,50 @@ def _replace(self, context):
     core.sync(context.scene)
     core.replace(context.scene)
     _rebake(context.scene)
+
+
+class AfterglowFXLayer(bpy.types.PropertyGroup):
+    """One stackable environment-effect layer. Floats are keyframeable on the Scene:
+    effects.build samples their animation per event, so layers can join as a track builds."""
+    enabled: BoolProperty(name="Enabled", default=False,
+                          description="This layer fires on its trigger band's onsets (Build Effects to apply)")
+    weight: FloatProperty(name="Weight", default=0.8, min=0.0, max=1.0,
+                          description="Share of onsets this layer answers; keyframe it to bring the layer in later")
+    intensity: FloatProperty(name="Intensity", default=1.0, min=0.0, max=4.0,
+                             description="Brightness and size multiplier")
+    color: FloatVectorProperty(name="Color", subtype="COLOR", size=3, min=0.0, max=1.0,
+                               default=(0.8, 0.9, 1.0), description="Emission and light colour")
+    timing: FloatProperty(name="Timing", default=1.0, min=0.25, max=4.0,
+                          description="Event duration multiplier")
+    trigger_band: EnumProperty(name="Trigger Band", default="LOW", items=effects.BAND_ITEMS,
+                               description="Which frequency band's onsets fire this layer")
+
+
+class AfterglowEffects(bpy.types.PropertyGroup):
+    venue_shape: EnumProperty(name="Venue Shape", default="CIRCLE", items=(
+        ("CIRCLE", "Circular", "Emitters ride a circle around the venue centre"),
+        ("SQUARE", "Square", "Emitters ride a square around the venue bounds"),
+        ("RECT", "Rectangular", "Emitters ride the venue bounds' own rectangle"),
+        ("TRIANGLE", "Triangular", "Emitters ride a triangle around the venue bounds"),
+    ), description="Emitter paths and spawn footprints follow this shape over the whole venue")
+    seed: IntProperty(name="Seed", default=20260, min=0,
+                      description="Deterministic event placement; same seed, same show")
+    height: FloatProperty(name="Height", default=8.0, min=0.5, soft_max=50.0,
+                          description="How far above the venue the effects rise")
+    margin: FloatProperty(name="Margin", default=1.15, min=0.2, max=4.0,
+                          description="Grow or shrink the venue footprint around the collection")
+    strikes: PointerProperty(type=AfterglowFXLayer, name="Data Strikes",
+                             description="Thin vertical shafts that snap on over the venue")
+    blooms: PointerProperty(type=AfterglowFXLayer, name="Data Blooms",
+                            description="Soft spheres of light that swell and fade")
+    flashes: PointerProperty(type=AfterglowFXLayer, name="Rapid Flashes",
+                             description="Very short whole-venue light bursts")
+    trails: PointerProperty(type=AfterglowFXLayer, name="Travelling Light Trails",
+                            description="A bright head with a fading tail riding the venue path")
+    downward: PointerProperty(type=AfterglowFXLayer, name="Downward Trails",
+                              description="Streaks that fall from the top of the venue to the ground")
+    gun: PointerProperty(type=AfterglowFXLayer, name="Gun Bursts",
+                         description="Short fast directed bursts fired from the rim toward the centre")
 
 
 def _retempo(self, context):
@@ -74,6 +119,7 @@ class AfterglowScene(bpy.types.PropertyGroup):
     fast_playback: BoolProperty(name="Fast Playback", description="Precompute the reaction so playback "
                                 "never evaluates the slow sound node. Re-bake after editing bands, "
                                 "Decay or Delay in the modifier panel", update=_fast)
+    effects: PointerProperty(type=AfterglowEffects, name="Environment Effects")
 
 
 def _meter(self, context):
@@ -100,7 +146,7 @@ class AfterglowObject(bpy.types.PropertyGroup):
     meter_invert: BoolProperty(name="Invert", description="Fill from the far end (top down)", update=_meter)
 
 
-CLASSES = (AfterglowScene, AfterglowObject)
+CLASSES = (AfterglowFXLayer, AfterglowEffects, AfterglowScene, AfterglowObject)
 
 
 def register():
