@@ -1,4 +1,4 @@
-"""Environment effects: onset analysis, venue shapes, pooled builds, motion, stacking, removal."""
+"""Environment effects: onset analysis, venue shapes, light-only pooled builds, motion, stacking, removal."""
 import math
 import os
 import sys
@@ -8,6 +8,7 @@ import wave
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np  # noqa: E402
 import bpy  # noqa: E402
+from mathutils import Vector  # noqa: E402
 import helpers  # noqa: E402  (puts repo root on sys.path)
 import afterglow  # noqa: E402
 from helpers import emission_material, plane  # noqa: E402
@@ -361,25 +362,35 @@ def channel_signature():
     return sorted(out)
 
 
-def test_build_creates_tagged_collection_meshes_and_lights():
+def test_build_creates_only_tagged_lights():
     scene = build_stage()
     counts = effects.build(scene)
     assert counts["strikes"] == len(BASS_PULSES), counts
     colls = [c for c in bpy.data.collections if c.get(effects.TAG)]
     assert len(colls) == 1 and colls[0].name == effects.COLLECTION
     objs = fx_objs("strikes")
-    assert len(objs) == effects.POOL["strikes"] * 2  # mesh + real light per slot
-    lights = [ob for ob in objs if ob.type == "LIGHT"]
-    meshes = [ob for ob in objs if ob.type == "MESH"]
-    assert len(lights) == len(meshes) == effects.POOL["strikes"]
-    assert all(ob.data.type in ("POINT", "SPOT") for ob in lights)
-    assert all(ob.data.get(effects.TAG) for ob in lights)
-    # own emission material per mesh object (so strength curves never cross-fade)
-    mats = [ob.data.materials[0] for ob in meshes]
-    assert len({m.name for m in mats}) == len(mats)
-    assert all(m.get(effects.TAG) for m in mats)
-    # every pool object lives in the tagged collection
+    assert len(objs) == effects.POOL["strikes"]        # one real light per pool slot
+    assert all(ob.type == "LIGHT" for ob in objs)      # lights only, never meshes
+    assert all(ob.data.type in ("POINT", "SPOT") for ob in objs)
+    assert all(ob.get(effects.TAG) and ob.data.get(effects.TAG) for ob in objs)
+    # every pool light lives in the tagged collection
     assert set(colls[0].all_objects) == set(objs)
+
+
+def test_build_generates_no_meshes_or_materials():
+    scene = stage()
+    enable(scene, *effects.LAYERS)
+    user_meshes = set(bpy.data.meshes)
+    user_mats = set(bpy.data.materials)
+    effects.build(scene)
+    assert not [ob for ob in bpy.data.objects if ob.get(effects.TAG) and ob.type != "LIGHT"]
+    assert not [m for m in bpy.data.meshes if m.get(effects.TAG)]
+    assert not [m for m in bpy.data.materials if m.get(effects.TAG)]
+    assert set(bpy.data.meshes) == user_meshes         # the venue is left exactly as built
+    assert set(bpy.data.materials) == user_mats
+    want = sum(effects.POOL[n] * (effects.DOWN_LIGHTS if n == "downward" else 1)
+               for n in effects.LAYERS)
+    assert len(fx_objs()) == want                      # the expected tagged LIGHT count
 
 
 def test_rebuild_is_idempotent():
@@ -387,11 +398,11 @@ def test_rebuild_is_idempotent():
     effects.build(scene)
     first = channel_signature()
     n_coll = len(bpy.data.collections)
-    n_mesh = len(bpy.data.meshes)
+    n_light = len(bpy.data.lights)
     effects.build(scene)
     assert len([c for c in bpy.data.collections if c.get(effects.TAG)]) == 1
     assert len(bpy.data.collections) == n_coll
-    assert len(bpy.data.meshes) == n_mesh  # no leaked copies
+    assert len(bpy.data.lights) == n_light  # no leaked copies
     assert channel_signature() == first    # same show, key for key
 
 
@@ -411,7 +422,7 @@ def test_remove_restores_user_scene():
     user_meshes = set(bpy.data.meshes)
     effects.build(scene)
     n = effects.remove(scene)
-    assert n >= effects.POOL["strikes"] * 2
+    assert n == effects.POOL["strikes"]              # lights only: one object per slot
     assert not [c for c in bpy.data.collections if c.get(effects.TAG)]
     assert not fx_objs()
     assert set(bpy.data.objects) == user_objs
@@ -419,6 +430,7 @@ def test_remove_restores_user_scene():
     assert set(bpy.data.meshes) == user_meshes
     assert not [a for a in bpy.data.actions if a.get(effects.TAG)]
     assert not [l for l in bpy.data.lights if l.get(effects.TAG)]
+    assert not [m for m in bpy.data.materials if m.get(effects.TAG)]
     # the user's own material is untouched
     mat = bpy.data.objects["v0"].data.materials[0]
     assert [n.name for n in mat.node_tree.nodes] == ["Emission", "Material Output"]
@@ -452,29 +464,24 @@ def test_silence_build_is_dark():
     counts = effects.build(scene)
     assert all(v == 0 for v in counts.values()), counts
     objs = fx_objs()
-    assert objs
+    assert objs and all(ob.type == "LIGHT" for ob in objs)  # silence builds a dark, mesh-free pool
     for f in range(0, 145, 7):
         scene.frame_set(f)
         for ob in objs:
-            if ob.type == "LIGHT":
-                assert ob.data.energy == 0.0, (ob.name, f)
-            else:
-                assert max(ob.scale) < 1e-6, (ob.name, f, tuple(ob.scale))
+            assert ob.data.energy == 0.0, (ob.name, f)
 
 
 # ---------------------------------------------------------------- slice 4: motion & timing
 
-def track(scene, name, value_fn, lo=0, hi=200):
+def lit_rows(scene, name, value_fn, lo, hi, thresh=1e-6):
+    """(frame, value) for every frame in [lo, hi) where the named effect light is lit."""
     ob = bpy.data.objects[name]
     out = []
     for f in range(lo, hi):
         scene.frame_set(f)
-        out.append((f, value_fn(ob)))
+        if ob.data.energy > thresh:
+            out.append((f, value_fn(ob)))
     return out
-
-
-def visible(traced):
-    return [(f, v) for f, v in traced if v]
 
 
 def enable(scene, *layers):
@@ -485,20 +492,49 @@ def enable(scene, *layers):
         layer.weight = 1.0
 
 
-def test_downward_trails_fall():
+def test_downward_trail_is_a_smooth_light_cascade():
     scene = stage()
     enable(scene, "downward")
     effects.build(scene)
-    z = visible(track(scene, "AFX_downward_0",
-                      lambda ob: ob.location.z if max(ob.scale) > 1e-4 else None,
-                      lo=24, hi=47))  # first event only: sparse pulses reuse slot 0
-    frames = [f for f, _ in z]
-    zs = [v for _, v in z]
+    objs = fx_objs("downward")
+    assert all(ob.type == "LIGHT" for ob in objs)     # no geometry anywhere in the layer
+    assert len(objs) == effects.POOL["downward"] * effects.DOWN_LIGHTS
+    # head light of the first event: smooth monotonic fall from the venue top to the ground
+    rows = lit_rows(scene, "AFX_downward_0_light0", lambda ob: ob.location.z, lo=24, hi=47)
+    frames = [f for f, _ in rows]
+    zs = [z for _, z in rows]
     assert len(frames) >= 5, frames
-    assert all(b <= a + 1e-6 for a, b in zip(zs, zs[1:])), zs  # never rises
-    assert zs[0] > 6.5 and zs[-1] < 2.0, (zs[0], zs[-1])      # venue top (z1=8) to near ground
-    # the first event starts at the 1.0 s bass pulse: frame ~24 at 24 fps
-    assert abs(frames[0] - 24) <= 4, frames[0]
+    assert all(b <= a + 1e-6 for a, b in zip(zs, zs[1:])), zs        # never rises
+    steps = [a - b for a, b in zip(zs, zs[1:])]
+    assert max(steps) <= 1.6 * min(steps) + 1e-6, steps              # steady glide, no blocky jumps
+    assert zs[0] > 6.5 and zs[-1] < 2.0, (zs[0], zs[-1])             # venue top (z1=8) to near ground
+    assert abs(frames[0] - 25) <= 4, frames[0]                       # first pulse at 1.0 s -> frame ~25
+    # mid-event the cascade lights spread vertically: a trail of lights, not one dot
+    spread = 0.0
+    for f in range(24, 45):
+        scene.frame_set(f)
+        zs2 = [ob.location.z for ob in objs if ob.data.energy > 1.0]
+        if len(zs2) >= 2:
+            spread = max(spread, max(zs2) - min(zs2))
+    assert spread > 0.5, spread
+
+
+def test_downward_rebuild_and_remove_lifecycle():
+    scene = stage()
+    enable(scene, "downward")
+    user_objs = set(bpy.data.objects)
+    effects.build(scene)
+    sig = channel_signature()
+    n_light = len(bpy.data.lights)
+    effects.build(scene)
+    assert channel_signature() == sig                                # rebuild is idempotent
+    assert len(bpy.data.lights) == n_light
+    n = effects.remove(scene)
+    assert n == effects.POOL["downward"] * effects.DOWN_LIGHTS       # remove is safe and total
+    assert not fx_objs()
+    assert not [l for l in bpy.data.lights if l.get(effects.TAG)]
+    assert not [a for a in bpy.data.actions if a.get(effects.TAG)]
+    assert set(bpy.data.objects) == user_objs                        # the venue survives untouched
 
 
 def test_travelling_trail_rides_circular_path():
@@ -506,9 +542,8 @@ def test_travelling_trail_rides_circular_path():
     enable(scene, "trails")
     effects.build(scene)
     v = effects.make_venue(scene)
-    pts = [v for v in (l[1] for l in track(scene, "AFX_trails_0",
-                                           lambda ob: tuple(ob.location) if max(ob.scale) > 1e-4 else None,
-                                           lo=24, hi=75)) if v]
+    pts = [p for _, p in lit_rows(scene, "AFX_trails_0_light",
+                                  lambda ob: tuple(ob.location), lo=24, hi=75)]
     assert len(pts) >= 8, len(pts)
     for p in pts:
         d = math.dist(p[:2], (v.center.x, v.center.y))
@@ -530,9 +565,9 @@ def test_venue_shape_routes_trails():
         ob = None
         pos = []
         for f in range(20, 75):
-            ob = bpy.data.objects["AFX_trails_0"]
+            ob = bpy.data.objects["AFX_trails_0_light"]
             scene.frame_set(f)
-            if max(ob.scale) > 1e-4:
+            if ob.data.energy > 1e-6:
                 pos.append(tuple(ob.location.xy))
         positions[shape] = pos
     sq, ci = positions["SQUARE"], positions["CIRCLE"]
@@ -551,8 +586,8 @@ def test_gun_burst_is_fast_and_directed():
     effects.build(scene)
     v = effects.make_venue(scene)
     pts = [(f, tuple(ob.location)) for f, ob in
-           ((f, bpy.data.objects["AFX_gun_0"]) for f in range(24, 40))  # first burst only
-           if (scene.frame_set(f) or max(ob.scale) > 1e-4)]
+           ((f, bpy.data.objects["AFX_gun_0_light"]) for f in range(24, 40))  # first burst only
+           if (scene.frame_set(f) or ob.data.energy > 1e-6)]
     assert len(pts) >= 3, pts
     dists = [math.dist(p[:2], (v.center.x, v.center.y)) for _, p in pts]
     assert v.radius - 1.0 < dists[0] <= v.radius + 0.05, dists[0]  # fired from the rim (the
@@ -562,19 +597,22 @@ def test_gun_burst_is_fast_and_directed():
     assert pts[-1][0] - pts[0][0] <= 10                  # short directed burst, not a drift
 
 
-def test_strikes_are_static_vertical_shafts():
+def test_strikes_spot_is_static_and_aimed_down():
     scene = stage()
     enable(scene, "strikes")
     effects.build(scene)
-    rows = [(f, tuple(ob.location), tuple(ob.scale)) for f, ob in
-            ((f, bpy.data.objects["AFX_strikes_0"]) for f in range(15, 45))
-            if (scene.frame_set(f) or max(ob.scale) > 1e-4)]
+    ob = bpy.data.objects["AFX_strikes_0_light"]
+    assert ob.data.type == "SPOT"
+    rows = [(f, tuple(ob.location)) for f in range(15, 45)
+            if (scene.frame_set(f) or ob.data.energy > 1e-6)]
     assert rows
-    xy = {(round(p[0], 6), round(p[1], 6)) for _, p, _ in rows}
-    assert len(xy) == 1, xy                              # the shaft does not wander
-    zt = max(s[2] for _, _, s in rows)
-    rt = max(max(s[0], s[1]) for _, _, s in rows)
-    assert zt > 4.0 and rt < 0.3 and zt > 15 * rt, (zt, rt)  # tall and thin: venue-height shaft
+    xy = {(round(p[0], 6), round(p[1], 6)) for _, p in rows}
+    assert len(xy) == 1, xy                                     # the spot does not wander
+    v = effects.make_venue(scene)
+    assert abs(rows[0][1][2] - v.z1) < 1e-3, rows[0]            # crowning the venue top
+    scene.frame_set(rows[len(rows) // 2][0])
+    d = ob.matrix_world.to_3x3() @ Vector((0.0, 0.0, -1.0))     # spots shine along local -Z
+    assert d.z < -0.99, tuple(d)                                # aimed straight down at the floor
 
 
 def test_timing_mask_dark_outside_events():
@@ -582,13 +620,11 @@ def test_timing_mask_dark_outside_events():
     enable(scene, "strikes", "downward", "blooms", "flashes", "trails", "gun")
     effects.build(scene)
     objs = fx_objs()
+    assert all(ob.type == "LIGHT" for ob in objs)
     for f in (2, 5, 20, 200, 210):  # before the first pulse (~26.5) and past the song tail
         scene.frame_set(f)
         for ob in objs:
-            if ob.type == "LIGHT":
-                assert ob.data.energy == 0.0, (ob.name, f)
-            else:
-                assert max(ob.scale) < 1e-6, (ob.name, f)
+            assert ob.data.energy == 0.0, (ob.name, f)
     # and lit inside an event: the 1.0 s pulse peaks around frame 27-28
     scene.frame_set(28)
     assert any(ob.type == "LIGHT" and ob.data.energy > 0 for ob in objs)

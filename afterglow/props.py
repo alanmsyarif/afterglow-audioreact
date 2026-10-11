@@ -42,9 +42,9 @@ class AfterglowFXLayer(bpy.types.PropertyGroup):
     weight: FloatProperty(name="Weight", default=0.8, min=0.0, max=1.0,
                           description="Share of onsets this layer answers; keyframe it to bring the layer in later")
     intensity: FloatProperty(name="Intensity", default=1.0, min=0.0, max=4.0,
-                             description="Brightness and size multiplier")
+                             description="Brightness multiplier for the layer's lights")
     color: FloatVectorProperty(name="Color", subtype="COLOR", size=3, min=0.0, max=1.0,
-                               default=(0.8, 0.9, 1.0), description="Emission and light colour")
+                               default=(0.8, 0.9, 1.0), description="Light colour")
     timing: FloatProperty(name="Timing", default=1.0, min=0.25, max=4.0,
                           description="Event duration multiplier")
     trigger_band: EnumProperty(name="Trigger Band", default="LOW", items=effects.BAND_ITEMS,
@@ -65,17 +65,17 @@ class AfterglowEffects(bpy.types.PropertyGroup):
     margin: FloatProperty(name="Margin", default=1.15, min=0.2, max=4.0,
                           description="Grow or shrink the venue footprint around the collection")
     strikes: PointerProperty(type=AfterglowFXLayer, name="Data Strikes",
-                             description="Thin vertical shafts that snap on over the venue")
+                             description="Spots of light that snap on over the venue and shine straight down")
     blooms: PointerProperty(type=AfterglowFXLayer, name="Data Blooms",
-                            description="Soft spheres of light that swell and fade")
+                            description="Soft pulses of light that swell and fade inside the venue")
     flashes: PointerProperty(type=AfterglowFXLayer, name="Rapid Flashes",
                              description="Very short whole-venue light bursts")
     trails: PointerProperty(type=AfterglowFXLayer, name="Travelling Light Trails",
-                            description="A bright head with a fading tail riding the venue path")
+                            description="A bright moving light riding the venue path")
     downward: PointerProperty(type=AfterglowFXLayer, name="Downward Trails",
-                              description="Streaks that fall from the top of the venue to the ground")
+                              description="A smooth cascade of lights falling from the top of the venue to the ground")
     gun: PointerProperty(type=AfterglowFXLayer, name="Gun Bursts",
-                         description="Short fast directed bursts fired from the rim toward the centre")
+                         description="Short fast directed spots fired from the rim toward the centre")
 
 
 def _retempo(self, context):

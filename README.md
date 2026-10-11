@@ -1,19 +1,23 @@
-# Afterglow — Environment Effects (v0.8.0)
+# Afterglow — Environment Effects (v0.8.2)
 
 Audio-only environment effects for the whole venue: independent, stackable light
-layers triggered by onsets in the track. No weather, no network — everything comes
-from the sound file you already picked in the Afterglow panel.
+layers triggered by onsets in the track. Generated effects are **real lights only**
+(point/spot lamps with keyed energy, location and rotation) — no meshes, materials
+or other geometry are ever added, so your venue stays exactly as you built it and
+the look comes from real light spill on your existing objects. No weather, no
+network — everything comes from the sound file you already picked in the Afterglow
+panel.
 
 ## Layers
 
 | Layer | What it does | Default trigger band |
 |---|---|---|
-| Data Strikes | Thin vertical shafts that snap on over the venue, with a downward spot for ground spill | Low |
-| Data Blooms | Soft spheres of light that swell and fade inside the venue | Low |
+| Data Strikes | Spots that snap on over the venue top and shine straight down for ground spill | Low |
+| Data Blooms | Soft pulses of light that swell and fade inside the venue | Low |
 | Rapid Flashes | Very short whole-venue bursts from the centre | Low |
-| Travelling Light Trails | A bright head with a stretched fading tail riding the venue rim path | Low |
-| Downward Trails | Streaks that fall from the top of the venue to the ground | Low |
-| Gun Bursts | Short, fast, directed cones fired from the rim toward the centre, with a tight spot | Low |
+| Travelling Light Trails | A bright moving light riding the venue rim path | Low |
+| Downward Trails | A smooth cascade of lights falling from the venue top to the ground | Low |
+| Gun Bursts | Short, fast, directed spots fired from the rim toward the centre | Low |
 
 Layers are **not** a dropdown: enable any combination and they play simultaneously.
 Each layer has its own Weight, Intensity, Color, Timing and Trigger Band. Those
@@ -35,8 +39,9 @@ you can bring layers in gradually as the track builds (e.g. keyframe Weight 0 �
 1. Pick your Collection and Sound in the *Afterglow* sidebar panel as usual.
 2. Open the *Afterglow Environment Effects* panel, choose the venue shape, enable
    layers, set colours/bands.
-3. **Build Effects** — analyses the sound once, then keys pooled geometry and real
-   point/spot lights into a collection named `Afterglow Effects`.
+3. **Build Effects** — analyses the sound once, then keys pooled real point/spot
+   lights into a collection named `Afterglow Effects`. Only lights are generated:
+   no meshes or materials are ever created, so existing scenes are never altered.
 4. Scrub/play. The effects are plain F-curve animation on a layered action, so they
    render in any engine and never touch the Sample Sound node.
 5. **Remove Effects** deletes the collection and every datablock it owns (tagged
@@ -68,11 +73,16 @@ ffmpeg -i <OUT>/frames/%04d.png -vf "select='not(mod(n,8))',scale=320:-1,tile=4x
 
 ## Limitations (honest)
 
-- The effect motion is an **interpretation** of the reference video's look (thin
-  segmented vertical shafts, downward beaded trails, cool selective light in a dark
-  venue). Exact TITAN add-on motion is not verified or claimed.
-- Strikes are solid thin shafts; the reference's dashed/segmented beading is not
-  modelled segment-by-segment.
+- Generated effects are **lights only**: Build never adds meshes, materials or any
+  other geometry, so it cannot clutter or alter your venue. What you see is real
+  light spill on your existing objects and floor.
+- Because no geometry is generated, effects have no visible "beam" or streak shape
+  of their own (the reference video's thin segmented shafts and beaded trails are a
+  geometry/volumetric look). Downward Trails read as a smooth cascade of falling
+  points of light instead; Strikes and Gun Bursts read as aimed spots.
+- The effect timing and placement are an **interpretation** of the reference
+  video's look (cool selective light in a dark venue). Exact TITAN add-on motion is
+  not verified or claimed.
 - Effect lights have shadows disabled (dozens of shadow-casting lights would crawl);
   they provide environmental spill only.
 - Keyframed layer controls are sampled **per event at Build time** — re-Build after
@@ -81,5 +91,6 @@ ffmpeg -i <OUT>/frames/%04d.png -vf "select='not(mod(n,8))',scale=320:-1,tile=4x
 - Event detection is onset-driven per trigger band and tempo-aware when the track provides
   enough repeated pulses to fit a reliable grid. Sparse, sustained, or ambiguous material
   stays onset-driven rather than forcing a guessed beat; silence produces no events.
-- Pools are bounded (2–6 slots per layer); overlapping events beyond the pool share
-  slots rather than spawning unbounded geometry.
+- Pools are bounded (2–6 slots per layer; a Downward Trail event uses a cascade of
+  3 lights in one slot); overlapping events beyond the pool share slots rather than
+  spawning unbounded lights.

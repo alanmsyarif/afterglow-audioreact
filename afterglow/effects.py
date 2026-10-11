@@ -2,9 +2,12 @@
 
 Six independent layers (Data Strikes, Data Blooms, Rapid Flashes, Travelling Light
 Trails, Downward Trails, Gun Bursts) analyse the scene's sound once, place events
-deterministically inside the shared venue bounds, and key pooled geometry plus real
-lights in a tagged, removable collection. Everything is world-space over the venue,
-never normalised per object, and silent audio produces no events.
+deterministically inside the shared venue bounds, and key pooled real lights in a
+tagged, removable collection. Generated effects are lights only: no meshes or
+materials are ever created, so the venue itself is left exactly as the user built it
+and the visible result is real light spill on existing objects. Everything is
+world-space over the venue, never normalised per object, and silent audio produces
+no events.
 """
 import math
 import random
@@ -21,7 +24,7 @@ TAG = "afterglow_effects"
 SIG = TAG + "_sig"
 COLLECTION = "Afterglow Effects"
 PREFIX = "AFX"
-VERSION = 1
+VERSION = 2  # lights-only build layout; invalidates older geometry-based builds
 MIN_GAP = 0.18       # s between two events of one layer
 ONSET_REL = 0.3      # a run must exceed this fraction of the band's p95 to count
 SNAP_MIN_EVENTS = 8  # shorter streams stay raw: too sparse to trust with a grid
@@ -300,14 +303,14 @@ def make_venue(scene):
                  float(lo[2]), float(hi[2]) + fx.height)
 
 
-GEO = {"strikes": "streak", "blooms": "sphere", "flashes": "sphere",
-       "trails": "streak", "downward": "streak", "gun": "cone"}
 LIGHT_KIND = {"strikes": "SPOT", "blooms": "POINT", "flashes": "POINT",
               "trails": "POINT", "downward": "POINT", "gun": "SPOT"}
 SPOT_SIZE = {"strikes": 0.5, "gun": 0.18}
 ENERGY = {"strikes": 900.0, "blooms": 350.0, "flashes": 4000.0,
           "trails": 300.0, "downward": 250.0, "gun": 700.0}
-EMIT_STRENGTH = 24.0     # emission strength at intensity 1, full-strength event
+DOWN_LIGHTS = 3        # cascade size of one Downward Trail event: a trail of falling lights
+DOWN_LAG = 0.12        # fraction of the event duration between one cascade light and the next
+DOWN_GAIN = (1.0, 0.55, 0.3)  # head brightest, tail faintest
 DUR = {"strikes": 0.45, "blooms": 1.1, "flashes": 0.22, "trails": 1.8, "downward": 0.9, "gun": 0.28}
 ATTACK = {"strikes": 0.03, "blooms": 0.12, "flashes": 0.02, "trails": 0.15, "downward": 0.05, "gun": 0.015}
 HOLD = {"strikes": 0.5, "blooms": 0.45, "flashes": 0.35, "trails": 0.7, "downward": 0.8, "gun": 0.85}
@@ -375,69 +378,28 @@ def _tag_action(idblock):
         ad.action[TAG] = VERSION
 
 
-def _geo_mesh(kind):
-    """Unit-sized emitter geometry: streak = Z cylinder r1 d1, sphere = r1 icosphere,
-    cone = base at origin, apex at +Z. Shared by every pool slot of a layer."""
-    import bmesh
-    from mathutils import Matrix
-    name = f"{PREFIX}_geo_{kind}"
-    found = next((m for m in bpy.data.meshes if m.name == name and m.get(TAG)), None)
-    if found:
-        return found
-    bm = bmesh.new()
-    if kind == "sphere":
-        bmesh.ops.create_icosphere(bm, subdivisions=2, radius=1.0, matrix=Matrix.Identity(4))
-    elif kind == "streak":
-        bmesh.ops.create_cone(bm, cap_ends=True, segments=10, radius1=1.0, radius2=1.0,
-                              depth=1.0, matrix=Matrix.Identity(4))
-    else:
-        bmesh.ops.create_cone(bm, cap_ends=True, segments=10, radius1=1.0, radius2=0.0,
-                              depth=1.0, matrix=Matrix.Identity(4))
-        for v in bm.verts:  # 5.2: bmesh.ops.translate kw names are unstable; move verts directly
-            v.co.z += 0.5
-    me = bpy.data.meshes.new(name)
-    bm.to_mesh(me)
-    bm.free()
-    me[TAG] = VERSION
-    return me
-
-
-def _emit_material(name, color):
-    mat = bpy.data.materials.new(name)
-    mat[TAG] = VERSION
-    nt = mat.node_tree
-    nt.nodes.clear()
-    em = nt.nodes.new("ShaderNodeEmission")
-    em.inputs["Color"].default_value = (color[0], color[1], color[2], 1.0)
-    em.inputs["Strength"].default_value = 0.0
-    out = nt.nodes.new("ShaderNodeOutputMaterial")
-    nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
-    nt[TAG] = VERSION
-    return mat, em.inputs["Strength"]
-
-
-def _make_unit(coll, layer, slot, geo, color):
-    """One pool slot: an emitter mesh with its own material, plus a real light sibling
-    (parenting would inherit the emitter's animated scale)."""
-    me = geo.copy()
-    me[TAG] = VERSION
-    mesh_ob = bpy.data.objects.new(f"{PREFIX}_{layer}_{slot}", me)
-    mat, sock = _emit_material(f"{PREFIX}_mat_{layer}_{slot}", color)
-    me.materials.append(mat)
-    li = bpy.data.lights.new(f"{PREFIX}_{layer}_{slot}_light", LIGHT_KIND[layer])
-    li[TAG] = VERSION
-    li.color = (color[0], color[1], color[2])
-    li.energy = 0.0
-    li.use_shadow = False  # dozens of shadow-casting lights would crawl; spill only
-    if LIGHT_KIND[layer] == "SPOT":
-        li.spot_size = SPOT_SIZE[layer]
-        li.spot_blend = 0.35
-    light_ob = bpy.data.objects.new(f"{PREFIX}_{layer}_{slot}_light", li)
-    for ob in (mesh_ob, light_ob):
-        ob[TAG] = VERSION
-        ob.rotation_mode = "QUATERNION"
-        coll.objects.link(ob)
-    return mesh_ob, light_ob, sock
+def _make_unit(coll, layer, slot, color):
+    """One pool slot: a tuple of real lights (a staggered cascade for Downward Trails,
+    a single light for every other layer). Nothing else is generated — no meshes, no
+    materials — so the effects can never alter the venue's own look."""
+    n = DOWN_LIGHTS if layer == "downward" else 1
+    lights = []
+    for j in range(n):
+        name = f"{PREFIX}_{layer}_{slot}_light" + (str(j) if n > 1 else "")
+        li = bpy.data.lights.new(name, LIGHT_KIND[layer])
+        li[TAG] = VERSION
+        li.color = (color[0], color[1], color[2])
+        li.energy = 0.0
+        li.use_shadow = False  # dozens of shadow-casting lights would crawl; spill only
+        if LIGHT_KIND[layer] == "SPOT":
+            li.spot_size = SPOT_SIZE[layer]
+            li.spot_blend = 0.35
+        light_ob = bpy.data.objects.new(name, li)
+        light_ob[TAG] = VERSION
+        light_ob.rotation_mode = "QUATERNION"
+        coll.objects.link(light_ob)
+        lights.append(light_ob)
+    return tuple(lights)
 
 
 def _assign(free, t0, dur):
@@ -460,123 +422,85 @@ def _bright(strength, intensity):
     return max(0.0, min(strength, 2.0)) * max(0.0, intensity)
 
 
-def _key_appear(keys, mesh_ob, light_ob, sock, layer, b, env, frame_of):
-    """Shared appearance channels: emission strength and light energy follow the envelope."""
-    for t, e in env:
-        f = frame_of(t)
-        keys.add(sock, mesh_ob.data.materials[0].node_tree, "default_value", -1, f,
-                 EMIT_STRENGTH * b * e, "BEZIER")
-        keys.add(light_ob.data, light_ob.data, "energy", -1, f, ENERGY[layer] * b * e, "BEZIER")
+def _key_appear(keys, lights, layer, b, env, frame_of):
+    """Light energy follows the envelope; dark outside it."""
+    for light_ob in lights:
+        for t, e in env:
+            keys.add(light_ob.data, light_ob.data, "energy", -1, frame_of(t),
+                     ENERGY[layer] * b * e, "BEZIER")
 
 
-def _key_static_loc(keys, mesh_ob, light_ob, pos, t0, dur, frame_of, quat=None, quat_flip=None):
-    for ob in (mesh_ob, light_ob):
+def _key_static_loc(keys, lights, pos, t0, dur, frame_of):
+    for ob in lights:
         keys.add_vec(ob, ob, "location", frame_of(t0), pos, "LINEAR")
         keys.add_vec(ob, ob, "location", frame_of(t0 + dur), pos, "LINEAR")
-    for ob, q in ((mesh_ob, quat), (light_ob, quat_flip if quat_flip is not None else quat)):
-        if q is not None:
-            keys.add_vec(ob, ob, "rotation_quaternion", frame_of(t0), q, "LINEAR")
-            keys.add_vec(ob, ob, "rotation_quaternion", frame_of(t0 + dur), q, "LINEAR")
 
 
-def _layer_keys(name, keys, unit, venue, ev, b, timing, rng, fps, start):
-    """Motion + scale + brightness channels for one event of one layer."""
-    mesh_ob, light_ob, sock = unit
+def _layer_keys(name, keys, lights, venue, ev, b, timing, rng, fps, start):
+    """Motion + brightness channels for one event of one layer. Lights only: no
+    geometry is keyed, so the venue's own surfaces stay the only visible things."""
     t0, strength = ev
     dur = DUR[name] * max(timing, 0.05)
-    attack = ATTACK[name]
     frame_of = lambda t: start + t * fps  # noqa: E731
-    env = _envelope(t0, dur, attack, HOLD[name])
-    _key_appear(keys, mesh_ob, light_ob, sock, name, _bright(strength, b), env, frame_of)
+    env = _envelope(t0, dur, ATTACK[name], HOLD[name])
+    bright = _bright(strength, b)
     span = venue.span_z
-
-    def scaled(e):  # mesh hides completely as the envelope dies
-        return min(1.0, 3.0 * e)
-
     if name in ("strikes", "blooms", "flashes"):
         if name == "strikes":
             p = venue.footprint(rng)
-            pos = Vector((p.x, p.y, (venue.z0 + venue.z1) / 2))
-            r = 0.04 + 0.06 * strength
-            size = lambda e: (r * e, r * e, span * scaled(e))  # noqa: E731
-            light_pos = Vector((p.x, p.y, venue.z1))  # spot crowns the shaft, aimed down
+            pos = Vector((p.x, p.y, venue.z1))  # the spot crowns the strike, aimed down
         elif name == "blooms":
             p = venue.footprint(rng)
             pos = Vector((p.x, p.y, venue.z0 + 0.45 * span))
-            rb = venue.radius * 0.30 * (0.5 + 0.5 * strength)
-            size = lambda e: (rb * e,) * 3  # noqa: E731
-            light_pos = pos
         else:
             pos = Vector((venue.center.x, venue.center.y, venue.z0 + 0.85 * span))
-            rf = venue.radius * 0.12 * (0.5 + 0.5 * strength)
-            size = lambda e: (rf * e,) * 3  # noqa: E731
-            light_pos = pos
-        _key_static_loc(keys, mesh_ob, light_ob, pos, t0, dur, frame_of)
-        if name == "strikes":  # the spot lives at the shaft's crown, not its middle
-            for t, _ in ((t0, 0), (t0 + dur, 0)):
-                keys.add_vec(light_ob, light_ob, "location", frame_of(t), light_pos, "LINEAR")
-        for t, e in env:
-            keys.add_vec(mesh_ob, mesh_ob, "scale", frame_of(t), size(e), "BEZIER")
+        _key_static_loc(keys, lights, pos, t0, dur, frame_of)
     elif name == "trails":
+        light_ob = lights[0]
         u0 = rng.random()
         direction = 1.0 if rng.random() < 0.5 else -1.0
         u_span = direction * (0.25 + 0.25 * rng.random())
         samples = int(max(6, min(48, round(dur * fps))))
-        length = min(3.0, 0.5 * venue.radius) * (0.6 + 0.4 * strength)
-        r = 0.05 + 0.04 * strength
         for i in range(samples):
             frac = i / (samples - 1)
             p = venue.path_point(u0 + u_span * frac)
-            tan = venue.path_tangent(u0 + u_span * frac) * direction
-            q = UP.rotation_difference(tan)
-            f = frame_of(t0 + dur * frac)
-            for ob in (mesh_ob, light_ob):
-                keys.add_vec(ob, ob, "location", f, p, "LINEAR")
-                keys.add_vec(ob, ob, "rotation_quaternion", f, q, "LINEAR")
-        for t, e in env:
-            keys.add_vec(mesh_ob, mesh_ob, "scale", frame_of(t),
-                         (r * min(1.0, 2.0 * e), r * min(1.0, 2.0 * e), length * scaled(e)), "BEZIER")
+            keys.add_vec(light_ob, light_ob, "location", frame_of(t0 + dur * frac), p, "LINEAR")
     elif name == "downward":
         p = venue.footprint(rng)
-        ztop, zbot = venue.z1, venue.z0 + 0.02 * span
-        length = min(2.0, 0.3 * span) * (0.6 + 0.4 * strength)
-        r = 0.05 + 0.05 * strength
-        top = Vector((p.x, p.y, ztop))
-        bot = Vector((p.x, p.y, zbot))
-        for f, pos in ((frame_of(t0), top), (frame_of(t0 + dur), bot)):
-            for ob in (mesh_ob, light_ob):
-                keys.add_vec(ob, ob, "location", f, pos, "LINEAR")
-        for t, e in env:
-            keys.add_vec(mesh_ob, mesh_ob, "scale", frame_of(t),
-                         (r * min(1.0, 2.0 * e), r * min(1.0, 2.0 * e), length * scaled(e)), "BEZIER")
+        top = Vector((p.x, p.y, venue.z1))
+        bot = Vector((p.x, p.y, venue.z0 + 0.02 * span))
+        # A smooth cascade: every light glides the full height at the SAME constant
+        # speed, started one DOWN_LAG apart, head brightest — a falling trail of
+        # lights instead of one stretched, scaled cylinder.
+        fall = dur * (1.0 - (len(lights) - 1) * DOWN_LAG)
+        for j, light_ob in enumerate(lights):
+            tj = t0 + j * DOWN_LAG * dur
+            _key_appear(keys, (light_ob,), name, bright * DOWN_GAIN[j],
+                        _envelope(tj, fall, ATTACK[name], HOLD[name]), frame_of)
+            keys.add_vec(light_ob, light_ob, "location", frame_of(tj), top, "LINEAR")
+            keys.add_vec(light_ob, light_ob, "location", frame_of(tj + fall), bot, "LINEAR")
+        return
     else:  # gun: short, fast, directed rim -> centre
+        light_ob = lights[0]
         muzzle = venue.path_point(rng.random())
         muzzle.z = venue.z0 + 0.55 * span
         target = Vector((venue.center.x, venue.center.y, venue.z0 + 0.30 * span))
-        delta = target - muzzle
-        dist = delta.length
-        q = UP.rotation_difference(delta.normalized())
+        q = UP.rotation_difference((target - muzzle).normalized())
         q_flip = q @ Quaternion((1.0, 0.0, 0.0), math.pi)  # spots shine along -Z
         mid = muzzle.lerp(target, 0.5)
         for f, pos in ((frame_of(t0), muzzle), (frame_of(t0 + dur / 2), mid),
                        (frame_of(t0 + dur), target)):
-            keys.add_vec(mesh_ob, mesh_ob, "location", f, pos, "LINEAR")
             keys.add_vec(light_ob, light_ob, "location", f, pos, "LINEAR")
-        for ob, qq in ((mesh_ob, q), (light_ob, q_flip)):
-            keys.add_vec(ob, ob, "rotation_quaternion", frame_of(t0), qq, "LINEAR")
-            keys.add_vec(ob, ob, "rotation_quaternion", frame_of(t0 + dur), qq, "LINEAR")
-        rc = 0.10 * (0.6 + 0.4 * strength)
-        lc = max(0.3, min(dist * 0.8, 1.4 * (0.6 + 0.4 * strength)))
-        for t, e in env:
-            keys.add_vec(mesh_ob, mesh_ob, "scale", frame_of(t),
-                         (rc * min(1.0, 4.0 * e), rc * min(1.0, 4.0 * e), lc * scaled(e)), "BEZIER")
+        keys.add_vec(light_ob, light_ob, "rotation_quaternion", frame_of(t0), q_flip, "LINEAR")
+        keys.add_vec(light_ob, light_ob, "rotation_quaternion", frame_of(t0 + dur), q_flip, "LINEAR")
+    _key_appear(keys, lights, name, bright, env, frame_of)
 
 
 def _build_layer(coll, scene, venue, name, events, fps, start, end):
     fx = scene.afterglow.effects
     layer = getattr(fx, name)
     keys = _Keys()
-    units = [_make_unit(coll, name, slot, _geo_mesh(GEO[name]), tuple(layer.color))
+    units = [_make_unit(coll, name, slot, tuple(layer.color))
              for slot in range(POOL[name])]
     rng = random.Random(f"{fx.seed}:{name}:place")
     free = [-1e9] * POOL[name]
@@ -591,31 +515,28 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
         slot = _assign(free, t0, dur)
         _layer_keys(name, keys, units[slot], venue, (t0, strength), intensity, timing, rng, fps, start)
         placed += 1
-    # baseline: everything dark outside the events, so silence renders as nothing
+    # baseline: every light dark outside its events, so silence renders as nothing
     b0, b1 = start - 1.0, end + 1.0
-    for mesh_ob, light_ob, sock in units:
-        for f in (b0, b1):
-            keys.add_vec(mesh_ob, mesh_ob, "scale", f, (0.0, 0.0, 0.0), "BEZIER")
-            keys.add_vec(mesh_ob, mesh_ob, "rotation_quaternion", f, (1.0, 0.0, 0.0, 0.0), "LINEAR")
-            keys.add(sock, mesh_ob.data.materials[0].node_tree, "default_value", -1, f, 0.0, "BEZIER")
-            keys.add(light_ob.data, light_ob.data, "energy", -1, f, 0.0, "BEZIER")
-        mesh_ob.location = (venue.center.x, venue.center.y, venue.z0)
-        light_ob.location = (venue.center.x, venue.center.y, venue.z0)
+    for lights in units:
+        for light_ob in lights:
+            for f in (b0, b1):
+                keys.add(light_ob.data, light_ob.data, "energy", -1, f, 0.0, "BEZIER")
+            light_ob.location = (venue.center.x, venue.center.y, venue.z0)
     keys.write()
-    for mesh_ob, light_ob, sock in units:
-        _tag_action(mesh_ob)
-        _tag_action(light_ob)
-        _tag_action(light_ob.data)
-        _tag_action(mesh_ob.data.materials[0].node_tree)
+    for lights in units:
+        for light_ob in lights:
+            _tag_action(light_ob)
+            _tag_action(light_ob.data)
     return placed
 
 
 def settings_sig(scene):
     """Everything a build depends on, for the panel's stale-build hint. Keyframed layer
-    controls are sampled per event at build time, so their animation is not part of this."""
+    controls are sampled per event at build time, so their animation is not part of this.
+    VERSION is included so builds from older add-on versions always report outdated."""
     s = scene.afterglow
     fx = s.effects
-    vals = [fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4)]
+    vals = [VERSION, fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4)]
     for name in LAYERS:
         layer = getattr(fx, name)
         vals += [layer.enabled, round(layer.weight, 4), round(layer.intensity, 4),
@@ -632,8 +553,9 @@ def outdated(scene):
 
 
 def build(scene):
-    """(Re)build the effects collection: analyse once, then key pooled geometry and real
-    lights for every enabled layer. Deterministic for a given (sound, settings, seed)."""
+    """(Re)build the effects collection: analyse once, then key pooled real lights for
+    every enabled layer. Lights only — no meshes or materials are generated, so the
+    venue is left untouched. Deterministic for a given (sound, settings, seed)."""
     s = scene.afterglow
     if s.sound is None:
         raise ValueError("Pick a sound file first")
@@ -656,7 +578,9 @@ def build(scene):
 
 
 def remove(scene):
-    """Delete every tagged datablock the build owns. User data is never touched."""
+    """Delete every tagged datablock the build owns. User data is never touched.
+    Meshes and materials are still swept so builds from older, geometry-based
+    versions of the add-on are removed cleanly."""
     for c in [c for c in bpy.data.collections if c.get(TAG)]:
         bpy.data.collections.remove(c)
     n = 0

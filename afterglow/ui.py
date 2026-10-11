@@ -134,7 +134,7 @@ class AFTERGLOW_OT_build_effects(bpy.types.Operator):
     bl_idname = "afterglow.build_effects"
     bl_label = "Build Effects"
     bl_description = ("Analyse the sound once and key the enabled environment-effect layers "
-                      "over the venue as pooled geometry and real lights")
+                      "over the venue as pooled real lights (lights only — no geometry is added)")
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -201,6 +201,7 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         row = col.row(align=True)
         row.operator("afterglow.build_effects")
         row.operator("afterglow.remove_effects")
+        col.label(text="Effects are real lights only — no geometry is generated", icon="LIGHT")
         col.label(text="Weight/Intensity/Timing are keyframeable:", icon="INFO")
         col.label(text="Build samples their animation per event")
 
