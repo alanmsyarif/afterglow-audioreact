@@ -5,7 +5,7 @@ layers triggered by onsets in the track. Generated effects are **real lights onl
 (point/spot lamps with keyed energy, location and rotation) no meshes, materials
 or other geometry are ever added, so your venue stays exactly as you built it and
 the look comes from real light spill on your existing objects. No weather, no
-network — everything comes from the sound file you already picked in the Afterglow
+network everything comes from the sound file you already picked in the Afterglow
 panel.
 
 ## Layers
@@ -21,7 +21,7 @@ panel.
 
 Layers are **not** a dropdown: enable any combination and they play simultaneously.
 Each layer has its own Weight, Intensity, Color, Timing and Trigger Band. Those
-floats are keyframeable on the Scene — Build samples their animation per event, so
+floats are keyframeable on the Scene Build samples their animation per event, so
 you can bring layers in gradually as the track builds (e.g. keyframe Weight 0 → 1).
 
 ## Venue shapes
@@ -39,7 +39,7 @@ you can bring layers in gradually as the track builds (e.g. keyframe Weight 0 �
 1. Pick your Collection and Sound in the *Afterglow* sidebar panel as usual.
 2. Open the *Afterglow Environment Effects* panel, choose the venue shape, enable
    layers, set colours/bands.
-3. **Build Effects** — analyses the sound once, then keys pooled real point/spot
+3. **Build Effects** analyses the sound once, then keys pooled real point/spot
    lights into a collection named `Afterglow Effects`. Only lights are generated:
    no meshes or materials are ever created, so existing scenes are never altered.
 4. Scrub/play. The effects are plain F-curve animation on a layered action, so they
@@ -84,7 +84,7 @@ ffmpeg -i <OUT>/frames/%04d.png -vf "select='not(mod(n,8))',scale=320:-1,tile=4x
   video's look (cool selective light in a dark venue).
 - Effect lights have shadows disabled (dozens of shadow-casting lights would crawl);
   they provide environmental spill only.
-- Keyframed layer controls are sampled **per event at Build time** — re-Build after
+- Keyframed layer controls are sampled **per event at Build time** re-Build after
   animating Weight/Intensity/Timing. The *Build outdated* hint does not track
   keyframe edits, only static settings.
 - Event detection is onset-driven per trigger band and tempo-aware when the track provides
