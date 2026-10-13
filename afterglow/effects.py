@@ -27,7 +27,20 @@ COLLECTION = "Afterglow Effects"
 PREFIX = "AFX"
 VERSION = 2  # lights-only build layout; invalidates older geometry-based builds
 MIN_GAP = 0.18       # s between two events of one layer
-ONSET_REL = 0.3      # a run must exceed this fraction of the band's p95 to count
+# Onsets: band-limited spectral flux (how fast the band's sound rises), peak-picked against
+# the music around it rather than the whole song, so beats under sustained bass, pads or a
+# full mix still stand out, and each is timed at its attack rather than its loudest point.
+FLUX_FFT, FLUX_HOP = 2048, 256  # analysis window and step (~5.8 ms at 44.1 kHz)
+FLUX_LOG = 1000.0    # log compression: soft and loud hits rise alike
+FLUX_LAG = 3         # compare with the sound this many hops earlier...
+FLUX_SPREAD = 3      # ...max-filtered over this many bins: slow swells and beating between a
+                     # kick's tail and a held bassline barely register, sharp attacks do (SuperFlux)
+ONSET_SPREAD = 0.25  # s either side the adaptive threshold looks at
+ONSET_PEAK = 0.05    # s: a peak must be the highest this close on either side
+ONSET_RISE = 1.4     # a peak must exceed the local median flux by this factor...
+ONSET_FLOOR = 0.08   # ...and this share of the song's strong flux (p99), so noise never fires
+ONSET_NEAR = 0.3     # s: an onset must be at least ONSET_DOMINANCE as strong as any other
+ONSET_DOMINANCE = 0.75  # this close, so a beat's echoes and weaker off-beat clicks stay quiet
 SNAP_MIN_EVENTS = 8  # shorter streams stay raw: too sparse to trust with a grid
 SNAP_MAX_RMS = 0.15  # grid residual RMS, as a fraction of the period, that still counts as a pulse
 SNAP_TOL = 0.30      # an event never moves more than this fraction of a period
@@ -61,29 +74,66 @@ def sample_prop(scene, path, default, frame):
     return float(fc.evaluate(frame)) if fc else default
 
 
-def _onsets(times, amp):
-    """One event per contiguous run above ONSET_REL*p95, timed at the run's peak.
-    Digital silence (p95 ~ 0) yields nothing; there are no fixed-time fake beats."""
-    if not len(amp):
+def onset_novelty(mono, rate, band):
+    """(times, flux): band-limited spectral flux every FLUX_HOP samples, each frame centred
+    on its time. Flux is the summed rise of log-compressed magnitude over FLUX_LAG hops,
+    against the earlier spectrum max-filtered across FLUX_SPREAD bins (SuperFlux)."""
+    lo, hi = band
+    pad = np.pad(np.asarray(mono, np.float32), (FLUX_FFT // 2, FLUX_FFT // 2))
+    frames = 1 + max(0, len(pad) - FLUX_FFT) // FLUX_HOP
+    freqs = np.fft.rfftfreq(FLUX_FFT, 1.0 / rate)
+    sel = np.nonzero((freqs >= lo) & (freqs <= hi))[0]
+    window = np.hanning(FLUX_FFT).astype(np.float32)
+    flux = np.zeros(frames, np.float32)
+    h = FLUX_SPREAD // 2
+    prev = np.full((FLUX_LAG, len(sel)), np.inf, np.float32)  # the last FLUX_LAG max-filtered
+                                                              # frames; none before the song
+    for c in range(0, frames, 1024):  # chunks bound memory on long songs
+        k = np.arange(c, min(c + 1024, frames))
+        seg = pad[k[:, None] * FLUX_HOP + np.arange(FLUX_FFT)[None, :]] * window
+        spec = np.log1p(FLUX_LOG * np.abs(np.fft.rfft(seg, axis=1))[:, sel] * (2.0 / FLUX_FFT))
+        wide = np.pad(spec, ((0, 0), (h, h)), mode="edge")
+        ref = np.lib.stride_tricks.sliding_window_view(wide, 2 * h + 1, axis=1).max(axis=2)
+        earlier = np.vstack([prev, ref])[:len(k)]  # the reference FLUX_LAG frames back
+        flux[k] = np.maximum(spec - earlier, 0.0).sum(axis=1)
+        prev = np.vstack([prev, ref])[-FLUX_LAG:]
+    return np.arange(frames) * FLUX_HOP / rate, flux
+
+
+def detect_onsets(mono, rate, band):
+    """[(seconds, strength)] onsets in a band: peaks of its spectral flux that are the
+    highest within ONSET_PEAK, beat the local median within ONSET_SPREAD by ONSET_RISE and
+    clear ONSET_FLOOR of the song's strong flux, at least MIN_GAP apart (the stronger one
+    wins). Strength is the peak against the median accepted peak, at most 2. Silence (no
+    flux) yields nothing; there are no fixed-time fake beats."""
+    times, flux = onset_novelty(mono, rate, band)
+    if not len(flux):
         return []
-    p95 = float(np.percentile(amp, 95))
-    if p95 <= 1e-6:
+    strong = float(np.percentile(flux, 99))
+    if strong <= 1e-6:
         return []
-    above = amp > ONSET_REL * p95
-    events, last, i, n = [], -1e9, 0, len(amp)
-    while i < n:
-        if not above[i]:
-            i += 1
+    fps = rate / FLUX_HOP
+    w = max(1, int(ONSET_PEAK * fps))
+    m = max(w, int(ONSET_SPREAD * fps))
+    padded = np.pad(flux, (m, m), mode="edge")
+    view = np.lib.stride_tricks.sliding_window_view(padded, 2 * m + 1)
+    local = np.median(view, axis=1)
+    peak = view[:, m - w:m + w + 1].max(axis=1)
+    keep = (flux >= peak) & (flux > ONSET_RISE * local) & (flux > ONSET_FLOOR * strong)
+    picked = []
+    for k in np.nonzero(keep)[0]:
+        t, v = float(times[k]), float(flux[k])
+        if picked and t - picked[-1][0] < MIN_GAP:
+            if v > picked[-1][1]:
+                picked[-1] = (t, v)
             continue
-        j = i
-        while j < n and above[j]:
-            j += 1
-        k = i + int(np.argmax(amp[i:j]))
-        if times[k] - last >= MIN_GAP:
-            events.append((float(times[k]), min(float(amp[k]) / p95, 2.0)))
-            last = float(times[k])
-        i = j
-    return events
+        picked.append((t, v))
+    picked = [(t, v) for t, v in picked  # quiet next to a stronger onset: an echo or off-beat
+              if v >= ONSET_DOMINANCE * max(u for s, u in picked if abs(s - t) <= ONSET_NEAR)]
+    if not picked:
+        return []
+    ref = float(np.median([v for _, v in picked]))
+    return [(t, min(v / ref, 2.0)) for t, v in picked]
 
 
 def _grid_fit(ts):
@@ -170,8 +220,7 @@ def analyze(scene):
         layer = getattr(fx, name)
         band = BANDS[layer.trigger_band]
         if band not in cache:
-            times, series = bake.band_series(mono, rate, [band])
-            cache[band] = _tempo_snap(_onsets(times, series[0]), mono, rate, curve_box)
+            cache[band] = _tempo_snap(detect_onsets(mono, rate, band), mono, rate, curve_box)
         rng = random.Random(f"{fx.seed}:{name}")
         ev = []
         for t, s in cache[band]:

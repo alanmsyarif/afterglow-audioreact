@@ -200,6 +200,70 @@ def _grid_dev(path, ts):
     return float(dev.max()), 60.0 / step
 
 
+BUSY_BPM, BUSY_INTRO, BUSY_DUR = 124.0, 4.0, 16.0
+
+
+def busy_wav():
+    """A sparse intro (kicks only) then a busy middle: the same kicks over a held square
+    bassline, a pad and off-beat hi-hats. Returns (path, kick times)."""
+    rate = 44100
+    beat = 60.0 / BUSY_BPM
+    kicks = np.arange(0.25, BUSY_DUR - 0.2, beat)
+    path = os.path.join(tempfile.gettempdir(), "afterglow_fx_busy.wav")
+    if os.path.exists(path):
+        return path, kicks
+    rng = np.random.default_rng(1)
+    n = int(rate * BUSY_DUR)
+    t = np.arange(n) / rate
+    x = np.zeros(n, np.float32)
+
+    def add(t0, seg, gain):
+        i = int(t0 * rate)
+        seg = seg[:n - i]
+        x[i:i + len(seg)] += gain * seg
+
+    tk = np.arange(int(0.35 * rate)) / rate
+    kick = np.sin(2 * np.pi * np.cumsum(45 + 75 * np.exp(-tk / 0.03)) / rate) * np.exp(-tk / 0.12)
+    kick[:int(0.004 * rate)] += rng.normal(0, 0.6, int(0.004 * rate))
+    for t0 in kicks:
+        add(t0, kick, 0.9)
+    mid = t >= BUSY_INTRO
+    bass_f = np.where((t // (2 * beat)) % 2 == 0, 55.0, 41.2)
+    x += (0.35 * np.sign(np.sin(2 * np.pi * np.cumsum(bass_f) / rate)) * mid).astype(np.float32)
+    x += (0.15 * mid * sum(np.sin(2 * np.pi * f * t) for f in (220, 330, 440))).astype(np.float32)
+    hat = np.diff(rng.normal(0, 1, int(0.04 * rate)) * np.exp(-np.arange(int(0.04 * rate)) / rate / 0.01),
+                  prepend=0)
+    for t0 in np.arange(BUSY_INTRO, BUSY_DUR - 0.1, beat / 2):
+        add(t0 + beat / 4, hat, 0.25)
+    data = (np.clip(x, -1, 1) * 32767).astype("<i2")
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(data.tobytes())
+    return path, kicks
+
+
+def test_strikes_keep_the_beat_in_a_busy_mix():
+    """Every kick of a busy middle gets its strike, on time, on Low and on Full range: a
+    held bassline, pad and hats never swallow the beat or add strikes between kicks."""
+    path, kicks = busy_wav()
+    scene = stage(path)
+    fx = scene.afterglow.effects
+    fx.strikes.enabled, fx.strikes.weight = True, 1.0
+    mid = kicks[kicks >= BUSY_INTRO]
+    for band in ("LOW", "FULL"):
+        fx.strikes.trigger_band = band
+        ts = np.array(times_of(effects.analyze(scene)["strikes"]))
+        late = ts[ts >= BUSY_INTRO]
+        errs = [late[np.argmin(np.abs(late - k))] - k for k in mid if np.min(np.abs(late - k)) <= 0.06]
+        assert len(errs) >= len(mid) - 1, (band, len(errs), len(mid))       # the beat never drops out
+        assert len(late) - len(errs) <= 2, (band, len(late) - len(errs))    # nothing between kicks
+        assert float(np.mean(np.abs(errs))) < 0.02, (band, np.mean(np.abs(errs)))  # on time
+        early = ts[ts < BUSY_INTRO - 0.1]
+        assert len(early) == np.sum(kicks < BUSY_INTRO - 0.1), (band, early)  # the intro too
+
+
 def test_events_snap_to_detected_beat_grid():
     scene = stage(beat_wav())
     fx = scene.afterglow.effects
@@ -212,10 +276,9 @@ def test_events_snap_to_detected_beat_grid():
     dev, bpm = _grid_dev(beat_wav(), ts)
     assert abs(bpm - BEAT_BPM) < 6.0, bpm            # the train really detects near 120 BPM
     assert dev < 0.06, dev                           # phase-locked to the detected beat grid
-    # and strictly tighter than the raw amplitude-run peaks, which carry the jitter
+    # and strictly tighter than the raw onsets, which carry the jitter
     mono, rate = effects.bake._load(scene)
-    ft, fs = effects.bake.band_series(mono, rate, [effects.BANDS["FULL"]])
-    raw_dev, _ = _grid_dev(beat_wav(), times_of(effects._onsets(ft, fs[0])))
+    raw_dev, _ = _grid_dev(beat_wav(), times_of(effects.detect_onsets(mono, rate, effects.BANDS["FULL"])))
     assert raw_dev > 2 * dev + 0.02, (raw_dev, dev)
 
 
@@ -241,8 +304,7 @@ def test_contradicting_tempo_curve_keeps_raw_onsets():
     finally:
         effects.tempo.tempo_curve = real
     mono, rate = effects.bake._load(scene)
-    lt, ls = effects.bake.band_series(mono, rate, [effects.BANDS["LOW"]])
-    assert ts == times_of(effects._onsets(lt, ls[0]))  # byte-identical raw onsets
+    assert ts == times_of(effects.detect_onsets(mono, rate, effects.BANDS["LOW"]))  # identical raw onsets
 
 
 # ---------------------------------------------------------------- slice 2: venue
