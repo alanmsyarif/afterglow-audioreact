@@ -113,6 +113,29 @@ def test_bake_missing_file_raises():
         raise AssertionError("no ValueError")
 
 
+def test_replaced_file_is_reanalysed():
+    """Same path, new song: the analysis cache and the keyed curve both follow the file."""
+    scene = bpy.context.scene
+    path = write_wav("ag_replaced.wav", clicks(lambda t: 100, 12))
+    scene.afterglow.sound = bpy.data.sounds.load(path)
+    tempo.bake(scene)
+    assert abs(beat_length_at(6) - 0.6) < 0.03
+    write_wav("ag_replaced.wav", clicks(lambda t: 140, 14))  # different length, so different size
+    tempo.bake(scene)
+    assert abs(beat_length_at(6) - 60 / 140) < 0.03, beat_length_at(6)
+
+
+def test_packed_sound_analysed_without_file():
+    scene = bpy.context.scene
+    path = write_wav("ag_packed_tempo.wav", clicks(lambda t: 100, 12))
+    snd = bpy.data.sounds.load(path)
+    snd.pack()
+    os.remove(path)
+    scene.afterglow.sound = snd
+    tempo.bake(scene)
+    assert abs(beat_length_at(6) - 0.6) < 0.03
+
+
 def test_rebake_keeps_hand_edits_and_follows_start_frame():
     scene = bpy.context.scene
     scene.afterglow.sound = bpy.data.sounds.load(write_wav("ag_100.wav", clicks(lambda t: 100, 20)))

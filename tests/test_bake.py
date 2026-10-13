@@ -2,8 +2,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bpy  # noqa: E402  (before aud: the bpy wheel only provides aud once loaded)
 import aud  # noqa: E402
-import bpy  # noqa: E402
 import numpy as np  # noqa: E402
 import helpers  # noqa: E402
 from helpers import at, attr, emission_material, plane, sound  # noqa: E402
@@ -124,6 +124,29 @@ def test_fast_playback_toggle_bakes_and_switches():
         mod = core.find_modifier(bpy.data.objects[n])
         assert nodes.get_input(mod, "Use Baked") is True
         assert bpy.data.objects[n].get(bake.SIG)
+
+
+def test_slider_drag_rebakes_once_settled():
+    """In the UI a dragged setting re-bakes once it settles, not on every step."""
+    from afterglow import props
+    scene = stage()
+    scene.afterglow.fast_playback = True
+    real = props._interactive
+    props._interactive = lambda: True
+    try:
+        for v in (1.5, 2.0, 2.5):  # three drag steps
+            scene.afterglow.beats_per_sweep = v
+        assert bake.outdated(scene), "baked on a drag step"
+        assert bpy.app.timers.is_registered(props._flush)
+        assert props._flush() is not None  # still settling: the timer waits again
+        props._pending[scene.name] -= props.REBAKE_DELAY
+        assert props._flush() is None and not props._pending
+        assert bake.outdated(scene) == []
+    finally:
+        props._interactive = real
+        if bpy.app.timers.is_registered(props._flush):
+            bpy.app.timers.unregister(props._flush)
+        props._pending.clear()
 
 
 def test_baked_playback_much_faster():
