@@ -1,4 +1,4 @@
-# Afterglow (v0.9.0)
+# Afterglow (v0.10.0)
 
 Audio-reactive emission for Blender 5.2. Point Afterglow at a collection and a sound
 file, and every emissive object in it lights up with the music, each one listening to
@@ -10,7 +10,9 @@ Everything comes from the sound file itself: no live input, no network.
 ## Install
 
 1. Requires **Blender 5.2** or newer.
-2. Download `afterglow-<version>.zip` from [`dist/`](dist/).
+2. Download `afterglow-<version>.zip` from
+   [Releases](https://github.com/alanmsyarif/afterglow-audioreact/releases)
+   (versions up to 0.9.0 are also in [`dist/`](dist/)).
 3. In Blender: *Edit → Preferences → Get Extensions → ⌄ → Install from Disk…* and pick
    the zip (or drag the zip onto the Blender window).
 4. Open the 3D Viewport sidebar (`N`) → **Afterglow** tab.
@@ -60,10 +62,11 @@ Select an Afterglow object to tune it in the panel:
 ## Environment Effects
 
 Audio-only environment effects for the whole venue: independent, stackable light layers
-triggered by onsets in the track. Generated effects are **real lights only** (point and
-spot lamps with keyed energy, location and rotation). No meshes, materials or other
-geometry are ever added, so your venue stays exactly as you built it and the look comes
-from real light spill on your existing objects.
+triggered by onsets in the track. By default, generated effects are **real lights only**
+(point and spot lamps with keyed energy, location and rotation). No meshes, materials or
+other geometry are added, so your venue stays exactly as you built it and the look comes
+from real light spill on your existing objects. Turn on **Visible Beams** to also see the
+light in the air (below).
 
 ### Layers
 
@@ -91,13 +94,36 @@ Afterglow collection, never per object):
 - **Rectangular**: trails ride the venue bounds' own rectangle.
 - **Triangular**: trails ride a triangle; spawns fill the triangle.
 
+### Visible Beams
+
+Off by default. **Visible Beams** makes the strikes visible in the air, not just as spill
+on surfaces:
+
+- Each **Data Strike** becomes a thin, white-hot filament from the venue top to the floor,
+  broken into short dashes (a different pattern per light) inside a faint glow. Its light
+  moves down near the filament's base and becomes a point light, so it lights the floor
+  and the sides of nearby objects from low down. With **Companions** on (the default), a
+  fainter filament of short bright beads runs beside it, on a different side per light.
+- Each **Gun Burst** gets a glowing tracer that flies along its aim with a fading tail,
+  and its spot tightens to the tracer's cone.
+
+**Glow** sets the beams' brightness, **Companions** turns the beaded filaments on or off,
+and **Flow** sets how fast the dashes and beads stream down each Strike (0 holds them
+still). The beams are emissive meshes parented to their
+lights, with brightness keyed on the same envelope as the light, so they look the same in
+EEVEE and Cycles and cost almost nothing to render. They cast no shadows and light nothing
+themselves (the lights do that). They're drawn as wireframes and can't be selected, so
+they never hide or block your venue in the viewport, and Remove Effects deletes them with
+the lights.
+
 ### Usage
 
 1. Pick your Collection and Sound in the *Afterglow* panel as usual.
 2. Open the *Afterglow Environment Effects* panel, choose the venue shape, enable layers,
    and set colours and bands.
 3. **Build Effects** analyses the sound once, then keys pooled real point/spot lights into
-   a collection named `Afterglow Effects` in the current scene.
+   a collection named `Afterglow Effects` in the current scene (plus their beam meshes
+   when Visible Beams is on).
 4. Scrub or play. The effects are plain F-curve animation on a layered action, so they
    render in any engine and never touch the Sample Sound node.
 5. **Remove Effects** deletes this scene's effects collection and every datablock it owns
@@ -143,22 +169,35 @@ for t in tests/test_*.py; do python "$t" || break; done
 On Linux without a GPU, `tests/test_render.py` needs Mesa's software OpenGL
 (`apt install libegl1 libgl1-mesa-dri`).
 
+## Releasing
+
+1. Bump `version` in `afterglow/blender_manifest.toml` (and the README title), and commit.
+2. Tag the commit with that version and push the tag:
+
+   ```bash
+   git tag v0.10.0 && git push origin v0.10.0
+   ```
+
+[`release.yml`](.github/workflows/release.yml) runs the full test suite, checks the tag
+matches the manifest, builds the zip with Blender's own extension builder, and publishes
+it as a GitHub Release.
+
 ## Limitations (honest)
 
-- Generated effects are **lights only**: Build never adds meshes, materials or any other
-  geometry, so it cannot clutter or alter your venue. What you see is real light spill on
-  your existing objects and floor.
-- Because no geometry is generated, effects have no visible "beam" or streak shape of
-  their own (the reference video's thin segmented shafts and beaded trails are a
-  geometry/volumetric look). Downward Trails read as a smooth cascade of falling points
-  of light instead; Strikes and Gun Bursts read as aimed spots.
+- Generated effects are **lights only** unless Visible Beams is on, and even then Build
+  only adds its own tagged beam meshes: it never edits your objects, materials or World.
+- Without Visible Beams, effects have no visible "beam" or streak shape of their own:
+  Strikes and Gun Bursts read as aimed spots, Downward Trails as a cascade of falling
+  points of light. Visible Beams covers Strikes and Gun Bursts only.
+- Beam meshes are glows, not volumes: they don't light fog, and objects in front of a
+  beam don't shadow it. Seen from straight above or below, a strike filament is a dot.
 - The effect timing and placement are an **interpretation** of the reference video's
   look (cool selective light in a dark venue).
 - Effect lights have shadows disabled (dozens of shadow-casting lights would crawl); they
-  provide environmental spill only.
+  provide environmental spill only, and their beams pass through objects.
 - Keyframed layer controls are sampled **per event at Build time**: re-Build after
-  animating Weight/Intensity/Timing. The *Build outdated* hint does not track keyframe
-  edits or moved venue objects, only static settings.
+  animating Weight/Intensity/Timing (the *Build outdated* hint tracks their keyframes).
+  The hint does not track moved venue objects.
 - Event detection is onset-driven per trigger band and tempo-aware when the track
   provides enough repeated pulses to fit a reliable grid. Sparse, sustained, or ambiguous
   material stays onset-driven rather than forcing a guessed beat; silence produces no

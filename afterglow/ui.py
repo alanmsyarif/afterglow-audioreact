@@ -87,16 +87,11 @@ class AFTERGLOW_OT_calibrate(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        wm = context.window_manager
-        samples = 96
-        wm.progress_begin(0, samples)
         try:
-            done = core.calibrate(context.scene, samples, progress=wm.progress_update)
+            done = core.calibrate(context.scene)
         except ValueError as e:
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
-        finally:
-            wm.progress_end()
         self.report({"INFO"}, f"Calibrated {len(done)} objects")
         return {"FINISHED"}
 
@@ -179,6 +174,15 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         row = col.row(align=True)
         row.prop(fx, "height")
         row.prop(fx, "margin")
+        row = col.row(align=True)
+        row.prop(fx, "beams")
+        sub = row.row(align=True)
+        sub.active = fx.beams
+        sub.prop(fx, "beam_glow")
+        sub.prop(fx, "beam_companions", toggle=True)
+        row = col.row(align=True)
+        row.active = fx.beams
+        row.prop(fx, "beam_flow")
         for name in effects.LAYERS:
             layer = getattr(fx, name)
             box = col.box()
@@ -201,7 +205,7 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         row = col.row(align=True)
         row.operator("afterglow.build_effects")
         row.operator("afterglow.remove_effects")
-        col.label(text="Effects are real lights only — no geometry is generated", icon="LIGHT")
+        col.label(text="Effects are real lights; Visible Beams adds glowing shafts", icon="LIGHT")
         col.label(text="Weight/Intensity/Timing are keyframeable:", icon="INFO")
         col.label(text="Build samples their animation per event")
 

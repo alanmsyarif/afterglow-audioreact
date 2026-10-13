@@ -99,6 +99,17 @@ class AfterglowEffects(bpy.types.PropertyGroup):
                           description="How far above the venue the effects rise")
     margin: FloatProperty(name="Margin", default=1.15, min=0.2, max=4.0,
                           description="Grow or shrink the venue footprint around the collection")
+    beams: BoolProperty(name="Visible Beams", default=False,
+                        description="Give each Data Strike and Gun Burst light a glowing shaft mesh, so they "
+                        "show as beams in the air (the same in EEVEE and Cycles). Adds tagged shaft meshes "
+                        "and materials to the effects collection")
+    beam_glow: FloatProperty(name="Glow", default=1.0, min=0.0, soft_max=4.0,
+                             description="Brightness of the beam shafts")
+    beam_companions: BoolProperty(name="Companions", default=True,
+                                  description="Give each Data Strike a fainter, beaded filament beside it")
+    beam_flow: FloatProperty(name="Flow", default=1.0, min=0.0, soft_max=4.0,
+                             description="How fast the dashes and beads stream down each Data Strike "
+                             "(0 holds them still)")
     strikes: PointerProperty(type=AfterglowFXLayer, name="Data Strikes",
                              description="Spots of light that snap on over the venue and shine straight down")
     blooms: PointerProperty(type=AfterglowFXLayer, name="Data Blooms",

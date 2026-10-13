@@ -783,6 +783,173 @@ def test_build_operator_and_outdated_flag():
     assert not [c for c in bpy.data.collections if c.get(effects.TAG)]
 
 
+def shaft_objs():
+    return [ob for ob in bpy.data.objects if ob.get(effects.TAG) and ob.type == "MESH"]
+
+
+def beams_stage(sound_path=None):
+    scene = build_stage(sound_path=sound_path)
+    fx = scene.afterglow.effects
+    enable(scene, "gun", "blooms")
+    fx.beams = True
+    return scene
+
+
+def test_visible_beams_give_strikes_and_guns_a_shaft():
+    scene = beams_stage()
+    effects.build(scene)
+    lights = {ob.name: ob for ob in fx_objs() if ob.type == "LIGHT"}
+    shafts = shaft_objs()
+    assert len(shafts) == effects.POOL["strikes"] + effects.POOL["gun"]  # blooms get none
+    mats = set()
+    for sh in shafts:
+        layer = sh.name.split("_")[1]
+        assert layer in effects.BEAM_LAYERS
+        assert sh.parent is lights[sh.name.replace("_shaft", "_light")]   # follows its light
+        if layer == "gun":                                              # the tracer's spot fits it
+            assert abs(sh.parent.data.spot_size - effects.BEAM_SPOT_SIZE["gun"]) < 1e-6
+        else:                                                           # a strike glows from its base
+            assert sh.parent.data.type == "POINT"
+        assert sh.data.get(effects.TAG) and sh.users_collection[0] is effects._collections(scene)[0]
+        assert sh.display_type == "WIRE" and sh.hide_select             # never hides or blocks the venue
+        assert not (sh.visible_shadow or sh.visible_diffuse)            # a glow, not a lamp
+        assert all(p.use_smooth for p in sh.data.polygons)
+        want = ("filament", "sleeve", "beads") if layer == "strikes" else ("tracer",)
+        assert [m.name.rsplit("_", 1)[1] for m in sh.data.materials] == list(want)
+        assert {p.material_index for p in sh.data.polygons} == set(range(len(want)))
+        for mat in sh.data.materials:
+            mats.add(mat.name)
+            nodes = {n.bl_idname for n in mat.node_tree.nodes}
+            assert {"ShaderNodeEmission", "ShaderNodeBsdfTransparent", "ShaderNodeAddShader"} <= nodes
+            key = next(n for n in mat.node_tree.nodes if n.bl_idname == "ShaderNodeAttribute")
+            assert (key.attribute_type, key.attribute_name) == ("OBJECT", effects.GLOW)
+            assert ("ShaderNodeObjectInfo" in nodes) == (layer == "strikes")  # dashes differ per strike
+    assert len(mats) == 4                                              # shared per layer and part
+    for ob in lights.values():                                         # other layers stay lights only
+        if ob.name.split("_")[1] not in effects.BEAM_LAYERS:
+            assert not [c for c in ob.children]
+
+
+def test_strike_shaft_reaches_the_floor():
+    scene = beams_stage()
+    effects.build(scene)
+    v = effects.make_venue(scene)
+    sh = next(s for s in shaft_objs() if s.name.startswith("AFX_strikes"))
+    for f in range(20, 60):
+        scene.frame_set(f)
+        if sh[effects.GLOW] > 0.1:
+            break
+    zs = [(sh.matrix_world @ vtx.co).z for vtx in sh.data.vertices]
+    assert abs(max(zs) - v.z1) < 1e-3 and abs(min(zs) - v.z0) < 1e-3, (min(zs), max(zs), v.z0, v.z1)
+    light_z = sh.parent.matrix_world.translation.z                     # lit from low down, near its base
+    assert abs(light_z - (v.z0 + effects.STRIKE_BASE * v.span_z)) < 1e-3, light_z
+
+
+def test_strike_companion_beads_beside_it():
+    scene = beams_stage()
+    effects.build(scene)
+    v = effects.make_venue(scene)
+    sides = set()
+    for sh in [s for s in shaft_objs() if s.name.startswith("AFX_strikes")]:
+        beads = [p for p in sh.data.polygons if p.material_index == 2]
+        main = [p for p in sh.data.polygons if p.material_index == 0]
+        bc = sum((p.center for p in beads), Vector()) / len(beads)
+        mc = sum((p.center for p in main), Vector()) / len(main)
+        d = (bc.xy - mc.xy).length / v.span_z
+        lo, hi = effects.COMPANION_OFFSET
+        assert lo - 1e-3 <= d <= hi + 1e-3, d                         # a parallel filament nearby
+        sides.add(round(math.atan2(bc.y - mc.y, bc.x - mc.x), 3))
+    assert len(sides) == effects.POOL["strikes"]                       # a side of its own per light
+    scene.afterglow.effects.beam_companions = False
+    assert effects.outdated(scene)
+    effects.build(scene)
+    sh = next(s for s in shaft_objs() if s.name.startswith("AFX_strikes"))
+    assert [m.name.rsplit("_", 1)[1] for m in sh.data.materials] == ["filament", "sleeve"]
+
+
+def test_strike_dashes_flow_down():
+    scene = beams_stage()
+    fx = scene.afterglow.effects
+    fx.beam_flow = 2.0
+    effects.build(scene)
+    v = effects.make_venue(scene)
+    fps = scene.render.fps / scene.render.fps_base
+    want = effects.FLOW_SPEED * 2.0 * v.span_z / fps               # metres per frame
+    mats = {m.name.rsplit("_", 2)[1] + "_" + m.name.rsplit("_", 1)[1]: m for m in bpy.data.materials
+            if m.get(effects.TAG)}
+    for kind in ("strikes_filament", "strikes_sleeve", "strikes_beads"):
+        nt = mats[kind].node_tree
+        flow = nt.nodes["Flow"].outputs[0]
+        assert flow.links[0].to_node.bl_idname == "ShaderNodeMath"   # offsets the dash height
+        (fc,) = effects._fcurves_of(nt)
+        assert fc.extrapolation == "LINEAR" and all(k.interpolation == "LINEAR" for k in fc.keyframe_points)
+        for f in (10, 100, 400):                                     # a steady rise, past the keys too
+            assert abs(fc.evaluate(f + 1) - fc.evaluate(f) - want) < 1e-4, (kind, f)
+    assert "Flow" not in mats["gun_tracer"].node_tree.nodes        # the tracer has no dashes
+    fx.beam_flow = 0.0
+    assert effects.outdated(scene)
+    effects.build(scene)
+    assert not [m for m in bpy.data.materials if m.get(effects.TAG) and "Flow" in m.node_tree.nodes]
+
+
+def test_shaft_glow_follows_its_light():
+    """The glow is keyed with the light's own envelope, through busy-pool handovers too."""
+    scene = beams_stage(dense_wav())
+    scene.afterglow.effects.strikes.timing = 4.0          # more overlap than strike slots
+    effects.build(scene)
+    pairs = [(sh, sh.parent) for sh in shaft_objs()]
+    lit = 0
+    for f in range(1, 170, 2):
+        scene.frame_set(f)
+        for sh, light in pairs:
+            layer = sh.name.split("_")[1]
+            scale = effects.STRIKE_BEAM_ENERGY if layer == "strikes" else 1.0
+            want = light.data.energy / (effects.ENERGY[layer] * scale)
+            assert abs(sh[effects.GLOW] - want) < 1e-3, (sh.name, f, sh[effects.GLOW], want)
+            lit += want > 0.05
+    assert lit > 20, lit
+
+
+def test_visible_beams_lifecycle():
+    scene = beams_stage()
+    scene.afterglow.effects.beams = False
+    effects.build(scene)
+    assert not shaft_objs()                                          # off by default: lights only
+    fx = scene.afterglow.effects
+    fx.beams = True
+    assert effects.outdated(scene)
+    effects.build(scene)
+    n = len(shaft_objs())
+    effects.build(scene)
+    assert len(shaft_objs()) == n                                    # rebuilds never stack shafts
+    fx.beam_glow = 2.0
+    assert effects.outdated(scene)
+    assert bpy.ops.afterglow.remove_effects() == {"FINISHED"}
+    assert not shaft_objs()
+    for store in (bpy.data.meshes, bpy.data.materials, bpy.data.actions):
+        assert not [d for d in store if d.get(effects.TAG)], store
+
+
+def test_outdated_follows_keyframes_not_frame():
+    scene = build_stage()
+    path = "afterglow.effects.strikes.weight"
+    scene.afterglow.effects.strikes.weight = 0.0
+    scene.keyframe_insert(path, frame=1)
+    scene.afterglow.effects.strikes.weight = 1.0
+    scene.keyframe_insert(path, frame=100)
+    effects.build(scene)
+    for f in (1, 37, 100, 140):                # scrubbing an animated control is not an edit
+        scene.frame_set(f)
+        assert not effects.outdated(scene), f
+    kp = effects._fcurve(scene, path).keyframe_points[1]
+    kp.co.y = kp.handle_left.y = kp.handle_right.y = 0.5   # editing a key is
+    assert effects.outdated(scene)
+    effects.build(scene)
+    assert not effects.outdated(scene)
+    effects._fcurve(scene, path).keyframe_points[0].interpolation = "CONSTANT"
+    assert effects.outdated(scene)
+
+
 def test_build_operator_reports_missing_sound():
     scene = stage()
     scene.afterglow.sound = None
