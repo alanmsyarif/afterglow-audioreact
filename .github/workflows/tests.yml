@@ -1,0 +1,36 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"  # the bpy wheel's Python
+
+      - name: Install Blender as a Python module, plus software OpenGL for EEVEE
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgl1-mesa-dri libglx-mesa0
+          pip install bpy==5.2.2
+
+      - name: Validate the extension manifest
+        run: |
+          EXT="$(python -c "import os, bpy; print(os.path.join(bpy.utils.system_resource('SCRIPTS'), 'addons_core', 'bl_pkg', 'cli', 'blender_ext.py'))" | tail -n 1)"
+          python -I "$EXT" validate afterglow
+
+      - name: Run the tests
+        run: |
+          fail=0
+          for t in tests/test_*.py; do
+            echo "::group::$t"
+            python "$t" || { echo "::error::$t failed"; fail=1; }
+            echo "::endgroup::"
+          done
+          exit $fail

@@ -5,10 +5,14 @@ version = "0.8.2"
 name = "Afterglow"
 tagline = "Audio-reactive emission for every object in a collection"
 maintainer = "alanmaulanasyarif@gmail.com"
+website = "https://github.com/alanmsyarif/afterglow-audioreact"
 type = "add-on"
 blender_version_min = "5.2.0"
 license = ["SPDX:GPL-3.0-or-later"]
-tags = ["Animation", "Material"]
+tags = ["Animation", "Lighting", "Material"]
+
+[permissions]
+files = "Read the audio files you pick for analysis"
 
 [build]
 paths_exclude_pattern = ["__pycache__/"]
