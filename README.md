@@ -10,7 +10,9 @@ Everything comes from the sound file itself: no live input, no network.
 ## Install
 
 1. Requires **Blender 5.2** or newer.
-2. Download `afterglow-<version>.zip` from [`dist/`](dist/).
+2. Download `afterglow-<version>.zip` from
+   [Releases](https://github.com/alanmsyarif/afterglow-audioreact/releases)
+   (versions up to 0.9.0 are also in [`dist/`](dist/)).
 3. In Blender: *Edit → Preferences → Get Extensions → ⌄ → Install from Disk…* and pick
    the zip (or drag the zip onto the Blender window).
 4. Open the 3D Viewport sidebar (`N`) → **Afterglow** tab.
@@ -142,6 +144,19 @@ for t in tests/test_*.py; do python "$t" || break; done
 
 On Linux without a GPU, `tests/test_render.py` needs Mesa's software OpenGL
 (`apt install libegl1 libgl1-mesa-dri`).
+
+## Releasing
+
+1. Bump `version` in `afterglow/blender_manifest.toml` (and the README title), and commit.
+2. Tag the commit with that version and push the tag:
+
+   ```bash
+   git tag v0.10.0 && git push origin v0.10.0
+   ```
+
+[`release.yml`](.github/workflows/release.yml) runs the full test suite, checks the tag
+matches the manifest, builds the zip with Blender's own extension builder, and publishes
+it as a GitHub Release.
 
 ## Limitations (honest)
 

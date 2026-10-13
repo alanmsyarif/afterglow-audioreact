@@ -2,6 +2,9 @@
 __pycache__/
 *.py[cod]
 
+# Local extension builds (releases are built by .github/workflows/release.yml)
+/build/
+
 # Blender autosaves and backups
 *.blend1
 *.blend2
