@@ -1,5 +1,6 @@
 """Collection-level operations: apply, respread, calibrate, sync, remove."""
 import os
+import tempfile
 
 import aud
 import numpy as np
@@ -25,6 +26,52 @@ def write_meter(ob, mod):
 def sound_ok(sound):
     """Packed, or its file exists. Blender 5.2 crashes evaluating Sample Sound on a missing file."""
     return bool(sound.packed_file) or os.path.isfile(bpy.path.abspath(sound.filepath, library=sound.library))
+
+
+_audio = {}  # audio_key -> (mono samples, rate); one entry, the last song decoded
+
+
+def audio_key(sound):
+    """What a sound's audio content is, for caches: its packed copy, or its file's path,
+    size and modification time, so replacing the file on disk is noticed."""
+    if sound.packed_file:
+        return ("packed", sound.name_full, sound.packed_file.size)
+    path = bpy.path.abspath(sound.filepath, library=sound.library)
+    try:
+        st = os.stat(path)
+    except OSError:
+        return (path, None, None)
+    return (path, st.st_size, st.st_mtime_ns)
+
+
+def load_mono(sound, what="Audio analysis"):
+    """(mono float32 samples, rate) of a Sound, decoded from its packed copy when it has one,
+    else from its file. The last song decoded is cached, so Build, Bake, Calibrate and tempo
+    analysis on one song decode it once."""
+    key = audio_key(sound)
+    if key in _audio:
+        return _audio[key]
+    tmp = None
+    try:
+        if sound.packed_file:
+            fd, tmp = tempfile.mkstemp(suffix=os.path.splitext(sound.filepath)[1] or ".wav")
+            with os.fdopen(fd, "wb") as f:
+                f.write(sound.packed_file.data)
+        clip = aud.Sound(tmp or key[0])
+        data, rate = np.asarray(clip.data()), clip.specs[0]
+        del clip
+    except Exception:
+        raise ValueError(f"{what} needs the sound file on disk or packed into the .blend") from None
+    finally:
+        if tmp:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+    mono = (data.mean(axis=1) if data.ndim == 2 else data).astype(np.float32)
+    _audio.clear()
+    _audio[key] = (mono, rate)
+    return mono, rate
 
 
 def targets(collection):
@@ -129,11 +176,8 @@ def _level(ob, depsgraph):
 
 
 def _seconds(sound):
-    try:
-        clip = aud.Sound(bpy.path.abspath(sound.filepath, library=sound.library))
-        return clip.length / clip.specs[0]
-    except Exception:
-        raise ValueError("Calibrate needs the sound file on disk") from None
+    mono, rate = load_mono(sound, "Calibrate")
+    return len(mono) / rate
 
 
 def _pct(values, p):

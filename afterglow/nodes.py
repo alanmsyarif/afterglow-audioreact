@@ -6,7 +6,7 @@ TAG = "afterglow"
 VERSION = 7  # bump when the interface changes; get_group() migrates older groups
 SAMPLES = 8  # ponytail: fixed smoothing sample count; expose it if long tails get steppy
 BEAT_NODE = "Beat Length"
-TEMPO_TAGS = ("afterglow_tempo_path", "afterglow_tempo_start")  # set by tempo.bake on the group
+TEMPO_TAGS = ("afterglow_tempo_path", "afterglow_tempo_start", "afterglow_tempo_size")  # set by tempo.bake
 KICK = (40.0, 150.0)
 TAPS = 8
 

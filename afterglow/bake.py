@@ -1,7 +1,5 @@
 """Fast Playback: precompute each object's held peak per frame with numpy and key it onto the
 modifier's Baked Peak input, so playback never evaluates the slow Sample Sound node."""
-import aud
-import bpy
 import numpy as np
 from bpy_extras import anim_utils
 
@@ -124,12 +122,7 @@ def _load(scene):
         raise ValueError("Pick a sound file first")
     if not core.sound_ok(s.sound):
         raise ValueError("Sound file not found")
-    try:
-        clip = aud.Sound(bpy.path.abspath(s.sound.filepath, library=s.sound.library))
-        data, rate = np.asarray(clip.data()), clip.specs[0]
-    except Exception:
-        raise ValueError("Fast Playback needs the sound file on disk") from None
-    return (data.mean(axis=1) if data.ndim == 2 else data), rate
+    return core.load_mono(s.sound, "Fast Playback")
 
 
 def _band_of(m):

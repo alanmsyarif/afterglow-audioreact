@@ -1,10 +1,9 @@
 """Local tempo detection, baked into the node group as a Beat Length curve."""
-import aud
 import bpy
 import numpy as np
 from bpy_extras import anim_utils
 
-from . import nodes
+from . import core, nodes
 
 FFT, HOP = 2048, 512
 WINDOW_S, STEP_S = 8.0, 1.0
@@ -57,8 +56,8 @@ def tempo_curve(samples, rate):
     return _median(out)
 
 
-TAG_PATH, TAG_START = nodes.TEMPO_TAGS
-_cache = {}  # absolute path -> curve; re-keying after a Start Frame change skips re-analysis
+TAG_PATH, TAG_START, TAG_SIZE = nodes.TEMPO_TAGS
+_cache = {}  # core.audio_key -> curve; re-keying after a Start Frame change skips re-analysis
 
 
 def bake(scene):
@@ -67,17 +66,17 @@ def bake(scene):
     if s.sound is None:
         raise ValueError("Pick a sound file first")
     path = bpy.path.abspath(s.sound.filepath, library=s.sound.library)
-    curve = _cache.get(path)
+    key = core.audio_key(s.sound)
+    curve = _cache.get(key)
     if curve is None:
-        try:
-            clip = aud.Sound(path)
-            samples, rate = np.asarray(clip.data()), clip.specs[0]
-        except Exception:
-            raise ValueError("Tempo analysis needs the sound file on disk") from None
-        curve = _cache[path] = tempo_curve(samples, rate)
+        samples, rate = core.load_mono(s.sound, "Tempo analysis")
+        curve = _cache[key] = tempo_curve(samples, rate)
+    size = s.sound.packed_file.size if s.sound.packed_file else key[1]
     group = nodes.get_group()
     fc = _fcurve(group)
-    if fc and len(fc.keyframe_points) and group.get(TAG_PATH) == path:
+    # A curve keyed before sizes were recorded (older versions) counts as the same song.
+    same = group.get(TAG_PATH) == path and group.get(TAG_SIZE, size) == size
+    if fc and len(fc.keyframe_points) and same:
         # Same song already keyed: keep the user's hand edits, only follow Start Frame.
         delta = s.start_frame - group.get(TAG_START, s.start_frame)
         if delta:
@@ -92,7 +91,7 @@ def bake(scene):
         for t, bpm in curve:
             socket.default_value = 60.0 / bpm
             socket.keyframe_insert("default_value", frame=s.start_frame + t * fps)
-    group[TAG_PATH], group[TAG_START] = path, s.start_frame
+    group[TAG_PATH], group[TAG_START], group[TAG_SIZE] = path, s.start_frame, size
     return curve
 
 

@@ -583,8 +583,14 @@ def settings_sig(scene):
     return repr(vals)
 
 
+def _collections(scene):
+    """This scene's effects collections. Every scene keeps its own build: other scenes'
+    effects are never reported, rebuilt or removed from here."""
+    return [c for c in scene.collection.children if c.get(TAG)]
+
+
 def outdated(scene):
-    coll = next((c for c in bpy.data.collections if c.get(TAG)), None)
+    coll = next(iter(_collections(scene)), None)
     return bool(coll) and coll.get(SIG) != settings_sig(scene)
 
 
@@ -614,17 +620,23 @@ def build(scene):
 
 
 def remove(scene):
-    """Delete every tagged datablock the build owns. User data is never touched.
-    Meshes and materials are still swept so builds from older, geometry-based
-    versions of the add-on are removed cleanly."""
-    for c in [c for c in bpy.data.collections if c.get(TAG)]:
-        bpy.data.collections.remove(c)
+    """Delete this scene's build and every tagged datablock it owns. User data and other
+    scenes' builds are never touched. Tagged datablocks left without users are swept too,
+    so builds from older, geometry-based versions of the add-on are removed cleanly."""
     n = 0
-    for ob in [o for o in bpy.data.objects if o.get(TAG)]:
-        bpy.data.objects.remove(ob, do_unlink=True)
+    for c in _collections(scene):
+        for ob in [o for o in c.all_objects if o.get(TAG)]:
+            bpy.data.objects.remove(ob, do_unlink=True)
+            n += 1
+        bpy.data.collections.remove(c)
+    for c in [c for c in bpy.data.collections if c.get(TAG) and c.users == 0]:
+        bpy.data.collections.remove(c)  # unlinked from every scene: nobody's build
+    for ob in [o for o in bpy.data.objects if o.get(TAG) and o.users == 0]:
+        bpy.data.objects.remove(ob)
         n += 1
+    # lights before actions: a light's own energy action only loses its user with the light
     for store in (bpy.data.meshes, bpy.data.materials, bpy.data.lights, bpy.data.actions):
-        for db in [d for d in store if d.get(TAG)]:
+        for db in [d for d in store if d.get(TAG) and d.users == 0]:
             store.remove(db)
     return n
 

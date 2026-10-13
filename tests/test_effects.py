@@ -727,6 +727,43 @@ def test_busy_pool_hands_slot_over_cleanly():
                 assert dist <= 1.5 * speed * dt + 1e-4, (layer, ob.name, dt, dist)
 
 
+def test_scenes_keep_their_own_builds():
+    a = build_stage()
+    effects.build(a)
+    lights_a = {ob.name for ob in fx_objs()}
+    b = bpy.data.scenes.new("B")
+    b.render.fps = 24
+    s, sa = b.afterglow, a.afterglow
+    s.collection, s.sound = sa.collection, sa.sound
+    s.effects.strikes.enabled, s.effects.strikes.weight = True, 1.0
+    effects.build(b)                                   # building B leaves A's build alone
+    assert {ob.name for ob in fx_objs()} >= lights_a
+    assert len(fx_objs()) == 2 * len(lights_a)
+    assert effects._collections(a) and effects._collections(b)
+    s.effects.seed += 1                                # B's settings never flag A
+    assert effects.outdated(b) and not effects.outdated(a)
+    effects.remove(b)
+    assert {ob.name for ob in fx_objs()} == lights_a   # removing B leaves A alone
+    assert not effects._collections(b) and effects._collections(a)
+    assert all(ob.data.users == 1 for ob in fx_objs())
+    assert not [d for d in bpy.data.lights if d.get(effects.TAG) and d.users == 0]
+    assert not [d for d in bpy.data.actions if d.get(effects.TAG) and d.users == 0]
+
+
+def test_packed_sound_builds_without_file():
+    import shutil
+    path = os.path.join(tempfile.gettempdir(), "afterglow_fx_packed.wav")
+    shutil.copy(pulse_wav(), path)
+    scene = build_stage()
+    want = times_of(effects.analyze(scene)["strikes"])
+    snd = bpy.data.sounds.load(path)
+    snd.pack()
+    os.remove(path)
+    scene.afterglow.sound = snd
+    assert times_of(effects.analyze(scene)["strikes"]) == want
+    assert effects.build(scene)["strikes"] == len(want)
+
+
 # ---------------------------------------------------------------- slice 5: operators & UI
 
 def test_operators_registered():

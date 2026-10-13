@@ -1,20 +1,55 @@
+import time
+
 import bpy
 from bpy.props import (BoolProperty, EnumProperty, FloatProperty, FloatVectorProperty,
                        IntProperty, PointerProperty)
 
 from . import bake, core, effects, materials, nodes, tempo
 
+REBAKE_DELAY = 0.3  # s of quiet after the last setting change before the automatic re-bake
+_pending = {}       # scene name -> time of its last change still waiting for a re-bake
+
 
 def _sync(self, context):
     core.sync(context.scene)
 
 
-def _rebake(scene):
+def _bake_now(scene):
     if scene.afterglow.fast_playback:
         try:
             bake.bake_all(scene)
         except ValueError:
             pass  # the panel's Re-bake button reports it
+
+
+def _flush():
+    """Timer: re-bake every scene whose settings have been still for REBAKE_DELAY."""
+    now = time.monotonic()
+    for name, t in list(_pending.items()):
+        if now - t >= REBAKE_DELAY:
+            del _pending[name]
+            scene = bpy.data.scenes.get(name)
+            if scene:
+                _bake_now(scene)
+    return REBAKE_DELAY - (now - min(_pending.values())) if _pending else None
+
+
+def _interactive():
+    return not bpy.app.background
+
+
+def _rebake(scene):
+    """Re-bake after a setting change. Dragging a slider fires this on every step, so the
+    UI waits for the value to settle instead of baking each one; scripts and headless runs
+    have no event loop for timers and bake at once."""
+    if not scene.afterglow.fast_playback:
+        return
+    if not _interactive():
+        _bake_now(scene)
+        return
+    _pending[scene.name] = time.monotonic()
+    if not bpy.app.timers.is_registered(_flush):
+        bpy.app.timers.register(_flush, first_interval=REBAKE_DELAY)
 
 
 def _sync_rebake(self, context):
@@ -24,7 +59,7 @@ def _sync_rebake(self, context):
 
 def _fast(self, context):
     core.sync(context.scene)  # writes Use Baked
-    _rebake(context.scene)
+    _bake_now(context.scene)  # one click, not a drag: never leave Use Baked without a bake
 
 
 def _replace(self, context):
@@ -157,6 +192,9 @@ def register():
 
 
 def unregister():
+    if bpy.app.timers.is_registered(_flush):
+        bpy.app.timers.unregister(_flush)
+    _pending.clear()
     del bpy.types.Object.afterglow
     del bpy.types.Scene.afterglow
     for c in reversed(CLASSES):
