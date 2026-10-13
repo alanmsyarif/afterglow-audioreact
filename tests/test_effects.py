@@ -867,6 +867,31 @@ def test_strike_companion_beads_beside_it():
     assert [m.name.rsplit("_", 1)[1] for m in sh.data.materials] == ["filament", "sleeve"]
 
 
+def test_strike_dashes_flow_down():
+    scene = beams_stage()
+    fx = scene.afterglow.effects
+    fx.beam_flow = 2.0
+    effects.build(scene)
+    v = effects.make_venue(scene)
+    fps = scene.render.fps / scene.render.fps_base
+    want = effects.FLOW_SPEED * 2.0 * v.span_z / fps               # metres per frame
+    mats = {m.name.rsplit("_", 2)[1] + "_" + m.name.rsplit("_", 1)[1]: m for m in bpy.data.materials
+            if m.get(effects.TAG)}
+    for kind in ("strikes_filament", "strikes_sleeve", "strikes_beads"):
+        nt = mats[kind].node_tree
+        flow = nt.nodes["Flow"].outputs[0]
+        assert flow.links[0].to_node.bl_idname == "ShaderNodeMath"   # offsets the dash height
+        (fc,) = effects._fcurves_of(nt)
+        assert fc.extrapolation == "LINEAR" and all(k.interpolation == "LINEAR" for k in fc.keyframe_points)
+        for f in (10, 100, 400):                                     # a steady rise, past the keys too
+            assert abs(fc.evaluate(f + 1) - fc.evaluate(f) - want) < 1e-4, (kind, f)
+    assert "Flow" not in mats["gun_tracer"].node_tree.nodes        # the tracer has no dashes
+    fx.beam_flow = 0.0
+    assert effects.outdated(scene)
+    effects.build(scene)
+    assert not [m for m in bpy.data.materials if m.get(effects.TAG) and "Flow" in m.node_tree.nodes]
+
+
 def test_shaft_glow_follows_its_light():
     """The glow is keyed with the light's own envelope, through busy-pool handovers too."""
     scene = beams_stage(dense_wav())

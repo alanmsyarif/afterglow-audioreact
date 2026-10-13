@@ -107,7 +107,9 @@ on surfaces:
 - Each **Gun Burst** gets a glowing tracer that flies along its aim with a fading tail,
   and its spot tightens to the tracer's cone.
 
-**Glow** sets the beams' brightness; **Companions** turns the beaded filaments on or off. The beams are emissive meshes parented to their
+**Glow** sets the beams' brightness, **Companions** turns the beaded filaments on or off,
+and **Flow** sets how fast the dashes and beads stream down each Strike (0 holds them
+still). The beams are emissive meshes parented to their
 lights, with brightness keyed on the same envelope as the light, so they look the same in
 EEVEE and Cycles and cost almost nothing to render. They cast no shadows and light nothing
 themselves (the lights do that). They're drawn as wireframes and can't be selected, so

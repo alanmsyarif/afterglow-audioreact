@@ -180,6 +180,9 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         sub.active = fx.beams
         sub.prop(fx, "beam_glow")
         sub.prop(fx, "beam_companions", toggle=True)
+        row = col.row(align=True)
+        row.active = fx.beams
+        row.prop(fx, "beam_flow")
         for name in effects.LAYERS:
             layer = getattr(fx, name)
             box = col.box()

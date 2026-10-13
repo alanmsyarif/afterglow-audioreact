@@ -107,6 +107,9 @@ class AfterglowEffects(bpy.types.PropertyGroup):
                              description="Brightness of the beam shafts")
     beam_companions: BoolProperty(name="Companions", default=True,
                                   description="Give each Data Strike a fainter, beaded filament beside it")
+    beam_flow: FloatProperty(name="Flow", default=1.0, min=0.0, soft_max=4.0,
+                             description="How fast the dashes and beads stream down each Data Strike "
+                             "(0 holds them still)")
     strikes: PointerProperty(type=AfterglowFXLayer, name="Data Strikes",
                              description="Spots of light that snap on over the venue and shine straight down")
     blooms: PointerProperty(type=AfterglowFXLayer, name="Data Blooms",

@@ -340,6 +340,7 @@ COMPANION_OFFSET = (0.05, 0.09)  # distance from the Strike, as a fraction of th
 BEAD_SCALE = 3.0         # bead pattern features per metre
 BEAD_CUT = 0.6           # pattern values below this are gaps: short beads, long gaps
 BEAD_EMISSION = 18.0
+FLOW_SPEED = 0.5         # dashes and beads stream down at this many venue heights per second
 GUN_TRACER = 1.0         # Gun Burst tracer length, as a fraction of the venue radius
 SHAFT_SEGMENTS = 24
 TRACER_EMISSION = 4.0
@@ -443,6 +444,14 @@ def _own_fcurve(idblock, path, index):
     return fc
 
 
+def _fcurves_of(idblock):
+    ad = idblock.animation_data
+    if not (ad and ad.action):
+        return []
+    bag = anim_utils.action_get_channelbag_for_slot(ad.action, ad.action_slot)
+    return list(bag.fcurves) if bag else []
+
+
 def _tag_action(idblock):
     ad = idblock.animation_data
     if ad and ad.action:
@@ -475,13 +484,15 @@ def _make_unit(coll, layer, slot, color, beams=False):
     return tuple(lights)
 
 
-def _beam_material(layer, kind, color, glow):
+def _beam_material(layer, kind, color, glow, flow=None):
     """One additive glow material (emission over transparency) per beam part, shared by
     a layer's shafts. Each shaft's keyed GLOW property (an Object attribute) sets its
     brightness. kind: "filament" (a Strike's bright core) or "sleeve" (its faint glow),
     both broken into dashes that differ per shaft; "beads" (its companion: short beads, long
     gaps, a pattern of its own); or "tracer" (a Gun Burst cone, brightest at its light and
-    on its core, fading to nothing at its edges and tail)."""
+    on its core, fading to nothing at its edges and tail). flow = (start, end, fps, metres
+    per second) streams the dash patterns down the Strike: the pattern's height offset is
+    keyed to rise linearly through the song, so the same dashes slide steadily downward."""
     mat = bpy.data.materials.new(f"{PREFIX}_{layer}_{kind}")
     mat[TAG] = VERSION
     mat.surface_render_method = "BLENDED"
@@ -513,8 +524,13 @@ def _beam_material(layer, kind, color, glow):
         z = N.new("ShaderNodeSeparateXYZ")
         L.new(coords.outputs["Object"], z.inputs[0])     # metres along the Strike
         beads = kind == "beads"
+        height = z.outputs["Z"]
+        if flow:
+            offset = N.new("ShaderNodeValue")
+            offset.name = offset.label = "Flow"
+            height = op("ADD", height, offset.outputs[0])  # sampling higher up = dashes move down
         line = N.new("ShaderNodeCombineXYZ")
-        L.new(op("MULTIPLY", z.outputs["Z"], BEAD_SCALE if beads else DASH_SCALE), line.inputs["Z"])
+        L.new(op("MULTIPLY", height, BEAD_SCALE if beads else DASH_SCALE), line.inputs["Z"])
         noise = N.new("ShaderNodeTexNoise")
         noise.noise_dimensions = "4D"
         noise.inputs["Scale"].default_value = 1.0
@@ -543,6 +559,17 @@ def _beam_material(layer, kind, color, glow):
     L.new(emission.outputs[0], add.inputs[1])
     out = N.new("ShaderNodeOutputMaterial")
     L.new(add.outputs[0], out.inputs["Surface"])
+    if flow and kind != "tracer":
+        start, end, fps, speed = flow
+        sock = N["Flow"].outputs[0]
+        for f in (start, end):
+            sock.default_value = (f - start) / fps * speed
+            sock.keyframe_insert("default_value", frame=f)
+        for fc in _fcurves_of(nt):
+            fc.extrapolation = "LINEAR"
+            for kp in fc.keyframe_points:
+                kp.interpolation = "LINEAR"
+        _tag_action(nt)
     return mat
 
 
@@ -724,7 +751,9 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
     keys.beams = beams
     keys.energy = STRIKE_BEAM_ENERGY if beams and name == "strikes" else 1.0
     if beams:
-        mats = [_beam_material(name, k, tuple(layer.color), fx.beam_glow)
+        speed = FLOW_SPEED * fx.beam_flow * venue.span_z
+        flow = (start, end, fps, speed) if speed > 0 else None
+        mats = [_beam_material(name, k, tuple(layer.color), fx.beam_glow, flow)
                 for k in _beam_kinds(name, fx.beam_companions)]
         sides = random.Random(f"{fx.seed}:{name}:beams")
         for lights in units:
@@ -784,7 +813,7 @@ def settings_sig(scene):
     s = scene.afterglow
     fx = s.effects
     vals = [VERSION, fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4),
-            fx.beams, round(fx.beam_glow, 4), fx.beam_companions]
+            fx.beams, round(fx.beam_glow, 4), fx.beam_companions, round(fx.beam_flow, 4)]
     for name in LAYERS:
         layer = getattr(fx, name)
         vals += [layer.enabled, layer.trigger_band, tuple(round(c, 4) for c in layer.color)]
