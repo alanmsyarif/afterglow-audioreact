@@ -118,6 +118,18 @@ class AfterglowEffects(bpy.types.PropertyGroup):
                              "1 mostly gaps (the companion is always more broken up)")
     beam_dash: FloatProperty(name="Dash Size", default=0.75, min=0.05, soft_max=5.0, unit="LENGTH",
                              description="Length of the dash pattern's features along a Data Strike")
+    beam_walk: EnumProperty(name="Walk", default="DOWN", items=(
+        ("DOWN", "Down", "Each Data Strike beam grows from the top and lands on the floor on the beat, "
+         "then its tail follows it down"),
+        ("UP", "Up", "Each Data Strike beam leaves the floor on the beat and grows to the top, then its "
+         "tail follows it up"),
+        ("OFF", "Off", "Each Data Strike beam appears all at once"),
+    ), description="How a Data Strike beam travels in and out")
+    beam_walk_time: FloatProperty(name="Walk Time", default=0.25, min=0.02, soft_max=2.0, max=10.0,
+                                  unit="TIME_ABSOLUTE",
+                                  description="Seconds a Data Strike beam's head takes to cross the whole height "
+                                  "(its tail takes as long to leave). Walking Down it starts early, so it "
+                                  "still lands on the beat")
     emitter: PointerProperty(type=bpy.types.Object, name="Emitter Cage",
                              description="Effects spawn inside this cage: move, turn (Z) and scale it in the "
                              "viewport. Empty: the venue is fitted to the collection (Height, Margin)")

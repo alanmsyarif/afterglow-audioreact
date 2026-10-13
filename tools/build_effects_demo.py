@@ -1,12 +1,12 @@
 """Repeatable Environment Effects demo: synthetic pulse track (fixture, not a real song),
-a circular pillar venue with classic Afterglow reaction, all six effect layers stacked,
-a saved .blend, and a short sequential EEVEE render window for motion proof.
+a circular pillar venue with classic Afterglow reaction, all six effect layers stacked
+with Visible Beams on, a saved .blend, and a short sequential EEVEE render window for
+motion proof.
 
-Run:
-  "C:/Program Files/Blender Foundation/Blender 5.2/blender.exe" -b --factory-startup \
-      --python-exit-code 1 --python tools/build_effects_demo.py
+Run (the output folder is optional; it defaults to <temp>/afterglow-effects-demo):
+  blender -b --factory-startup --python-exit-code 1 --python tools/build_effects_demo.py -- <OUT>
 
-Outputs (absolute):
+Outputs:
   <OUT>/effects_demo.blend
   <OUT>/frames/%04d.png   (RENDER_START..RENDER_END)
 Then make the clip/contact sheet with ffmpeg (see README.md).
@@ -14,11 +14,13 @@ Then make the clip/contact sheet with ffmpeg (see README.md).
 import math
 import os
 import sys
+import tempfile
 import wave
 
 import numpy as np
 
-OUT = r"C:\Users\Axioo Pongo\AppData\Local\hermes\cache\scratch\afterglow-effects-demo"
+ARGS = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+OUT = os.path.abspath(ARGS[0]) if ARGS else os.path.join(tempfile.gettempdir(), "afterglow-effects-demo")
 RENDER_START, RENDER_END = 150, 246   # the drop: every layer active, ~4 s motion proof
 FPS = 24
 DUR = 12.0
@@ -146,6 +148,7 @@ def main():
     # --- all six effect layers, stacked, with per-layer colours and trigger bands
     fx = scene.afterglow.effects
     fx.venue_shape = "CIRCLE"
+    fx.beams = True  # dashed strike filaments that walk down and land on the beat, gun tracers
     fx.height = 9.0
     fx.margin = 1.1
     fx.seed = 77
