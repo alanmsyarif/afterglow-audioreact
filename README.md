@@ -1,4 +1,4 @@
-# Afterglow (v0.9.0)
+# Afterglow (v0.10.0)
 
 Audio-reactive emission for Blender 5.2. Point Afterglow at a collection and a sound
 file, and every emissive object in it lights up with the music, each one listening to
