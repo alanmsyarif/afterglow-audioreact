@@ -130,6 +130,17 @@ class AfterglowEffects(bpy.types.PropertyGroup):
                                   description="Seconds a Data Strike beam's head takes to cross the whole height "
                                   "(its tail takes as long to leave). Walking Down it starts early, so it "
                                   "still lands on the beat")
+    strike_placement: EnumProperty(name="Placement", default="RANDOM", items=(
+        ("RANDOM", "Random", "Data Strikes land at random spots inside the venue"),
+        ("POINTS", "Points", "Data Strikes land on the strike points you placed by hand"),
+    ), description="Where Data Strikes land")
+    strike_order: EnumProperty(name="Order", default="SEQUENCE", items=(
+        ("SEQUENCE", "Sequence", "Strike the points one after another, in name order"),
+        ("RANDOM", "Random", "Strike a point drawn at random each time (the same every build, from the Seed)"),
+    ), description="Which strike point each Data Strike lands on")
+    strike_points: PointerProperty(type=bpy.types.Collection, name="Strike Points",
+                                   description="Every object in this collection is a strike point (only its "
+                                   "position on the floor counts). Add Point makes one at the 3D cursor")
     emitter: PointerProperty(type=bpy.types.Object, name="Emitter Cage",
                              description="Effects spawn inside this cage: move, turn (Z) and scale it in the "
                              "viewport. Empty: the venue is fitted to the collection (Height, Margin)")

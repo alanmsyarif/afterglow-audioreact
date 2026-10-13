@@ -116,6 +116,20 @@ and place. It never renders, Build, Remove Effects, Apply and Remove leave it al
 moving it marks the build outdated. The refresh button beside it snaps it back to the
 collection (it asks first); delete it to go back to the fitted venue.
 
+### Strike points
+
+Data Strikes land at random spots inside the venue by default. To place them yourself, set
+the Data Strikes layer's **Placement** to **Points** and press **Add Point**: Afterglow adds
+a **Strike Point** at the 3D cursor, an arrow as tall as the venue standing on its floor,
+showing where a strike will land. Move, duplicate or delete points like any object (only
+their position on the floor counts), then Build Effects.
+
+**Order** decides which point each strike lands on: **Sequence** goes through them one
+after another in name order (rename them to choreograph), **Random** draws one per strike
+(the same every build, from the Seed). The points live in an **Afterglow Strike Points**
+collection; you can pick any other collection instead, and every object in it becomes a
+point. Moving a point marks the build outdated; Build and Remove Effects never touch them.
+
 ### Visible Beams
 
 ![A Data Strike walking Down: the dashed filament grows from the top and lands on the floor on the beat, where its light flashes](docs/images/strike_walk.gif)

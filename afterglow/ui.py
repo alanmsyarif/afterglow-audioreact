@@ -197,6 +197,17 @@ def draw_venue(col, fx):
     row.prop(fx, "margin")
 
 
+def draw_strike_points(col, fx):
+    """Data Strikes placement: random spots, or strike points placed by hand."""
+    col.separator()
+    col.row(align=True).prop(fx, "strike_placement", expand=True)
+    if fx.strike_placement == "POINTS":
+        row = col.row(align=True)
+        row.prop(fx, "strike_points", text="")
+        row.operator("afterglow.add_strike_point", text="Add Point", icon="ADD")
+        col.row(align=True).prop(fx, "strike_order", expand=True)
+
+
 def draw_beams(col, fx):
     """Visible Beams section: the strike filaments' look and motion."""
     col.active = fx.beams
@@ -213,6 +224,27 @@ def draw_beams(col, fx):
     row = col.row(align=True)
     row.prop(fx, "beam_gaps")
     row.prop(fx, "beam_dash")
+
+
+class AFTERGLOW_OT_add_strike_point(bpy.types.Operator):
+    bl_idname = "afterglow.add_strike_point"
+    bl_label = "Add Strike Point"
+    bl_description = ("Add a strike point at the 3D cursor: Data Strikes land on your points instead of at "
+                      "random. Move, duplicate or delete points like any object, then Build Effects")
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        try:
+            ob = effects.add_strike_point(context.scene, context.scene.cursor.location)
+        except ValueError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+        for other in context.selected_objects:
+            other.select_set(False)
+        ob.select_set(True)
+        context.view_layer.objects.active = ob  # ready to grab (G)
+        self.report({"INFO"}, f"{ob.name} added at the 3D cursor")
+        return {"FINISHED"}
 
 
 class AFTERGLOW_PT_effects(bpy.types.Panel):
@@ -249,6 +281,8 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
                 r = body.row(align=True)
                 r.prop(layer, "timing")
                 r.prop(layer, "color", text="")
+                if name == "strikes":
+                    draw_strike_points(body, fx)
         if effects.outdated(context.scene):
             warn = col.row(align=True)
             warn.alert = True
@@ -330,6 +364,7 @@ class AFTERGLOW_PT_panel(bpy.types.Panel):
 CLASSES = (AFTERGLOW_OT_load_sound, AFTERGLOW_OT_apply, AFTERGLOW_OT_respread,
            AFTERGLOW_OT_calibrate, AFTERGLOW_OT_bake, AFTERGLOW_OT_remove, AFTERGLOW_PT_panel,
            AFTERGLOW_OT_build_effects, AFTERGLOW_OT_remove_effects, AFTERGLOW_OT_fit_emitter,
+           AFTERGLOW_OT_add_strike_point,
            AFTERGLOW_PT_effects)
 
 
