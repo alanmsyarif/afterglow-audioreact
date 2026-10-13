@@ -685,6 +685,48 @@ def test_timing_scales_event_duration():
     assert d1 >= 4 and 1.5 * d1 <= d2 <= 2.6 * d1 + 2, spans
 
 
+def dense_wav():
+    path = os.path.join(tempfile.gettempdir(), "afterglow_fx_dense.wav")
+    if not os.path.exists(path):
+        _write_wav(path, 6.0, [(0.5 + 0.32 * i, 80.0) for i in range(16)])
+    return path
+
+
+def lit_moves(ob, layer):
+    """(seconds, distance) between consecutive location keys of a light, for every key
+    interval it is lit through (energy at the midpoint above 5% of the layer's peak)."""
+    loc = sorted((fc for fc in helpers.fcurves(ob) if fc.data_path == "location"),
+                 key=lambda fc: fc.array_index)
+    energy = next(fc for fc in helpers.fcurves(ob.data) if fc.data_path == "energy")
+    frames = sorted({round(kp.co[0], 4) for fc in loc for kp in fc.keyframe_points})
+    out = []
+    for fa, fb in zip(frames, frames[1:]):
+        if energy.evaluate((fa + fb) / 2) > 0.05 * effects.ENERGY[layer]:
+            a = Vector([fc.evaluate(fa) for fc in loc])
+            b = Vector([fc.evaluate(fb) for fc in loc])
+            out.append(((fb - fa) / 24.0, (b - a).length))
+    return out
+
+
+def test_busy_pool_hands_slot_over_cleanly():
+    """More overlapping events than pool slots: the stolen slot's old event is cut short,
+    never interleaved with the new one (which made lights jump between two spots)."""
+    for layer, timing in (("blooms", 4.0), ("trails", 1.0)):
+        scene = stage(dense_wav())
+        enable(scene, layer)
+        getattr(scene.afterglow.effects, layer).timing = timing
+        ts = times_of(effects.analyze(scene)[layer])
+        dur = effects.DUR[layer] * timing
+        n = effects.POOL[layer]
+        assert len(ts) > 2 * n and ts[n] - ts[0] < dur, ts  # the pool must run out
+        effects.build(scene)
+        v = effects.make_venue(scene)
+        speed = 0.5 * v._arclen()[1][-1] / dur if layer == "trails" else 0.0  # max trail travel
+        for ob in fx_objs(layer):
+            for dt, dist in lit_moves(ob, layer):
+                assert dist <= 1.5 * speed * dt + 1e-4, (layer, ob.name, dt, dist)
+
+
 # ---------------------------------------------------------------- slice 5: operators & UI
 
 def test_operators_registered():

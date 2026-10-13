@@ -315,6 +315,9 @@ DUR = {"strikes": 0.45, "blooms": 1.1, "flashes": 0.22, "trails": 1.8, "downward
 ATTACK = {"strikes": 0.03, "blooms": 0.12, "flashes": 0.02, "trails": 0.15, "downward": 0.05, "gun": 0.015}
 HOLD = {"strikes": 0.5, "blooms": 0.45, "flashes": 0.35, "trails": 0.7, "downward": 0.8, "gun": 0.85}
 TAIL_S = 2.5             # keep the timeline this long past the song so tails finish
+CUT_FADE = 0.03          # s an event cut short by a stolen pool slot takes to fade out
+CUT_EPS = 0.05           # frames: a cut event is dark and still this long before the handover
+                         # (FCurve.update() merges keys closer than 0.01 frame)
 UP = Vector((0.0, 0.0, 1.0))
 
 
@@ -335,6 +338,24 @@ class _Keys:
     def add_vec(self, struct, idblock, path, frame, values, interp):
         for i, v in enumerate(values):
             self.add(struct, idblock, path, i, frame, v, interp)
+
+    def cut(self, lights, frame, fade):
+        """Truncate what these lights are already keyed to do from frame on, so a stolen
+        pool slot hands over cleanly instead of interleaving two events' keys: energy fades
+        to 0 over the fade frames, motion holds still, and the light only moves once dark."""
+        structs = {s for ob in lights for s in (ob, ob.data)}
+        end = frame - CUT_EPS
+        for (struct, path, _), ch in self.channels.items():
+            if struct not in structs:
+                continue
+            values = ch["values"]
+            at = round(float(end - fade if path == "energy" else end), 4)
+            v = _value_at(values, at)
+            for f in [f for f in values if f > at]:
+                del values[f]
+            values[at] = v
+            if path == "energy":
+                values[round(float(end), 4)] = 0.0
 
     def write(self):
         for (struct, path, index), ch in self.channels.items():
@@ -360,6 +381,18 @@ class _Keys:
                 if ch["interp"] == "BEZIER":
                     kp.handle_left_type = kp.handle_right_type = "AUTO_CLAMPED"
             fc.update()
+
+
+def _value_at(values, frame):
+    """Linear interpolation of sparse {frame: value} keys, held past either end."""
+    frames = sorted(values)
+    i = bisect_right(frames, frame)
+    if i == 0:
+        return values[frames[0]]
+    if i == len(frames):
+        return values[frames[-1]]
+    f0, f1 = frames[i - 1], frames[i]
+    return values[f0] + (values[f1] - values[f0]) * (frame - f0) / (f1 - f0)
 
 
 def _own_fcurve(idblock, path, index):
@@ -403,14 +436,15 @@ def _make_unit(coll, layer, slot, color):
 
 
 def _assign(free, t0, dur):
-    """First slot idle at t0, else the one freed longest ago: bounded pool, no duplicates."""
+    """(slot, busy): the first slot idle at t0, else the one closest to finishing, which
+    is then still mid-event (busy). Bounded pool, no duplicates."""
     for i, until in enumerate(free):
         if until <= t0:
             free[i] = t0 + dur
-            return i
+            return i, False
     i = min(range(len(free)), key=free.__getitem__)
     free[i] = t0 + dur
-    return i
+    return i, True
 
 
 def _envelope(t0, dur, attack, hold):
@@ -512,7 +546,9 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
         intensity = sample_prop(scene, f"afterglow.effects.{name}.intensity", layer.intensity, frame0)
         timing = sample_prop(scene, f"afterglow.effects.{name}.timing", layer.timing, frame0)
         dur = DUR[name] * max(timing, 0.05)
-        slot = _assign(free, t0, dur)
+        slot, busy = _assign(free, t0, dur)
+        if busy:  # every slot still lit: cut the oldest event short rather than interleave
+            keys.cut(units[slot], frame0, CUT_FADE * fps)
         _layer_keys(name, keys, units[slot], venue, (t0, strength), intensity, timing, rng, fps, start)
         placed += 1
     # baseline: every light dark outside its events, so silence renders as nothing

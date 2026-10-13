@@ -91,5 +91,6 @@ ffmpeg -i <OUT>/frames/%04d.png -vf "select='not(mod(n,8))',scale=320:-1,tile=4x
   enough repeated pulses to fit a reliable grid. Sparse, sustained, or ambiguous material
   stays onset-driven rather than forcing a guessed beat; silence produces no events.
 - Pools are bounded (2–6 slots per layer; a Downward Trail event uses a cascade of
-  3 lights in one slot); overlapping events beyond the pool share slots rather than
-  spawning unbounded lights.
+  3 lights in one slot). When every slot is still lit, a new event takes over the one
+  closest to finishing: that event fades out quickly and the new one starts cleanly,
+  rather than spawning unbounded lights.
