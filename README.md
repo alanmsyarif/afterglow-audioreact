@@ -151,6 +151,8 @@ Beam controls:
 | Control | What it does |
 |---|---|
 | Glow | Brightness of all beams. |
+| Core, Glow Size | Radius of a Strike's bright core filament (also its beaded companion's) and of the soft glow tube around it, in metres. |
+| Tracer Width | Width of the Gun Burst tracer, as a multiple of its spot's cone. |
 | Flow, Direction | How fast the dashes and beads stream (0 holds them still), and whether **Down** or **Up**. |
 | Gaps | How broken up the filaments are: 0 almost solid, 1 mostly gaps (the beaded companion is always a bit more broken up). |
 | Dash Size | Length of the dash pattern's features, in metres. |
@@ -246,10 +248,13 @@ it as a GitHub Release.
 - Keyframed layer controls are sampled **per event at Build time**: re-Build after
   animating Weight/Intensity/Timing (the *Build outdated* hint tracks their keyframes).
   The hint does not track moved venue objects.
-- Event detection is onset-driven per trigger band and tempo-aware when the track
-  provides enough repeated pulses to fit a reliable grid. Sparse, sustained, or ambiguous
-  material stays onset-driven rather than forcing a guessed beat; silence produces no
-  events.
+- Event detection is onset-driven per trigger band: it follows how fast the band's sound
+  *rises* (spectral flux), against the music around it rather than the whole song, so
+  beats under a held bassline, pads or a full mix still fire, on their attack. An onset
+  much weaker than one right next to it (an echo, an off-beat click) is skipped. It is
+  tempo-aware when the track provides enough repeated pulses to fit a reliable grid;
+  sparse, sustained, or ambiguous material stays onset-driven rather than forcing a
+  guessed beat; silence produces no events.
 - Pools are bounded (2–6 slots per layer; a Downward Trail event uses a cascade of 3
   lights in one slot). When every slot is still lit, a new event takes over the one
   closest to finishing: that event fades out quickly and the new one starts cleanly,

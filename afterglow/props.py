@@ -118,6 +118,15 @@ class AfterglowEffects(bpy.types.PropertyGroup):
                              "1 mostly gaps (the companion is always more broken up)")
     beam_dash: FloatProperty(name="Dash Size", default=0.75, min=0.05, soft_max=5.0, unit="LENGTH",
                              description="Length of the dash pattern's features along a Data Strike")
+    beam_core: FloatProperty(name="Core Radius", default=0.018, min=0.001, soft_max=0.2, precision=3,
+                             unit="LENGTH", description="Radius of a Data Strike's bright core filament "
+                             "(and of its beaded companion)")
+    beam_glow_size: FloatProperty(name="Glow Radius", default=0.06, min=0.001, soft_max=1.0, precision=3,
+                                  unit="LENGTH", description="Radius of the soft glow tube around a Data "
+                                  "Strike's core")
+    beam_tracer_width: FloatProperty(name="Tracer Width", default=1.0, min=0.05, soft_max=5.0,
+                                     description="Width of the Gun Burst tracer, as a multiple of its spot's cone "
+                                     "(the spot keeps its own cone)")
     beam_walk: EnumProperty(name="Walk", default="DOWN", items=(
         ("DOWN", "Down", "Each Data Strike beam grows from the top and lands on the floor on the beat, "
          "then its tail follows it down"),

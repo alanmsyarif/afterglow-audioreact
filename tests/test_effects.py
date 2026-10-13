@@ -1215,6 +1215,37 @@ def beam_measures(scene):
             sh.parent.matrix_world.translation.z - v.z0, fc.evaluate(11) - fc.evaluate(10))
 
 
+def tube_radius(sh, slot):
+    """Largest distance of a shaft part's vertices from that part's own axis."""
+    me = sh.data
+    vs = {vi for p in me.polygons if p.material_index == slot for vi in p.vertices}
+    pts = [me.vertices[i].co for i in vs]
+    c = sum(pts, Vector()) / len(pts)
+    return max((p.xy - c.xy).length for p in pts)
+
+
+def test_beam_tube_size_controls():
+    scene = beams_stage()
+    fx = scene.afterglow.effects
+    effects.build(scene)
+    gun = next(s for s in shaft_objs() if s.name.startswith("AFX_gun"))
+    gun_r = tube_radius(gun, 0)
+    for prop, value in (("beam_core", 0.05), ("beam_glow_size", 0.4), ("beam_tracer_width", 2.0)):
+        setattr(fx, prop, value)
+        assert effects.outdated(scene), prop                         # every size is an edit
+    effects.build(scene)
+    for sh in [s for s in shaft_objs() if s.name.startswith("AFX_strikes")]:
+        assert abs(tube_radius(sh, 0) - 0.05) < 1e-4                 # the core
+        assert abs(tube_radius(sh, 1) - 0.4) < 1e-4                  # the glow tube
+        assert abs(tube_radius(sh, 2) - 0.05) < 1e-4                 # the companion's core
+        lanes = [d.value for d in sh.data.attributes[effects.LANE].data]
+        slot_of = {vi: p.material_index for p in sh.data.polygons for vi in p.vertices}
+        assert all(lanes[vi] == (1.0 if s == 2 else 0.0) for vi, s in slot_of.items())  # own patterns
+    gun = next(s for s in shaft_objs() if s.name.startswith("AFX_gun"))
+    assert abs(tube_radius(gun, 0) - 2.0 * gun_r) < 1e-4             # the tracer, twice as wide
+    assert abs(gun.parent.data.spot_size - effects.BEAM_SPOT_SIZE["gun"]) < 1e-6  # its spot unchanged
+
+
 def test_beam_size_ignores_venue_height():
     """Raising the venue (Height, or the cage's Z scale) makes beams taller, never thicker:
     the core, glow, companion distance, light height and dash speed stay the same."""

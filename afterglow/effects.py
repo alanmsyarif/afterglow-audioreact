@@ -504,8 +504,9 @@ BEAM_SPOT_BLEND = 0.2
 # how thick it is, how far its companion sits or how fast its dashes stream.
 STRIKE_BASE = 1.2        # m: Strike light height above the floor (at most a quarter of the venue)
 STRIKE_BEAM_ENERGY = 0.4  # its energy relative to the spot it replaces: close to the floor
-FILAMENT_RADIUS = 0.018  # m: Strike core radius...
-SLEEVE_RADIUS = 0.06     # m: ...and its glow sleeve's
+FILAMENT_RADIUS = 0.018  # m: Strike core radius (default of the Core Radius control)...
+SLEEVE_RADIUS = 0.06     # m: ...and its glow sleeve's (Glow Radius)
+LANE = "afterglow_lane"  # mesh point attribute: 0 main filament and sleeve, 1 the companion
 FILAMENT_EMISSION = 30.0  # emission strengths at Glow 1 and full event brightness
 SLEEVE_EMISSION = 1.0
 SLEEVE_POWER = 3.0       # sleeve edge falloff: brightest hugging the core, gone at its rim
@@ -686,9 +687,8 @@ def _beam_material(layer, kind, color, glow, flow=None, gaps=0.375, dash=0.75, w
     per second) streams the dash patterns along the Strike: the pattern's height offset is
     keyed linearly through the song, so the same dashes slide steadily down (positive
     speed) or up (negative). gaps (0..1) and dash (metres per feature) shape the pattern.
-    Each filament's pattern also depends on its distance from the shaft's axis, in bins of
-    a quarter metre: core and sleeve share bin 0 (their dashes line up), each companion has
-    a bin of its own. walk = ("DOWN" | "UP", lo, hi) shows only the stretch between the
+    Each filament's pattern also depends on its LANE mesh attribute: core and sleeve share
+    lane 0 (their dashes line up), the companion has lane 1, at any tube size. walk = ("DOWN" | "UP", lo, hi) shows only the stretch between the
     shaft's keyed WALK head and tail, measured along the Strike's height lo..hi (local Z)
     from its top (DOWN) or its floor (UP), so the beam travels in and out."""
     mat = bpy.data.materials.new(f"{PREFIX}_{layer}_{kind}")
@@ -735,13 +735,9 @@ def _beam_material(layer, kind, color, glow, flow=None, gaps=0.375, dash=0.75, w
         noise.inputs["Detail"].default_value = 3.0
         L.new(line.outputs[0], noise.inputs["Vector"])
         seed = op("MULTIPLY", N.new("ShaderNodeObjectInfo").outputs["Random"], 100.0)
-        axis = N.new("ShaderNodeVectorMath")             # distance from the shaft's axis
-        axis.operation = "LENGTH"
-        flat = N.new("ShaderNodeCombineXYZ")
-        L.new(z.outputs["X"], flat.inputs["X"])
-        L.new(z.outputs["Y"], flat.inputs["Y"])
-        L.new(flat.outputs[0], axis.inputs[0])
-        lane = op("MULTIPLY", op("FLOOR", op("MULTIPLY", axis.outputs["Value"], 4.0), 0.0), 13.0)
+        part = N.new("ShaderNodeAttribute")              # which filament: its own pattern
+        part.attribute_type, part.attribute_name = "GEOMETRY", LANE
+        lane = op("MULTIPLY", part.outputs["Factor"], 13.0)
         L.new(op("ADD", op("ADD", seed, lane), 37.0 if beads else 0.0), noise.inputs["W"])
         cut = GAP_CUT[0] + (GAP_CUT[1] - GAP_CUT[0]) * min(max(gaps, 0.0), 1.0)
         cut = min(cut + BEAD_EXTRA_CUT, 0.95) if beads else cut
@@ -806,17 +802,19 @@ def _make_shaft(coll, light_ob, tubes, mats):
     It is a glow you see, not a lamp: no shadows and no light on the scene (the light does
     the lighting), shown as a wireframe and unselectable so it never hides or blocks the
     venue. tubes: _tube() parts, each using mats[slot]."""
-    verts, faces, slots = [], [], []
+    verts, faces, slots, lanes = [], [], [], []
     for tv, tf, slot in tubes:
         base = len(verts)
         verts += tv
         faces += [tuple(base + i for i in f) for f in tf]
         slots += [slot] * len(tf)
+        lanes += [1.0 if slot == 2 else 0.0] * len(tv)  # slot 2: the beaded companion
     name = light_ob.name.replace("_light", "_shaft")
     me = bpy.data.meshes.new(name)
     me.from_pydata(verts, [], faces)
     me.shade_smooth()  # flat faces would band the soft edge falloff
     me.polygons.foreach_set("material_index", slots)
+    me.attributes.new(LANE, "FLOAT", "POINT").data.foreach_set("value", lanes)
     me[TAG] = VERSION
     for m in mats:
         me.materials.append(m)
@@ -843,16 +841,17 @@ def _strike_base(venue):
     return min(STRIKE_BASE, 0.25 * venue.span_z)
 
 
-def _beam_tubes(name, venue, rng):
+def _beam_tubes(name, venue, rng, sizes=(FILAMENT_RADIUS, SLEEVE_RADIUS, 1.0)):
     """One beam's tubes: a Strike's full-height filament inside its glow sleeve, from the
     floor to the venue top around its light (_strike_base up), plus one beaded companion
     filament COMPANION_RING out, covering a stretch of COMPANION_SPAN of the height, on a
-    side and stretch drawn from rng; or a Gun tracer cone along the spot's aim (-Z)."""
+    side and stretch drawn from rng; or a Gun tracer cone along the spot's aim (-Z).
+    sizes = (core radius, glow radius, tracer width scale), from the Visible Beams controls."""
     if name == "strikes":
         span = venue.span_z
         base = _strike_base(venue)
         lo, hi = -base, span - base
-        core, sleeve = FILAMENT_RADIUS, SLEEVE_RADIUS
+        core, sleeve = sizes[0], sizes[1]
         tubes = [_tube(((lo, core), (hi, core)), 0), _tube(((lo, sleeve), (hi, sleeve)), 1)]
         a, d = 2 * math.pi * rng.random(), COMPANION_RING
         share = rng.uniform(*COMPANION_SPAN)
@@ -861,7 +860,7 @@ def _beam_tubes(name, venue, rng):
                            (d * math.cos(a), d * math.sin(a))))
         return tubes
     length = GUN_TRACER * venue.radius
-    half = math.tan(BEAM_SPOT_SIZE[name] / 2)
+    half = math.tan(BEAM_SPOT_SIZE[name] / 2) * sizes[2]
     return [_tube(((0.0, 0.02 * length * half), (-length, length * half)), 0)]
 
 
@@ -1074,7 +1073,7 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
         sides = random.Random(f"{fx.seed}:{name}:beams")
         for lights in units:
             for light_ob in lights:
-                tubes = _beam_tubes(name, venue, sides)
+                tubes = _beam_tubes(name, venue, sides, (fx.beam_core, fx.beam_glow_size, fx.beam_tracer_width))
                 keys.shafts[light_ob.name] = _make_shaft(coll, light_ob, tubes, mats)
     rng = random.Random(f"{fx.seed}:{name}:place")
     free = [-1e9] * POOL[name]
@@ -1133,7 +1132,8 @@ def settings_sig(scene):
     vals = [VERSION, fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4),
             fx.beams, round(fx.beam_glow, 4), round(fx.beam_flow, 4), fx.beam_direction,
             round(fx.beam_gaps, 4), round(fx.beam_dash, 4), fx.beam_walk, round(fx.beam_walk_time, 4),
-            fx.strike_placement, fx.strike_order]
+            fx.strike_placement, fx.strike_order,
+            round(fx.beam_core, 5), round(fx.beam_glow_size, 5), round(fx.beam_tracer_width, 4)]
     if fx.strike_placement == "POINTS":                 # moving a point moves its strikes
         vals += [tuple(tuple(round(c, 4) for c in p) for p in strike_points(scene))]
     cage = fx.emitter                                   # moving the cage moves the venue

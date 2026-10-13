@@ -213,6 +213,10 @@ def draw_beams(col, fx):
     col.active = fx.beams
     col.prop(fx, "beam_glow")
     row = col.row(align=True)
+    row.prop(fx, "beam_core", text="Core")
+    row.prop(fx, "beam_glow_size", text="Glow Size")
+    col.prop(fx, "beam_tracer_width")
+    row = col.row(align=True)
     row.prop(fx, "beam_walk", expand=True)
     sub = col.row(align=True)
     sub.active = fx.beam_walk != "OFF"
