@@ -104,8 +104,8 @@ brighter beams and foggier air).
 It adds exactly one object to the effects collection: a box over the venue with a Volume
 Scatter material, drawn as a wireframe and unselectable so it never hides or blocks your
 venue in the viewport. Remove Effects deletes it with the lights. Volumes make renders
-slower; in EEVEE, a smaller *Volumetrics → Resolution* (tile size) in Render Properties
-gives crisper beams.
+slower; in EEVEE, a finer *Volumes → Resolution* in Render Properties (e.g. 1:4 instead of
+the default 1:8) gives crisper beams.
 
 ### Usage
 
