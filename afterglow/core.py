@@ -165,16 +165,6 @@ def respread(objs):
         nodes.set_input(mod, "High", high)
 
 
-def _level(ob, depsgraph):
-    ev = ob.evaluated_get(depsgraph)
-    me = ev.to_mesh()
-    try:
-        attr = me.attributes.get("ar_level")
-        return attr.data[0].value if attr and len(attr.data) else 0.0
-    finally:
-        ev.to_mesh_clear()
-
-
 def _seconds(sound):
     mono, rate = load_mono(sound, "Calibrate")
     return len(mono) / rate
@@ -185,10 +175,13 @@ def _pct(values, p):
     return values[min(len(values) - 1, int(p * len(values)))]
 
 
-def calibrate(scene, samples=96, progress=None):
+def calibrate(scene, samples=None):
     """Set each object's Threshold to its band's median level and Gain so its 90th percentile
-    reaches 1. Samples each modifier's raw band amplitude (decay off) across the sound.
-    Returns the calibrated objects."""
+    reaches 1, from each modifier's raw band amplitude (no peak hold) across the sound: every
+    frame of the song, or the given number of evenly spaced samples. Measured with numpy from
+    the same source as Fast Playback, which matches the Sample Sound node without evaluating
+    it (that costs ~0.14 s per frame on a full song). Returns the calibrated objects."""
+    from . import bake  # bake imports core
     s = scene.afterglow
     objs = sorted((o for o in _managed(scene) if find_modifier(o)), key=lambda o: o.name)
     if not objs:
@@ -200,35 +193,9 @@ def calibrate(scene, samples=96, progress=None):
     mods = [find_modifier(o) for o in objs]
     # Ripple listens to the kick band, which has its own scale: calibrate the pair in use.
     gain_key, threshold_key = ("Ripple Gain", "Ripple Threshold") if s.ripple else ("Gain", "Threshold")
-    keys = (gain_key, threshold_key, "Decay")
-    saved = [{k: nodes.get_input(m, k) for k in keys} for m in mods]
-    sample_frames = [s.start_frame + round((i + 0.5) / samples * duration * fps) for i in range(samples)]
-    if s.fast_playback:
-        # The bake holds peaks (Decay) and may be stale; measure raw levels from its source.
-        from . import bake  # bake imports core
-        levels = [list(v) for v in bake.raw_levels(scene, mods, sample_frames)]
-        _set_calibration(mods, levels, gain_key, threshold_key, shared=s.ripple)
-        return objs
-    frame = scene.frame_current
-    levels = [[] for _ in objs]
-    try:
-        # Raw amplitude: no gain/threshold, and Decay 0 so each jump costs one FFT instead of 8
-        # (random seeks miss the node's FFT cache; 8 samples made 96 jumps take ~80 s).
-        for m in mods:
-            for k, v in zip(keys, (1.0, 0.0, 0.0)):
-                nodes.set_input(m, k, v)
-        for i, f in enumerate(sample_frames):
-            scene.frame_set(f)
-            dg = bpy.context.evaluated_depsgraph_get()
-            for ob, out in zip(objs, levels):
-                out.append(_level(ob, dg))
-            if progress:
-                progress(i)
-    finally:
-        for m, old in zip(mods, saved):
-            for k, v in old.items():
-                nodes.set_input(m, k, v)
-        scene.frame_set(frame)
+    n = samples or max(1, int(duration * fps))
+    sample_frames = [s.start_frame + round((i + 0.5) / n * duration * fps) for i in range(n)]
+    levels = [list(v) for v in bake.raw_levels(scene, mods, sample_frames)]
     _set_calibration(mods, levels, gain_key, threshold_key, shared=s.ripple)
     return objs
 

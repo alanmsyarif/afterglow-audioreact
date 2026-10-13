@@ -210,20 +210,57 @@ def test_fps_change_flags_outdated():
     assert len(bake.outdated(scene)) == 3
 
 
-def test_calibrate_with_fast_playback_measures_raw_like_live():
-    scene = stage()
-    for n in NAMES:
-        nodes.set_input(core.find_modifier(bpy.data.objects[n]), "Decay", 1.0)  # long tails
-    core.calibrate(scene, samples=48)
-    live = {n: (nodes.get_input(core.find_modifier(bpy.data.objects[n]), "Threshold"),
-                nodes.get_input(core.find_modifier(bpy.data.objects[n]), "Gain")) for n in NAMES}
-    scene.afterglow.fast_playback = True
-    core.calibrate(scene, samples=48)
+def live_calibration(scene, samples):
+    """(Threshold, Gain) per object from the Sample Sound node itself: raw levels (Gain 1,
+    Threshold 0, Decay 0) at the frames Calibrate samples, through the same percentiles."""
+    fps = scene.render.fps / scene.render.fps_base
+    duration = core._seconds(scene.afterglow.sound)
+    frames = [scene.afterglow.start_frame + round((i + 0.5) / samples * duration * fps) for i in range(samples)]
     for n in NAMES:
         mod = core.find_modifier(bpy.data.objects[n])
-        thr, gain = nodes.get_input(mod, "Threshold"), nodes.get_input(mod, "Gain")
-        assert abs(thr - live[n][0]) < 0.02, (n, live[n], thr, gain)
-        assert abs(gain - live[n][1]) <= 0.1 * live[n][1], (n, live[n], thr, gain)
+        for k, v in (("Gain", 1.0), ("Threshold", 0.0), ("Decay", 0.0)):
+            nodes.set_input(mod, k, v)
+    levels = {n: [] for n in NAMES}
+    for f in frames:
+        at(f)
+        for n in NAMES:
+            levels[n].append(attr(bpy.data.objects[n]))
+    out = {}
+    for n, v in levels.items():
+        med, high = core._pct(v, 0.5), core._pct(v, 0.9)
+        out[n] = (med, 1.0 / max(high - med, 1e-4))
+    return out
+
+
+def test_calibrate_matches_live_node_levels():
+    """Calibrate measures with numpy, never the slow node, yet lands where the node would,
+    with or without Fast Playback (whose bake holds peaks and must not be measured)."""
+    scene = stage()
+    live = live_calibration(scene, 48)
+    for fast in (False, True):
+        for n in NAMES:
+            nodes.set_input(core.find_modifier(bpy.data.objects[n]), "Decay", 1.0)  # long tails
+        scene.afterglow.fast_playback = fast
+        core.calibrate(scene, samples=48)
+        for n in NAMES:
+            mod = core.find_modifier(bpy.data.objects[n])
+            thr, gain = nodes.get_input(mod, "Threshold"), nodes.get_input(mod, "Gain")
+            lthr, lgain = live[n]
+            assert abs(thr - lthr) < 0.02, (fast, n, live[n], thr, gain)
+            assert abs(gain - lgain) <= 0.1 * lgain, (fast, n, live[n], thr, gain)
+            assert nodes.get_input(mod, "Decay") == 1.0  # calibration leaves Decay alone
+
+
+def test_calibrate_samples_every_frame_by_default():
+    scene = stage()
+    seen = []
+    real = bake.raw_levels
+    bake.raw_levels = lambda sc, mods, frames: seen.append(len(frames)) or real(sc, mods, frames)
+    try:
+        core.calibrate(scene)
+    finally:
+        bake.raw_levels = real
+    assert seen == [72], seen  # the 3 s song at 24 fps
 
 
 def through_stage(specs, n=21, **settings):

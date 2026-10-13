@@ -87,16 +87,11 @@ class AFTERGLOW_OT_calibrate(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
-        wm = context.window_manager
-        samples = 96
-        wm.progress_begin(0, samples)
         try:
-            done = core.calibrate(context.scene, samples, progress=wm.progress_update)
+            done = core.calibrate(context.scene)
         except ValueError as e:
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
-        finally:
-            wm.progress_end()
         self.report({"INFO"}, f"Calibrated {len(done)} objects")
         return {"FINISHED"}
 
