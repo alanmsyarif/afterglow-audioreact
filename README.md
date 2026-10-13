@@ -94,6 +94,32 @@ Afterglow collection, never per object):
 - **Rectangular**: trails ride the venue bounds' own rectangle.
 - **Triangular**: trails ride a triangle; spawns fill the triangle.
 
+### Emitter cage
+
+By default the venue is fitted to the collection (with **Height** and **Margin**). For
+direct control, press **Add Cage**: Afterglow adds an **Afterglow Emitter** object, a
+wireframe outline of the venue (its floor, its top, the ring trails ride and a few
+posts), fitted to exactly the venue you had. Then shape it in the viewport:
+
+- **Move** it to move the venue; its origin sits on the venue floor.
+- **Turn** it about Z to turn the venue (X and Y rotation are locked).
+- **Scale** X and Y to size the footprint (unequal scale makes an ellipse or rectangle),
+  and Z to set the height.
+
+Effects spawn and travel inside it, and changing **Venue Shape** redraws it. It never
+renders, Build and Remove Effects leave it alone, and moving it marks the build outdated.
+The refresh button beside it snaps it back to the collection; delete it to go back to the
+fitted venue.
+
+### Spawn On
+
+Pick a collection in **Spawn On**, and Data Strikes, Data Blooms and Downward Trails land
+on its objects instead of random spots: a Strike glows just above an object's top (its
+filament still reaches the venue top), a Downward Trail falls onto it, and a Bloom floats
+above it. Objects are picked per event, deterministically from the Seed. Travelling
+Trails, Gun Bursts and Rapid Flashes keep using the venue's path and centre. Moving a
+target object marks the build outdated.
+
 ### Visible Beams
 
 Off by default. **Visible Beams** makes the strikes visible in the air, not just as spill

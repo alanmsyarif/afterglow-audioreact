@@ -86,8 +86,12 @@ class AfterglowFXLayer(bpy.types.PropertyGroup):
                                description="Which frequency band's onsets fire this layer")
 
 
+def _reshape_cage(self, context):
+    effects.refresh_cage(context.scene)
+
+
 class AfterglowEffects(bpy.types.PropertyGroup):
-    venue_shape: EnumProperty(name="Venue Shape", default="CIRCLE", items=(
+    venue_shape: EnumProperty(name="Venue Shape", default="CIRCLE", update=_reshape_cage, items=(
         ("CIRCLE", "Circular", "Emitters ride a circle around the venue centre"),
         ("SQUARE", "Square", "Emitters ride a square around the venue bounds"),
         ("RECT", "Rectangular", "Emitters ride the venue bounds' own rectangle"),
@@ -107,6 +111,12 @@ class AfterglowEffects(bpy.types.PropertyGroup):
                              description="Brightness of the beam shafts")
     beam_companions: BoolProperty(name="Companions", default=True,
                                   description="Give each Data Strike a fainter, beaded filament beside it")
+    emitter: PointerProperty(type=bpy.types.Object, name="Emitter Cage",
+                             description="Effects spawn inside this cage: move, turn (Z) and scale it in the "
+                             "viewport. Empty: the venue is fitted to the collection (Height, Margin)")
+    spawn_on: PointerProperty(type=bpy.types.Collection, name="Spawn On",
+                              description="Data Strikes, Data Blooms and Downward Trails land on this "
+                              "collection's objects instead of random spots inside the venue")
     beam_flow: FloatProperty(name="Flow", default=1.0, min=0.0, soft_max=4.0,
                              description="How fast the dashes and beads stream down each Data Strike "
                              "(0 holds them still)")

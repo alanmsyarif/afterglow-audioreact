@@ -1,5 +1,6 @@
 """Environment effects: onset analysis, venue shapes, light-only pooled builds, motion, stacking, removal."""
 import math
+import random
 import os
 import sys
 import tempfile
@@ -762,6 +763,148 @@ def test_packed_sound_builds_without_file():
     scene.afterglow.sound = snd
     assert times_of(effects.analyze(scene)["strikes"]) == want
     assert effects.build(scene)["strikes"] == len(want)
+
+
+# ---------------------------------------------------------------- emitter cage & spawn on
+
+def cage_local(cage, p):
+    """A world point in the cage's own unit frame."""
+    return cage.matrix_world.inverted() @ Vector(p)
+
+
+def test_emitter_cage_starts_as_the_fitted_venue():
+    for shape in effects.SHAPES:
+        helpers.fresh()
+        scene = build_stage(shape=shape)
+        fitted = effects.make_venue(scene)
+        cage = effects.fit_cage(scene)
+        fx = scene.afterglow.effects
+        assert fx.emitter is cage and cage.get(effects.EMITTER_TAG)
+        assert cage.hide_render and cage.show_in_front               # a viewport control
+        assert tuple(cage.lock_rotation) == (True, True, False)      # it turns about Z only
+        assert not cage.data.polygons and cage.data.edges            # an outline, nothing to render
+        caged = effects.make_venue(scene)
+        assert caged.exact and abs(caged.z0 - fitted.z0) < 1e-5 and abs(caged.z1 - fitted.z1) < 1e-5
+        for a, b in zip(fitted.polygon(), caged.polygon()):           # the same footprint, exactly
+            assert (a - b).length < 1e-4, (shape, tuple(a), tuple(b))
+        for u in (0.0, 0.3, 0.71):
+            assert (fitted.path_point(u) - caged.path_point(u)).length < 0.05, (shape, u)
+
+
+def test_emitter_cage_moves_turns_and_scales_the_venue():
+    scene = build_stage(shape="CIRCLE")
+    cage = effects.fit_cage(scene)
+    cage.location = (3.0, -2.0, 0.5)
+    cage.rotation_euler.z = 0.6
+    cage.scale = (7.0, 2.5, 5.0)                                     # an ellipse, 5 m tall
+    bpy.context.view_layer.update()
+    v = effects.make_venue(scene)
+    assert abs(v.z0 - 0.5) < 1e-5 and abs(v.z1 - 5.5) < 1e-5
+    rng = random.Random(4)
+    for _ in range(200):                                             # spawns fill the cage's ellipse
+        q = cage_local(cage, v.footprint(rng))
+        assert q.x * q.x + q.y * q.y <= 1.0 + 1e-6 and abs(q.z) < 1e-5, tuple(q)
+    for i in range(40):                                              # trails ride its path ring
+        q = cage_local(cage, v.path_point(i / 40))
+        assert abs(math.hypot(q.x, q.y) - 1.0) < 0.01 and abs(q.z - effects.PATH_Z) < 1e-5, tuple(q)
+    enable(scene, "trails")                                          # and so do the built lights
+    effects.build(scene)
+    light = next(ob for ob in fx_objs("trails") if ob.type == "LIGHT")
+    for f in range(20, 90, 7):
+        scene.frame_set(f)
+        if light.data.energy > 1.0:
+            q = cage_local(cage, light.matrix_world.translation)
+            assert abs(math.hypot(q.x, q.y) - 1.0) < 0.02 and abs(q.z - effects.PATH_Z) < 1e-4, (f, tuple(q))
+
+
+def test_emitter_cage_lifecycle():
+    scene = build_stage(shape="SQUARE")
+    cage = effects.fit_cage(scene)
+    fx = scene.afterglow.effects
+    assert len(cage.data.vertices) == 3 * 4                         # floor, top and path rings
+    fx.venue_shape = "CIRCLE"                                        # Shape redraws the cage
+    assert len(cage.data.vertices) == 3 * effects.CIRCLE_SEG
+    fx.venue_shape = "TRIANGLE"
+    assert len(cage.data.vertices) == 3 * 3
+    effects.build(scene)
+    assert not effects.outdated(scene)
+    cage.location.x += 1.0                                           # moving the cage is an edit
+    bpy.context.view_layer.update()
+    assert effects.outdated(scene)
+    assert bpy.ops.afterglow.remove_effects() == {"FINISHED"}
+    assert bpy.data.objects.get(cage.name) is cage                  # Build/Remove never touch it
+    assert bpy.ops.afterglow.fit_emitter() == {"FINISHED"}           # snap back, same cage
+    assert [o for o in bpy.data.objects if o.get(effects.EMITTER_TAG)] == [cage]
+    assert abs(cage.location.x) < 1e-4
+    bpy.data.objects.remove(cage)                                    # deleted: fitted venue again
+    assert fx.emitter is None and not effects.make_venue(scene).exact
+
+
+def spawn_targets(scene, spots=((-5.0, 2.0, 1.0), (4.0, -3.0, 2.5), (1.0, 6.0, 0.4))):
+    coll = bpy.data.collections.new("Targets")
+    scene.collection.children.link(coll)
+    for i, (x, y, top) in enumerate(spots):
+        ob = bpy.data.objects.new(f"target{i}", None)              # an empty: its top is itself
+        ob.location = (x, y, top)
+        coll.objects.link(ob)
+    scene.afterglow.effects.spawn_on = coll
+    bpy.context.view_layer.update()
+    return spots
+
+
+def lit_positions(scene, layer, frames=range(1, 150)):
+    out = []
+    for f in frames:
+        scene.frame_set(f)
+        for ob in fx_objs(layer):
+            if ob.type == "LIGHT" and ob.data.energy > 1e-3:
+                out.append(tuple(ob.matrix_world.translation))
+    return out
+
+
+def test_spawn_on_lands_strikes_blooms_and_trails_on_objects():
+    scene = beams_stage()
+    enable(scene, "downward", "trails")
+    spots = spawn_targets(scene)
+    effects.build(scene)
+    v = effects.make_venue(scene)
+    near = lambda p: min(spots, key=lambda s: math.dist(p[:2], s[:2]))  # noqa: E731
+    for layer in ("strikes", "blooms", "downward"):
+        pts = lit_positions(scene, layer)
+        assert pts, layer
+        for p in pts:
+            assert math.dist(p[:2], near(p)[:2]) < 1e-3, (layer, p)    # right over a target
+    for p in lit_positions(scene, "strikes"):                         # a strike glows on its top
+        assert abs(p[2] - (near(p)[2] + effects.SPAWN_GAP * v.span_z)) < 1e-3, p
+    tops = []                                                         # its filament still ends at the top
+    for f in range(1, 150):
+        scene.frame_set(f)
+        for sh in shaft_objs():
+            if sh.name.startswith("AFX_strikes") and sh[effects.GLOW] > 0.05:
+                tops.append(max((sh.matrix_world @ vtx.co).z for vtx in sh.data.vertices))
+    assert tops and all(abs(t - v.z1) < 1e-3 for t in tops), (v.z1, tops[:5])
+    for p in lit_positions(scene, "blooms"):                          # a bloom floats above it
+        assert p[2] >= near(p)[2] + effects.BLOOM_LIFT * v.span_z - 1e-3, p
+    lows = {}
+    for p in lit_positions(scene, "downward"):                        # trails fall onto it
+        s = near(p)
+        lows[s] = min(lows.get(s, 1e9), p[2])
+    assert any(abs(low - s[2]) < 0.3 for s, low in lows.items()), lows
+    assert all(low >= s[2] - 1e-3 for s, low in lows.items()), lows  # never through it
+    for p in lit_positions(scene, "trails"):                          # path layers ignore targets
+        assert abs(p[2] - v.path_z) < 1e-3, p
+
+
+def test_spawn_on_edits_and_own_objects():
+    scene = build_stage()
+    spawn_targets(scene)
+    effects.build(scene)
+    assert not effects.outdated(scene)
+    bpy.data.objects["target1"].location.x += 2.0                   # moving a target is an edit
+    bpy.context.view_layer.update()
+    assert effects.outdated(scene)
+    scene.afterglow.effects.spawn_on = effects._collections(scene)[0]
+    assert effects._spawn_targets(scene) == []                       # never its own lights
 
 
 # ---------------------------------------------------------------- slice 5: operators & UI

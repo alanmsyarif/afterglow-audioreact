@@ -187,17 +187,33 @@ PATH_Z = 0.72  # travelling height, as a fraction of the venue's z span
 CIRCLE_SEG = 64
 
 
+def _unit_outline(shape):
+    """The shape's footprint outline at unit half-extents, CCW in local XY."""
+    if shape == "CIRCLE":
+        return [(math.cos(a), math.sin(a)) for a in (2 * math.pi * i / CIRCLE_SEG for i in range(CIRCLE_SEG))]
+    if shape == "TRIANGLE":
+        return [(math.cos(a), math.sin(a)) for a in (math.pi / 2, math.pi * 7 / 6, math.pi * 11 / 6)]
+    return [(1.0, -1.0), (1.0, 1.0), (-1.0, 1.0), (-1.0, -1.0)]
+
+
 class Venue:
     """The shared world-space bounds every layer emits in. Paths and footprints are
-    derived from ONE venue frame fitted to the collection, never per-object bounds,
-    so motion stays continuous across the whole scene."""
+    derived from ONE venue frame (fitted to the collection, or an emitter cage), never
+    per-object bounds, so motion stays continuous across the whole scene.
 
-    def __init__(self, shape, cx, cy, rx, ry, z0, z1):
+    Fitted to a collection, Circle and Square use the larger half-extent and Triangle
+    circumscribes the bounds. exact=True (an emitter cage) takes rx/ry as the shape's own
+    half-extents instead, so a scaled cage gives an ellipse or rectangle, and angle turns
+    the whole frame about its centre."""
+
+    def __init__(self, shape, cx, cy, rx, ry, z0, z1, exact=False, angle=0.0):
         self.shape = shape
         self.center = Vector((cx, cy))
         self.center3 = Vector((cx, cy, 0.0))
         self.rx, self.ry = rx, ry
         self.z0, self.z1 = z0, z1
+        self.exact, self.angle = exact, angle
+        self._cos, self._sin = math.cos(angle), math.sin(angle)
         self.path_z = z0 + PATH_Z * (z1 - z0)
         self._cum = None
 
@@ -209,22 +225,27 @@ class Venue:
     def span_z(self):
         return self.z1 - self.z0
 
-    def polygon(self):
-        """Closed CCW footprint polygon in world XY (the circle samples CIRCLE_SEG edges)."""
-        if self.shape == "CIRCLE":
-            return [Vector((self.center.x + self.radius * math.cos(a),
-                            self.center.y + self.radius * math.sin(a)))
-                    for a in (2 * math.pi * i / CIRCLE_SEG for i in range(CIRCLE_SEG))]
+    def half(self):
+        """(hx, hy): the shape's half-extents in its own frame."""
+        if self.exact or self.shape == "RECT":
+            return self.rx, self.ry
         if self.shape == "TRIANGLE":
             rt = 1.25 * math.hypot(self.rx, self.ry)
-            return [Vector((self.center.x + rt * math.cos(a), self.center.y + rt * math.sin(a)))
-                    for a in (math.pi / 2, math.pi * 7 / 6, math.pi * 11 / 6)]
-        r = self.radius if self.shape == "SQUARE" else None
-        hx = self.rx if r is None else r
-        hy = self.ry if r is None else r
-        cx, cy = self.center
-        return [Vector((cx + hx, cy - hy)), Vector((cx + hx, cy + hy)),
-                Vector((cx - hx, cy + hy)), Vector((cx - hx, cy - hy))]
+            return rt, rt
+        return self.radius, self.radius
+
+    def _world(self, x, y):
+        """Local frame (x, y) -> world XY: turned by angle about the centre."""
+        return Vector((self.center.x + x * self._cos - y * self._sin,
+                       self.center.y + x * self._sin + y * self._cos))
+
+    def polygon(self):
+        """Closed CCW footprint polygon in world XY (the circle samples CIRCLE_SEG edges)."""
+        hx, hy = self.half()
+        return [self._world(hx * ux, hy * uy) for ux, uy in _unit_outline(self.shape)]
+
+    def _analytic(self):
+        return self.shape == "CIRCLE" and not self.exact
 
     def _arclen(self):
         if self._cum is None:
@@ -238,7 +259,7 @@ class Venue:
     def path_point(self, u):
         """World position on the closed emitter path at normalised arc length u."""
         u %= 1.0
-        if self.shape == "CIRCLE":
+        if self._analytic():
             a = 2 * math.pi * u
             return Vector((self.center.x + self.radius * math.cos(a),
                            self.center.y + self.radius * math.sin(a), self.path_z))
@@ -253,7 +274,7 @@ class Venue:
     def path_tangent(self, u):
         """Unit travel direction of the path at u (CCW)."""
         u %= 1.0
-        if self.shape == "CIRCLE":
+        if self._analytic():
             a = 2 * math.pi * u
             return Vector((-math.sin(a), math.cos(a), 0.0))
         poly, cum = self._arclen()
@@ -263,25 +284,24 @@ class Venue:
 
     def footprint(self, rng):
         """A deterministic random world point inside the venue shape, at ground level."""
-        cx, cy = self.center
+        hx, hy = self.half()
         if self.shape == "CIRCLE":
-            r = self.radius * math.sqrt(rng.random())
+            r = math.sqrt(rng.random())
             a = 2 * math.pi * rng.random()
-            return Vector((cx + r * math.cos(a), cy + r * math.sin(a), self.z0))
-        if self.shape == "TRIANGLE":
+            p = self._world(hx * r * math.cos(a), hy * r * math.sin(a))
+        elif self.shape == "TRIANGLE":
             tri = self.polygon()
             u, v = rng.random(), rng.random()
             if u + v > 1.0:
                 u, v = 1.0 - u, 1.0 - v
             p = tri[0] + (tri[1] - tri[0]) * u + (tri[2] - tri[0]) * v
-            return Vector((p.x, p.y, self.z0))
-        hx = self.radius if self.shape == "SQUARE" else self.rx
-        hy = self.radius if self.shape == "SQUARE" else self.ry
-        return Vector((cx + rng.uniform(-hx, hx), cy + rng.uniform(-hy, hy), self.z0))
+        else:
+            p = self._world(rng.uniform(-hx, hx), rng.uniform(-hy, hy))
+        return Vector((p.x, p.y, self.z0))
 
 
-def make_venue(scene):
-    """Fit the venue to the world bounds of every object in the scene's collection."""
+def _fitted_venue(scene):
+    """The venue fitted to the world bounds of every object in the scene's collection."""
     s = scene.afterglow
     if s.collection is None:
         raise ValueError("Pick a collection first")
@@ -302,6 +322,96 @@ def make_venue(scene):
     ry = max((hi[1] - lo[1]) / 2, 0.25) * fx.margin
     return Venue(fx.venue_shape, float(cx), float(cy), float(rx), float(ry),
                  float(lo[2]), float(hi[2]) + fx.height)
+
+
+def make_venue(scene):
+    """The venue every layer emits in: the emitter cage when there is one (its location,
+    Z rotation, XY scale and Z scale are the venue's centre and floor, turn, half-extents
+    and height), else fitted to the scene's collection."""
+    fx = scene.afterglow.effects
+    cage = fx.emitter
+    if cage is None:
+        return _fitted_venue(scene)
+    bpy.context.view_layer.update()  # matrix_world is stale right after the cage is moved
+    loc, rot, scale = cage.matrix_world.decompose()
+    rx, ry, h = (max(abs(v), 0.05) for v in scale)
+    return Venue(fx.venue_shape, loc.x, loc.y, rx, ry, loc.z, loc.z + h,
+                 exact=True, angle=rot.to_euler().z)
+
+
+# --------------------------------------------------------------------------- emitter cage
+
+EMITTER_TAG = "afterglow_emitter"
+EMITTER_NAME = "Afterglow Emitter"
+CAGE_POSTS = 8  # vertical edges drawn on a circle cage
+
+
+def _cage_geometry(shape):
+    """(verts, edges) of a unit cage: the footprint at the floor (z 0) and top (z 1), the
+    travelling path ring at PATH_Z, and vertical posts. The object's scale sizes it."""
+    outline = _unit_outline(shape)
+    n = len(outline)
+    verts, edges = [], []
+    for z in (0.0, 1.0, PATH_Z):
+        base = len(verts)
+        verts += [(x, y, z) for x, y in outline]
+        edges += [(base + i, base + (i + 1) % n) for i in range(n)]
+    step = max(1, n // CAGE_POSTS)
+    edges += [(i, n + i) for i in range(0, n, step)]
+    return verts, edges
+
+
+def refresh_cage(scene):
+    """Redraw the scene's emitter cage for the current Venue Shape (cages Afterglow made)."""
+    fx = scene.afterglow.effects
+    cage = fx.emitter
+    if not (cage and cage.get(EMITTER_TAG) and cage.type == "MESH"):
+        return
+    me = cage.data
+    verts, edges = _cage_geometry(fx.venue_shape)
+    me.clear_geometry()
+    me.from_pydata(verts, edges, [])
+    me.update()
+
+
+def fit_cage(scene):
+    """Create the scene's emitter cage if needed, and fit it to the collection: the cage
+    then outlines exactly the venue that Shape, Height and Margin fit today."""
+    fx = scene.afterglow.effects
+    v = _fitted_venue(scene)
+    hx, hy = v.half()
+    cage = fx.emitter
+    if cage is None or not cage.get(EMITTER_TAG):
+        me = bpy.data.meshes.new(EMITTER_NAME)
+        me[EMITTER_TAG] = 1
+        cage = bpy.data.objects.new(EMITTER_NAME, me)
+        cage[EMITTER_TAG] = 1
+        cage.hide_render = True        # a viewport control, never rendered
+        cage.show_in_front = True      # visible through the venue
+        cage.lock_rotation = (True, True, False)  # the venue turns about Z only
+        scene.collection.objects.link(cage)
+        fx.emitter = cage
+    refresh_cage(scene)
+    cage.location = (v.center.x, v.center.y, v.z0)
+    cage.rotation_euler = (0.0, 0.0, 0.0)
+    cage.scale = (hx, hy, v.span_z)
+    return cage
+
+
+def _spawn_targets(scene):
+    """[(x, y, top)] of the Spawn On collection's objects: each one's world bounding-box
+    centre and top, sorted by name so the draw is deterministic."""
+    coll = scene.afterglow.effects.spawn_on
+    if coll is None:
+        return []
+    bpy.context.view_layer.update()
+    out = []
+    for ob in sorted(coll.all_objects, key=lambda o: o.name):
+        if ob.get(TAG) or ob.get(EMITTER_TAG):
+            continue  # Afterglow's own lights and cage are never targets
+        pts = [ob.matrix_world @ Vector(c) for c in ob.bound_box]
+        out.append((sum(p.x for p in pts) / 8, sum(p.y for p in pts) / 8, max(p.z for p in pts)))
+    return out
 
 
 LIGHT_KIND = {"strikes": "SPOT", "blooms": "POINT", "flashes": "POINT",
@@ -362,6 +472,7 @@ class _Keys:
         self.channels = {}
         self.shafts = {}  # light object name -> its Visible Beams shaft object
         self.beams = False  # building this layer with Visible Beams
+        self.targets = []   # Spawn On: [(x, y, top)] that footprint layers land on
         self.energy = 1.0   # light energy scale for this layer (Visible Beams strikes sit low)
 
     def add(self, struct, idblock, path, index, frame, value, interp):
@@ -680,6 +791,19 @@ def _key_static_loc(keys, lights, pos, t0, dur, frame_of):
         keys.add_vec(ob, ob, "location", frame_of(t0 + dur), pos, "LINEAR")
 
 
+SPAWN_GAP = 0.02   # a Strike on an object glows this far above its top (fraction of venue height)
+BLOOM_LIFT = 0.1   # a Bloom on an object floats at least this far above it
+
+
+def _spawn(venue, rng, targets):
+    """(ground point, top or None) where a footprint layer's event lands: one of the Spawn
+    On objects when set (top = its top), else a random point inside the venue."""
+    if targets:
+        x, y, top = targets[min(int(rng.random() * len(targets)), len(targets) - 1)]
+        return Vector((x, y, venue.z0)), top
+    return venue.footprint(rng), None
+
+
 def _layer_keys(name, keys, lights, venue, ev, b, timing, rng, fps, start):
     """Motion + brightness channels for one event of one layer. Lights only: no
     geometry is keyed, so the venue's own surfaces stay the only visible things."""
@@ -691,12 +815,18 @@ def _layer_keys(name, keys, lights, venue, ev, b, timing, rng, fps, start):
     span = venue.span_z
     if name in ("strikes", "blooms", "flashes"):
         if name == "strikes":
-            p = venue.footprint(rng)
+            p, top = _spawn(venue, rng, keys.targets)
             # the spot crowns the strike, aimed down; a Visible Beams strike glows from its base
-            pos = Vector((p.x, p.y, venue.z0 + STRIKE_BASE * span if keys.beams else venue.z1))
+            base = venue.z0 + STRIKE_BASE * span if top is None else top + SPAWN_GAP * span
+            pos = Vector((p.x, p.y, base if keys.beams else venue.z1))
+            shaft = keys.shafts.get(lights[0].name)
+            if shaft:  # the filament ends at the venue top, wherever this strike lands
+                reach = max(venue.z1 - base, 0.01 * span) / ((1.0 - STRIKE_BASE) * span)
+                keys.add_vec(shaft, shaft, "scale", frame_of(t0), (1.0, 1.0, reach), "CONSTANT")
         elif name == "blooms":
-            p = venue.footprint(rng)
-            pos = Vector((p.x, p.y, venue.z0 + 0.45 * span))
+            p, top = _spawn(venue, rng, keys.targets)
+            z = venue.z0 + 0.45 * span
+            pos = Vector((p.x, p.y, z if top is None else max(z, top + BLOOM_LIFT * span)))
         else:
             pos = Vector((venue.center.x, venue.center.y, venue.z0 + 0.85 * span))
         _key_static_loc(keys, lights, pos, t0, dur, frame_of)
@@ -711,9 +841,9 @@ def _layer_keys(name, keys, lights, venue, ev, b, timing, rng, fps, start):
             p = venue.path_point(u0 + u_span * frac)
             keys.add_vec(light_ob, light_ob, "location", frame_of(t0 + dur * frac), p, "LINEAR")
     elif name == "downward":
-        p = venue.footprint(rng)
+        p, land = _spawn(venue, rng, keys.targets)
         top = Vector((p.x, p.y, venue.z1))
-        bot = Vector((p.x, p.y, venue.z0 + 0.02 * span))
+        bot = Vector((p.x, p.y, venue.z0 + 0.02 * span if land is None else land))
         # A smooth cascade: every light glides the full height at the SAME constant
         # speed, started one DOWN_LAG apart, head brightest — a falling trail of
         # lights instead of one stretched, scaled cylinder.
@@ -749,6 +879,7 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
     units = [_make_unit(coll, name, slot, tuple(layer.color), beams)
              for slot in range(POOL[name])]
     keys.beams = beams
+    keys.targets = _spawn_targets(scene)
     keys.energy = STRIKE_BEAM_ENERGY if beams and name == "strikes" else 1.0
     if beams:
         speed = FLOW_SPEED * fx.beam_flow * venue.span_z
@@ -814,6 +945,10 @@ def settings_sig(scene):
     fx = s.effects
     vals = [VERSION, fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4),
             fx.beams, round(fx.beam_glow, 4), fx.beam_companions, round(fx.beam_flow, 4)]
+    cage = fx.emitter                                   # moving the cage moves the venue
+    vals += [tuple(round(x, 4) for row in cage.matrix_world for x in row) if cage else None]
+    vals += [fx.spawn_on.name if fx.spawn_on else None,  # moving a target moves its spawns
+             tuple(tuple(round(c, 4) for c in t) for t in _spawn_targets(scene))]
     for name in LAYERS:
         layer = getattr(fx, name)
         vals += [layer.enabled, layer.trigger_band, tuple(round(c, 4) for c in layer.color)]
