@@ -478,6 +478,15 @@ TRACER_CORE = 4.0        # tracer edge falloff power: bright core, soft edges hi
 TRACER_FADE = 2.0        # tracer falloff power along its length, brightest at its light
 GLOW = "afterglow_glow"  # shaft object property keyed with its event envelope (0..)
 GLOW_PATH = f'["{GLOW}"]'
+# Walk: a Strike beam travels in instead of popping on. WALK is keyed per event from 0
+# (hidden) to WALK_FULL (head has crossed the whole height) and on to WALK_GONE (tail has
+# followed it out). Positions are shares of the Strike's height along the walk direction;
+# WALK_EDGE softens the head and tail.
+WALK = "afterglow_walk"
+WALK_PATH = f'["{WALK}"]'
+WALK_EDGE = 0.04
+WALK_FULL = 1.0 + WALK_EDGE
+WALK_GONE = 2.0 + 3.0 * WALK_EDGE
 CUT_FADE = 0.03          # s an event cut short by a stolen pool slot takes to fade out
 CUT_EPS = 0.05           # frames: a cut event is dark and still this long before the handover
                          # (FCurve.update() merges keys closer than 0.01 frame)
@@ -493,6 +502,7 @@ class _Keys:
         self.shafts = {}  # light object name -> its Visible Beams shaft object
         self.beams = False  # building this layer with Visible Beams
         self.energy = 1.0   # light energy scale for this layer (Visible Beams strikes sit low)
+        self.walk = None    # Strike beams walk in: (share of the event the head takes) or None
 
     def add(self, struct, idblock, path, index, frame, value, interp):
         ch = self.channels.get((struct, path, index))
@@ -614,7 +624,7 @@ def _make_unit(coll, layer, slot, color, beams=False):
     return tuple(lights)
 
 
-def _beam_material(layer, kind, color, glow, flow=None, gaps=0.375, dash=0.75):
+def _beam_material(layer, kind, color, glow, flow=None, gaps=0.375, dash=0.75, walk=None):
     """One additive glow material (emission over transparency) per beam part, shared by
     a layer's shafts. Each shaft's keyed GLOW property (an Object attribute) sets its
     brightness. kind: "filament" (a Strike's bright core) or "sleeve" (its faint glow),
@@ -626,7 +636,9 @@ def _beam_material(layer, kind, color, glow, flow=None, gaps=0.375, dash=0.75):
     speed) or up (negative). gaps (0..1) and dash (metres per feature) shape the pattern.
     Each filament's pattern also depends on its distance from the shaft's axis, in bins of
     a quarter metre: core and sleeve share bin 0 (their dashes line up), each companion has
-    a bin of its own."""
+    a bin of its own. walk = ("DOWN" | "UP", lo, hi) shows only the stretch between the
+    shaft's keyed WALK head and tail, measured along the Strike's height lo..hi (local Z)
+    from its top (DOWN) or its floor (UP), so the beam travels in and out."""
     mat = bpy.data.materials.new(f"{PREFIX}_{layer}_{kind}")
     mat[TAG] = VERSION
     mat.surface_render_method = "BLENDED"
@@ -691,6 +703,16 @@ def _beam_material(layer, kind, color, glow, flow=None, gaps=0.375, dash=0.75):
         else:
             shape = op("MULTIPLY", dash.outputs["Result"], op("POWER", inside, SLEEVE_POWER))
             gain = SLEEVE_EMISSION
+    if walk and kind != "tracer":
+        way, lo, hi = walk
+        hz = op("DIVIDE", op("SUBTRACT", z.outputs["Z"], lo), max(hi - lo, 1e-3))  # 0 floor .. 1 top
+        u = op("SUBTRACT", 1.0, hz) if way == "DOWN" else hz          # 0 where the walk starts
+        w = N.new("ShaderNodeAttribute")
+        w.attribute_type, w.attribute_name = "OBJECT", WALK
+        head = op("MINIMUM", op("MAXIMUM", op("DIVIDE", op("SUBTRACT", w.outputs["Factor"], u), WALK_EDGE), 0.0), 1.0)
+        tail_at = op("SUBTRACT", w.outputs["Factor"], 1.0 + 2.0 * WALK_EDGE)
+        tail = op("MINIMUM", op("MAXIMUM", op("DIVIDE", op("SUBTRACT", u, tail_at), WALK_EDGE), 0.0), 1.0)
+        shape = op("MULTIPLY", shape, op("MULTIPLY", head, tail))
     key = N.new("ShaderNodeAttribute")
     key.attribute_type, key.attribute_name = "OBJECT", GLOW
     emission = N.new("ShaderNodeEmission")
@@ -749,6 +771,7 @@ def _make_shaft(coll, light_ob, tubes, mats):
     ob = bpy.data.objects.new(name, me)
     ob[TAG] = VERSION
     ob[GLOW] = 0.0
+    ob[WALK] = WALK_FULL  # fully shown unless a walk is keyed
     ob.parent = light_ob
     for attr in ("visible_shadow", "visible_diffuse", "visible_transmission", "visible_volume_scatter"):
         setattr(ob, attr, False)  # camera and reflections see it; it lights nothing
@@ -811,15 +834,16 @@ def _bright(strength, intensity):
     return max(0.0, min(strength, 2.0)) * max(0.0, intensity)
 
 
-def _key_appear(keys, lights, layer, b, env, frame_of):
-    """Light energy follows the envelope; dark outside it. A Visible Beams shaft glows
-    with the same envelope."""
+def _key_appear(keys, lights, layer, b, env, frame_of, light_env=None):
+    """Light energy follows the envelope (or light_env); dark outside it. A Visible Beams
+    shaft glows with the envelope."""
     for light_ob in lights:
         shaft = keys.shafts.get(light_ob.name)
-        for t, e in env:
+        for t, e in light_env or env:
             keys.add(light_ob.data, light_ob.data, "energy", -1, frame_of(t),
                      ENERGY[layer] * keys.energy * b * e, "BEZIER")
-            if shaft:
+        if shaft:
+            for t, e in env:
                 keys.add(shaft, shaft, GLOW_PATH, -1, frame_of(t), b * e, "BEZIER")
 
 
@@ -843,6 +867,11 @@ def _layer_keys(name, keys, lights, venue, ev, b, timing, rng, fps, start):
             p = venue.footprint(rng)
             # the spot crowns the strike, aimed down; a Visible Beams strike glows from its base
             pos = Vector((p.x, p.y, venue.z0 + _strike_base(venue) if keys.beams else venue.z1))
+            shaft = keys.shafts.get(lights[0].name)
+            if shaft and keys.walk:  # head travels in, holds, then the tail follows it out
+                for t, w in ((t0, 0.0), (t0 + keys.walk[1] * dur, WALK_FULL),
+                             (t0 + HOLD[name] * dur, WALK_FULL), (t0 + dur, WALK_GONE)):
+                    keys.add(shaft, shaft, WALK_PATH, -1, frame_of(t), w, "LINEAR")
         elif name == "blooms":
             p = venue.footprint(rng)
             pos = Vector((p.x, p.y, venue.z0 + 0.45 * span))
@@ -887,7 +916,12 @@ def _layer_keys(name, keys, lights, venue, ev, b, timing, rng, fps, start):
             keys.add_vec(light_ob, light_ob, "location", f, pos, "LINEAR")
         keys.add_vec(light_ob, light_ob, "rotation_quaternion", frame_of(t0), q_flip, "LINEAR")
         keys.add_vec(light_ob, light_ob, "rotation_quaternion", frame_of(t0 + dur), q_flip, "LINEAR")
-    _key_appear(keys, lights, name, bright, env, frame_of)
+    light_env = None
+    if name == "strikes" and keys.walk and keys.walk[0] == "DOWN":  # the light lands with the head
+        land = t0 + keys.walk[1] * dur
+        held = HOLD[name] * dur - (land - t0)  # the light still dims with the beam
+        light_env = _envelope(land, t0 + dur - land, min(ATTACK[name], 0.5 * held), held / (t0 + dur - land))
+    _key_appear(keys, lights, name, bright, env, frame_of, light_env)
 
 
 def _build_layer(coll, scene, venue, name, events, fps, start, end):
@@ -902,7 +936,12 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
     if beams:
         speed = FLOW_SPEED * fx.beam_flow * (-1.0 if fx.beam_direction == "UP" else 1.0)
         flow = (start, end, fps, speed) if speed else None
-        mats = [_beam_material(name, k, tuple(layer.color), fx.beam_glow, flow, fx.beam_gaps, fx.beam_dash)
+        walk = None
+        if name == "strikes" and fx.beam_walk != "OFF":
+            base = _strike_base(venue)
+            walk = (fx.beam_walk, -base, venue.span_z - base)
+            keys.walk = (fx.beam_walk, min(max(fx.beam_walk_time, 0.02), HOLD["strikes"] - 0.05))
+        mats = [_beam_material(name, k, tuple(layer.color), fx.beam_glow, flow, fx.beam_gaps, fx.beam_dash, walk)
                 for k in _beam_kinds(name)]
         sides = random.Random(f"{fx.seed}:{name}:beams")
         for lights in units:
@@ -963,7 +1002,7 @@ def settings_sig(scene):
     fx = s.effects
     vals = [VERSION, fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4),
             fx.beams, round(fx.beam_glow, 4), round(fx.beam_flow, 4), fx.beam_direction,
-            round(fx.beam_gaps, 4), round(fx.beam_dash, 4)]
+            round(fx.beam_gaps, 4), round(fx.beam_dash, 4), fx.beam_walk, round(fx.beam_walk_time, 4)]
     cage = fx.emitter                                   # moving the cage moves the venue
     vals += [tuple(round(x, 4) for row in cage.matrix_world for x in row) if cage else None]
     for name in LAYERS:

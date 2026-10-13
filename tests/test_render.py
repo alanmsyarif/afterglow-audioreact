@@ -261,4 +261,53 @@ def test_visible_beams_light_the_air():
         assert on_max > 0.3 and on_mean > 0.005, (engine, on_mean, on_max)
 
 
+def walk_halves(way):
+    """(upper, lower) peak brightness of the air filmed side-on while a Data Strike beam
+    is half way through walking in."""
+    import math
+    from afterglow import effects
+    helpers.fresh()
+    scene = bpy.context.scene
+    coll = bpy.data.collections.new("Venue")
+    scene.collection.children.link(coll)
+    plane("floor", coll)
+    scene.afterglow.collection = coll
+    scene.afterglow.sound = sound()
+    fx = scene.afterglow.effects
+    fx.strikes.enabled, fx.strikes.weight, fx.strikes.timing = True, 1.0, 4.0  # a slow walk
+    fx.beams, fx.beam_walk, fx.beam_walk_time = True, way, 0.4
+    effects.build(scene)
+    sh = next(ob for ob in bpy.data.objects if ob.name.startswith("AFX_strikes") and ob.type == "MESH")
+    fc = next(c for c in helpers.fcurves(sh) if c.data_path == effects.WALK_PATH)
+    k0, k1 = fc.keyframe_points[0].co.x, fc.keyframe_points[1].co.x
+    f = k0 + 0.5 / effects.WALK_FULL * (k1 - k0)                   # the head half way along
+    cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))
+    cam.location, cam.rotation_euler = (0, -14, 4), (math.pi / 2, 0, 0)
+    scene.collection.objects.link(cam)
+    scene.camera = cam
+    scene.world = bpy.data.worlds.new("w")
+    next(n for n in scene.world.node_tree.nodes if n.type == "BACKGROUND").inputs["Strength"].default_value = 0.0
+    scene.render.engine = "BLENDER_EEVEE"
+    scene.render.resolution_x = scene.render.resolution_y = 96
+    scene.frame_set(int(f), subframe=f - int(f))
+    scene.render.filepath = os.path.join(tempfile.gettempdir(), f"afterglow_walk_{way}.png")
+    bpy.ops.render.render(write_still=True)
+    img = bpy.data.images.load(scene.render.filepath)
+    w, h = img.size
+    px = img.pixels[:]
+    bpy.data.images.remove(img)
+
+    def peak(r0, r1):  # image rows run bottom-up
+        return max(sum(px[(y * w + x) * 4:(y * w + x) * 4 + 3]) / 3
+                   for y in range(int(h * r0), int(h * r1)) for x in range(w))
+    return peak(0.55, 0.85), peak(0.15, 0.45)
+
+
+def test_strike_beam_walks_the_chosen_way():
+    up_hi, up_lo = walk_halves("DOWN")              # walking Down: the top half shows first
+    assert up_hi > 0.3 and up_lo < 0.5 * up_hi, (up_hi, up_lo)
+    dn_hi, dn_lo = walk_halves("UP")                # walking Up: the bottom half shows first
+    assert dn_lo > 0.3 and dn_hi < 0.5 * dn_lo, (dn_hi, dn_lo)
+
+
 helpers.run(globals())

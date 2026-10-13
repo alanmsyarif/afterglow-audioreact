@@ -216,6 +216,11 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         row = beam.row(align=True)
         row.prop(fx, "beam_gaps")
         row.prop(fx, "beam_dash")
+        row = beam.row(align=True)
+        row.prop(fx, "beam_walk", expand=True)
+        sub = row.row(align=True)
+        sub.active = fx.beam_walk != "OFF"
+        sub.prop(fx, "beam_walk_time")
         for name in effects.LAYERS:
             layer = getattr(fx, name)
             box = col.box()
