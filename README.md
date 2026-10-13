@@ -134,7 +134,7 @@ Beam controls:
 | Flow, Direction | How fast the dashes and beads stream (0 holds them still), and whether **Down** or **Up**. |
 | Gaps | How broken up the filaments are: 0 almost solid, 1 mostly gaps (the beaded companion is always a bit more broken up). |
 | Dash Size | Length of the dash pattern's features, in metres. |
-| Walk, Walk Time | How a Strike beam arrives: **Down** (default) grows it from the top to the floor and its tail follows it out; **Up** does the same from the floor; **Off** shows it all at once. Walk Time is the share of the strike its head takes to cross the height. Walking Down, the light flashes on the floor when the head lands. A longer strike **Timing** walks slower. |
+| Walk, Walk Time | How a Strike beam arrives: **Down** (default) grows it from the top so it lands on the floor exactly on the beat, then its tail follows it out; **Up** leaves the floor on the beat and grows to the top; **Off** shows it all at once. Walk Time is how many seconds the head takes to cross the height (the tail takes as long to leave), whatever the strike's length. |
 
 The beams are emissive meshes parented to their lights, with brightness keyed on the same envelope as the light, so they look the same in
 EEVEE and Cycles and cost almost nothing to render. They cast no shadows and light nothing

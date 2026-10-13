@@ -502,7 +502,7 @@ class _Keys:
         self.shafts = {}  # light object name -> its Visible Beams shaft object
         self.beams = False  # building this layer with Visible Beams
         self.energy = 1.0   # light energy scale for this layer (Visible Beams strikes sit low)
-        self.walk = None    # Strike beams walk in: (share of the event the head takes) or None
+        self.walk = None    # Strike beams walk in: ("DOWN" | "UP", seconds the head takes) or None
 
     def add(self, struct, idblock, path, index, frame, value, interp):
         ch = self.channels.get((struct, path, index))
@@ -834,16 +834,36 @@ def _bright(strength, intensity):
     return max(0.0, min(strength, 2.0)) * max(0.0, intensity)
 
 
-def _key_appear(keys, lights, layer, b, env, frame_of, light_env=None):
-    """Light energy follows the envelope (or light_env); dark outside it. A Visible Beams
-    shaft glows with the envelope."""
+def _walk_times(keys, t0, dur):
+    """(head starts, head across, tail starts, tail gone) of a walking Strike beam, in
+    seconds. Walking Down the head lands on the floor exactly at the onset t0 (the beam
+    starts early); walking Up it leaves the floor at t0. The tail follows after the
+    strike's hold, taking as long as the head did."""
+    way, walk = keys.walk
+    head = t0 - walk if way == "DOWN" else t0
+    tail = max(head + walk, t0 + HOLD["strikes"] * dur)
+    return head, head + walk, tail, tail + walk
+
+
+def _busy(name, keys, t0, dur):
+    """(start, end) in seconds while an event keeps its pool slot: a walking Strike beam
+    from its first step to its tail leaving, every other event over its envelope."""
+    if name == "strikes" and keys.walk:
+        h0, _, _, t1 = _walk_times(keys, t0, dur)
+        return h0, max(t1, t0 + dur)
+    return t0, t0 + dur
+
+
+def _key_appear(keys, lights, layer, b, env, frame_of, glow_env=None):
+    """Light energy follows the envelope; dark outside it. A Visible Beams shaft glows with
+    the same envelope, or glow_env (a walking beam is lit for its whole walk)."""
     for light_ob in lights:
         shaft = keys.shafts.get(light_ob.name)
-        for t, e in light_env or env:
+        for t, e in env:
             keys.add(light_ob.data, light_ob.data, "energy", -1, frame_of(t),
                      ENERGY[layer] * keys.energy * b * e, "BEZIER")
         if shaft:
-            for t, e in env:
+            for t, e in glow_env or env:
                 keys.add(shaft, shaft, GLOW_PATH, -1, frame_of(t), b * e, "BEZIER")
 
 
@@ -869,15 +889,15 @@ def _layer_keys(name, keys, lights, venue, ev, b, timing, rng, fps, start):
             pos = Vector((p.x, p.y, venue.z0 + _strike_base(venue) if keys.beams else venue.z1))
             shaft = keys.shafts.get(lights[0].name)
             if shaft and keys.walk:  # head travels in, holds, then the tail follows it out
-                for t, w in ((t0, 0.0), (t0 + keys.walk[1] * dur, WALK_FULL),
-                             (t0 + HOLD[name] * dur, WALK_FULL), (t0 + dur, WALK_GONE)):
+                for t, w in zip(_walk_times(keys, t0, dur), (0.0, WALK_FULL, WALK_FULL, WALK_GONE)):
                     keys.add(shaft, shaft, WALK_PATH, -1, frame_of(t), w, "LINEAR")
         elif name == "blooms":
             p = venue.footprint(rng)
             pos = Vector((p.x, p.y, venue.z0 + 0.45 * span))
         else:
             pos = Vector((venue.center.x, venue.center.y, venue.z0 + 0.85 * span))
-        _key_static_loc(keys, lights, pos, t0, dur, frame_of)
+        s0, s1 = _busy(name, keys, t0, dur)  # in place for the whole (walking) event
+        _key_static_loc(keys, lights, pos, s0, s1 - s0, frame_of)
     elif name == "trails":
         light_ob = lights[0]
         u0 = rng.random()
@@ -916,12 +936,12 @@ def _layer_keys(name, keys, lights, venue, ev, b, timing, rng, fps, start):
             keys.add_vec(light_ob, light_ob, "location", f, pos, "LINEAR")
         keys.add_vec(light_ob, light_ob, "rotation_quaternion", frame_of(t0), q_flip, "LINEAR")
         keys.add_vec(light_ob, light_ob, "rotation_quaternion", frame_of(t0 + dur), q_flip, "LINEAR")
-    light_env = None
-    if name == "strikes" and keys.walk and keys.walk[0] == "DOWN":  # the light lands with the head
-        land = t0 + keys.walk[1] * dur
-        held = HOLD[name] * dur - (land - t0)  # the light still dims with the beam
-        light_env = _envelope(land, t0 + dur - land, min(ATTACK[name], 0.5 * held), held / (t0 + dur - land))
-    _key_appear(keys, lights, name, bright, env, frame_of, light_env)
+    glow_env = None
+    if name == "strikes" and keys.walk and keys.shafts:  # lit while it walks; the light keeps the beat
+        h0, _, _, t1 = _walk_times(keys, t0, dur)
+        a = min(ATTACK[name], 0.25 * (t1 - h0))
+        glow_env = [(h0, 0.0), (h0 + a, 1.0), (t1 - a, 1.0), (t1, 0.0)]
+    _key_appear(keys, lights, name, bright, env, frame_of, glow_env)
 
 
 def _build_layer(coll, scene, venue, name, events, fps, start, end):
@@ -940,7 +960,7 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
         if name == "strikes" and fx.beam_walk != "OFF":
             base = _strike_base(venue)
             walk = (fx.beam_walk, -base, venue.span_z - base)
-            keys.walk = (fx.beam_walk, min(max(fx.beam_walk_time, 0.02), HOLD["strikes"] - 0.05))
+            keys.walk = (fx.beam_walk, max(fx.beam_walk_time, 0.02))
         mats = [_beam_material(name, k, tuple(layer.color), fx.beam_glow, flow, fx.beam_gaps, fx.beam_dash, walk)
                 for k in _beam_kinds(name)]
         sides = random.Random(f"{fx.seed}:{name}:beams")
@@ -958,13 +978,15 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
         intensity = sample_prop(scene, f"afterglow.effects.{name}.intensity", layer.intensity, frame0)
         timing = sample_prop(scene, f"afterglow.effects.{name}.timing", layer.timing, frame0)
         dur = DUR[name] * max(timing, 0.05)
-        slot, busy = _assign(free, t0, dur)
+        s0, s1 = _busy(name, keys, t0, dur)
+        slot, busy = _assign(free, s0, s1 - s0)
         if busy:  # every slot still lit: cut the oldest event short rather than interleave
-            keys.cut(units[slot], frame0, CUT_FADE * fps)
+            keys.cut(units[slot], start + s0 * fps, CUT_FADE * fps)
         _layer_keys(name, keys, units[slot], venue, (t0, strength), intensity, timing, rng, fps, start)
         placed += 1
     # baseline: every light dark outside its events, so silence renders as nothing
-    b0, b1 = start - 1.0, end + 1.0
+    early = keys.walk[1] * fps if keys.walk and keys.walk[0] == "DOWN" else 0.0  # beams walking in
+    b0, b1 = start - 1.0 - early, end + 1.0
     for lights in units:
         for light_ob in lights:
             shaft = keys.shafts.get(light_ob.name)

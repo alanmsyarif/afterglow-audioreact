@@ -1092,31 +1092,65 @@ def walk_curve(sh):
     return next((fc for fc in helpers.fcurves(sh) if fc.data_path == effects.WALK_PATH), None)
 
 
-def test_strike_beam_walks_in_and_out():
+def onsets(sh):
+    """Frames where a strike light flashes on: its energy keys at 0 followed by a rise."""
+    energy = next(fc for fc in helpers.fcurves(sh.parent.data) if fc.data_path == "energy")
+    k = [(kp.co.x, kp.co.y) for kp in energy.keyframe_points]
+    return [f for (f, v), (_, nxt) in zip(k, k[1:]) if v == 0.0 and nxt > 1e-6]
+
+
+def walk_events(sh):
+    """[(head starts, head across, tail starts, tail gone)] frames of a shaft's walks
+    (none for a light that never fired)."""
+    fc = walk_curve(sh)
+    pts = [(kp.co.x, kp.co.y) for kp in fc.keyframe_points] if fc else []
+    return [tuple(p[0] for p in pts[i:i + 4]) for i in range(0, len(pts), 4)]
+
+
+def test_strike_beam_walks_in_and_lands_on_the_beat():
     scene = beams_stage()
     fx = scene.afterglow.effects
     assert fx.beam_walk == "DOWN"                                    # on by default: no sudden pop
     effects.build(scene)
     fps = scene.render.fps / scene.render.fps_base
     dur = effects.DUR["strikes"] * fx.strikes.timing
+    walk = fx.beam_walk_time * fps                                   # Walk Time is in seconds
+    t0 = effects.analyze(scene)["strikes"][0][0]                    # the first onset
     sh = sorted((s for s in shaft_objs() if s.name.startswith("AFX_strikes")), key=lambda s: s.name)[0]
     pts = [(kp.co.x, kp.co.y) for kp in walk_curve(sh).keyframe_points]
-    f0, w0 = pts[0]                                                  # the first event, key by key:
-    assert w0 == 0.0                                                 # hidden at the onset,
-    assert abs(pts[1][1] - effects.WALK_FULL) < 1e-6                 # head across after Walk Time,
-    assert abs(pts[1][0] - f0 - fx.beam_walk_time * dur * fps) < 1e-3
-    assert abs(pts[2][1] - effects.WALK_FULL) < 1e-6                 # held,
-    assert abs(pts[3][1] - effects.WALK_GONE) < 1e-6                 # tail out as it fades
-    assert abs(pts[3][0] - f0 - dur * fps) < 1e-3
-    energy = next(fc for fc in helpers.fcurves(sh.parent.data) if fc.data_path == "energy")
-    lit = [kp.co.x for kp in energy.keyframe_points if kp.co.y > 1e-6]
-    assert min(lit) >= pts[1][0] - 1e-3, (min(lit), pts[1][0])     # walking Down: lands with the head
+    assert [round(w, 6) for _, w in pts[:4]] == [0.0, round(effects.WALK_FULL, 6),
+                                                 round(effects.WALK_FULL, 6), round(effects.WALK_GONE, 6)]
+    head0, land, tail0, gone = (p[0] for p in pts[:4])
+    onset = scene.afterglow.start_frame + t0 * fps
+    assert abs(land - onset) < 1e-3, (land, onset)                   # the head lands on the beat,
+    assert abs(land - head0 - walk) < 1e-3                           # after walking Walk Time,
+    assert abs(tail0 - onset - effects.HOLD["strikes"] * dur * fps) < 1e-3   # holds,
+    assert abs(gone - tail0 - walk) < 1e-3                           # and its tail takes as long
+    for sh in [s for s in shaft_objs() if s.name.startswith("AFX_strikes")]:
+        flashes = onsets(sh)                                         # every strike, every event:
+        for _, land, _, _ in walk_events(sh):                        # the light flashes as it lands
+            assert min(abs(land - f) for f in flashes) < 1e-3, (sh.name, land)
     for kind in ("filament", "sleeve", "beads"):
         attrs = {n.attribute_name for n in strike_material(kind).node_tree.nodes
                  if n.bl_idname == "ShaderNodeAttribute"}
         assert effects.WALK in attrs, kind
     gun = next(m for m in bpy.data.materials if m.get(effects.TAG) and m.name.endswith("gun_tracer"))
     assert effects.WALK not in {n.attribute_name for n in gun.node_tree.nodes if n.bl_idname == "ShaderNodeAttribute"}
+
+
+def test_walk_time_is_seconds_not_strike_length():
+    scene = beams_stage()
+    fx = scene.afterglow.effects
+    fx.beam_walk_time = 0.6
+    lengths = set()
+    for timing in (0.5, 2.0):                                        # a short and a long strike
+        fx.strikes.timing = timing
+        effects.build(scene)
+        sh = sorted((s for s in shaft_objs() if s.name.startswith("AFX_strikes")), key=lambda s: s.name)[0]
+        head0, land, _, _ = walk_events(sh)[0]
+        lengths.add(round(land - head0, 3))
+    fps = scene.render.fps / scene.render.fps_base
+    assert lengths == {round(0.6 * fps, 3)}, lengths
 
 
 def test_strike_walk_up_and_off():
@@ -1128,10 +1162,9 @@ def test_strike_walk_up_and_off():
         assert effects.outdated(scene), prop
     effects.build(scene)
     sh = sorted((s for s in shaft_objs() if s.name.startswith("AFX_strikes")), key=lambda s: s.name)[0]
-    f0 = walk_curve(sh).keyframe_points[0].co.x
-    energy = next(fc for fc in helpers.fcurves(sh.parent.data) if fc.data_path == "energy")
-    lit = [kp.co.x for kp in energy.keyframe_points if kp.co.y > 1e-6]
-    assert min(lit) - f0 < 2.0, (min(lit), f0)                       # walking Up, it starts with the head
+    flashes = onsets(sh)
+    for head0, _, _, _ in walk_events(sh):                           # walking Up, it leaves on the beat
+        assert min(abs(head0 - f) for f in flashes) < 1e-3, head0
     fx.beam_walk = "OFF"
     effects.build(scene)
     sh = sorted((s for s in shaft_objs() if s.name.startswith("AFX_strikes")), key=lambda s: s.name)[0]
@@ -1144,7 +1177,7 @@ def test_shaft_glow_follows_its_light():
     """The glow is keyed with the light's own envelope, through busy-pool handovers too."""
     scene = beams_stage(dense_wav())
     scene.afterglow.effects.strikes.timing = 4.0          # more overlap than strike slots
-    scene.afterglow.effects.beam_walk = "UP"              # walking Down, the light waits for the head
+    scene.afterglow.effects.beam_walk = "OFF"             # a walking beam glows for its whole walk
     effects.build(scene)
     pairs = [(sh, sh.parent) for sh in shaft_objs()]
     lit = 0

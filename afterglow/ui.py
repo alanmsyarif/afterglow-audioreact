@@ -182,6 +182,39 @@ class AFTERGLOW_OT_fit_emitter(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def draw_venue(col, fx):
+    """Venue section: where effects spawn (shape, seed, and the cage or the fitted size)."""
+    row = col.row(align=True)
+    row.prop(fx, "venue_shape", text="Shape")
+    row.prop(fx, "seed")
+    row = col.row(align=True)
+    row.prop(fx, "emitter", text="Cage")
+    row.operator("afterglow.fit_emitter", text="" if fx.emitter else "Add Cage",
+                 icon="FILE_REFRESH" if fx.emitter else "MESH_CUBE")
+    row = col.row(align=True)
+    row.active = fx.emitter is None  # the cage sets the venue's size instead
+    row.prop(fx, "height")
+    row.prop(fx, "margin")
+
+
+def draw_beams(col, fx):
+    """Visible Beams section: the strike filaments' look and motion."""
+    col.active = fx.beams
+    col.prop(fx, "beam_glow")
+    row = col.row(align=True)
+    row.prop(fx, "beam_walk", expand=True)
+    sub = col.row(align=True)
+    sub.active = fx.beam_walk != "OFF"
+    sub.prop(fx, "beam_walk_time")
+    col.separator()
+    row = col.row(align=True)
+    row.prop(fx, "beam_flow")
+    row.prop(fx, "beam_direction", expand=True)
+    row = col.row(align=True)
+    row.prop(fx, "beam_gaps")
+    row.prop(fx, "beam_dash")
+
+
 class AFTERGLOW_PT_effects(bpy.types.Panel):
     bl_label = "Afterglow Environment Effects"
     bl_space_type = "VIEW_3D"
@@ -191,36 +224,16 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
 
     def draw(self, context):
         fx = context.scene.afterglow.effects
-        col = self.layout.column()
-        row = col.row(align=True)
-        row.prop(fx, "venue_shape", text="Shape")
-        row.prop(fx, "seed")
-        row = col.row(align=True)
-        row.prop(fx, "emitter", text="Cage")
-        row.operator("afterglow.fit_emitter", text="" if fx.emitter else "Add Cage",
-                     icon="FILE_REFRESH" if fx.emitter else "MESH_CUBE")
-        row = col.row(align=True)
-        row.active = fx.emitter is None  # the cage sets the venue's size instead
-        row.prop(fx, "height")
-        row.prop(fx, "margin")
-        row = col.row(align=True)
-        row.prop(fx, "beams")
-        sub = row.row(align=True)
-        sub.active = fx.beams
-        sub.prop(fx, "beam_glow")
-        beam = col.column(align=True)
-        beam.active = fx.beams
-        row = beam.row(align=True)
-        row.prop(fx, "beam_flow")
-        row.prop(fx, "beam_direction", expand=True)
-        row = beam.row(align=True)
-        row.prop(fx, "beam_gaps")
-        row.prop(fx, "beam_dash")
-        row = beam.row(align=True)
-        row.prop(fx, "beam_walk", expand=True)
-        sub = row.row(align=True)
-        sub.active = fx.beam_walk != "OFF"
-        sub.prop(fx, "beam_walk_time")
+        layout = self.layout
+        head, body = layout.panel("AFTERGLOW_fx_venue", default_closed=False)
+        head.label(text="Venue", icon="MESH_CIRCLE")
+        if body:
+            draw_venue(body.column(), fx)
+        head, body = layout.panel("AFTERGLOW_fx_beams", default_closed=True)
+        head.prop(fx, "beams", text="Visible Beams")
+        if body:
+            draw_beams(body.column(), fx)
+        col = layout.column()
         for name in effects.LAYERS:
             layer = getattr(fx, name)
             box = col.box()

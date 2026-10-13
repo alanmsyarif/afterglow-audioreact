@@ -91,4 +91,47 @@ def test_bake_operator_and_outdated_panel_data():
     assert bake.outdated(bpy.context.scene) == []
 
 
+class FakeLayout:
+    """Records what a panel draws; every prop must exist on its data."""
+
+    def __init__(self, log):
+        self.log, self.active, self.alert = log, True, False
+
+    def _child(self, *a, **k):
+        return FakeLayout(self.log)
+
+    row = column = box = _child
+
+    def panel(self, idname, default_closed=False):
+        self.log.append(("panel", idname))
+        return FakeLayout(self.log), FakeLayout(self.log)       # drawn open
+
+    def prop(self, data, name, **k):
+        assert name in data.bl_rna.properties, name
+        self.log.append(("prop", name))
+
+    def operator(self, idname, **k):
+        self.log.append(("op", idname))
+
+    def label(self, **k):
+        pass
+
+    def separator(self, **k):
+        pass
+
+
+def test_effects_panel_draws_its_sections():
+    stage()
+    from afterglow import ui
+    log = []
+    panel = type("P", (), {"layout": FakeLayout(log)})()
+    ui.AFTERGLOW_PT_effects.draw(panel, bpy.context)
+    assert ("panel", "AFTERGLOW_fx_venue") in log and ("panel", "AFTERGLOW_fx_beams") in log
+    drawn = {n for kind, n in log if kind == "prop"}
+    for name in ("venue_shape", "emitter", "beams", "beam_glow", "beam_walk", "beam_walk_time",
+                 "beam_flow", "beam_direction", "beam_gaps", "beam_dash"):
+        assert name in drawn, name
+    assert ("op", "afterglow.build_effects") in log
+
+
 helpers.run(globals())
