@@ -112,15 +112,6 @@ and place. It never renders, Build, Remove Effects, Apply and Remove leave it al
 moving it marks the build outdated. The refresh button beside it snaps it back to the
 collection (it asks first); delete it to go back to the fitted venue.
 
-### Spawn On
-
-Pick a collection in **Spawn On**, and Data Strikes, Data Blooms and Downward Trails land
-on its objects instead of random spots: a Strike glows just above an object's top (its
-filament still reaches the venue top), a Downward Trail falls onto it, and a Bloom floats
-above it. Objects are picked per event, deterministically from the Seed. Travelling
-Trails, Gun Bursts and Rapid Flashes keep using the venue's path and centre. Moving a
-target object marks the build outdated.
-
 ### Visible Beams
 
 Off by default. **Visible Beams** makes the strikes visible in the air, not just as spill
@@ -129,9 +120,9 @@ on surfaces:
 - Each **Data Strike** becomes a thin, white-hot filament from the venue top to the floor,
   broken into short dashes (a different pattern per light) inside a faint glow. Its light
   moves down near the filament's base and becomes a point light, so it lights the floor
-  and the sides of nearby objects from low down. With **Beams** above 1 (2 by default),
-  fainter filaments of short bright beads run around it, each covering only part of its
-  height, with sides, stretches and bead patterns of their own.
+  and the sides of nearby objects from low down. A fainter filament of short bright
+  beads runs beside it, covering only part of its height, on a side and stretch of its
+  own per light.
 - Each **Gun Burst** gets a glowing tracer that flies along its aim with a fading tail,
   and its spot tightens to the tracer's cone.
 
@@ -140,9 +131,8 @@ Beam controls:
 | Control | What it does |
 |---|---|
 | Glow | Brightness of all beams. |
-| Beams | Filaments per Strike: 1 is the main filament alone; each extra one is a beaded companion. |
 | Flow, Direction | How fast the dashes and beads stream (0 holds them still), and whether **Down** or **Up**. |
-| Gaps | How broken up the filaments are: 0 almost solid, 1 mostly gaps (companions are always a bit more broken up). |
+| Gaps | How broken up the filaments are: 0 almost solid, 1 mostly gaps (the beaded companion is always a bit more broken up). |
 | Dash Size | Length of the dash pattern's features, in metres. |
 
 The beams are emissive meshes parented to their lights, with brightness keyed on the same envelope as the light, so they look the same in

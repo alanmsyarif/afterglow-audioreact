@@ -203,13 +203,11 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         row.active = fx.emitter is None  # the cage sets the venue's size instead
         row.prop(fx, "height")
         row.prop(fx, "margin")
-        col.prop(fx, "spawn_on")
         row = col.row(align=True)
         row.prop(fx, "beams")
         sub = row.row(align=True)
         sub.active = fx.beams
         sub.prop(fx, "beam_glow")
-        sub.prop(fx, "beam_count")
         beam = col.column(align=True)
         beam.active = fx.beams
         row = beam.row(align=True)

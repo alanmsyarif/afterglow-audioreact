@@ -765,7 +765,7 @@ def test_packed_sound_builds_without_file():
     assert effects.build(scene)["strikes"] == len(want)
 
 
-# ---------------------------------------------------------------- emitter cage & spawn on
+# ---------------------------------------------------------------- emitter cage
 
 def cage_local(cage, p):
     """A world point in the cage's own unit frame."""
@@ -840,71 +840,6 @@ def test_emitter_cage_lifecycle():
     assert fx.emitter is None and not effects.make_venue(scene).exact
 
 
-def spawn_targets(scene, spots=((-5.0, 2.0, 1.0), (4.0, -3.0, 2.5), (1.0, 6.0, 0.4))):
-    coll = bpy.data.collections.new("Targets")
-    scene.collection.children.link(coll)
-    for i, (x, y, top) in enumerate(spots):
-        ob = bpy.data.objects.new(f"target{i}", None)              # an empty: its top is itself
-        ob.location = (x, y, top)
-        coll.objects.link(ob)
-    scene.afterglow.effects.spawn_on = coll
-    bpy.context.view_layer.update()
-    return spots
-
-
-def lit_positions(scene, layer, frames=range(1, 150)):
-    out = []
-    for f in frames:
-        scene.frame_set(f)
-        for ob in fx_objs(layer):
-            if ob.type == "LIGHT" and ob.data.energy > 1e-3:
-                out.append(tuple(ob.matrix_world.translation))
-    return out
-
-
-def test_spawn_on_lands_strikes_blooms_and_trails_on_objects():
-    scene = beams_stage()
-    enable(scene, "downward", "trails")
-    spots = spawn_targets(scene)
-    effects.build(scene)
-    v = effects.make_venue(scene)
-    near = lambda p: min(spots, key=lambda s: math.dist(p[:2], s[:2]))  # noqa: E731
-    for layer in ("strikes", "blooms", "downward"):
-        pts = lit_positions(scene, layer)
-        assert pts, layer
-        for p in pts:
-            assert math.dist(p[:2], near(p)[:2]) < 1e-3, (layer, p)    # right over a target
-    for p in lit_positions(scene, "strikes"):                         # a strike glows on its top
-        assert abs(p[2] - (near(p)[2] + effects.SPAWN_GAP)) < 1e-3, p
-    tops = []                                                         # its filament still ends at the top
-    for f in range(1, 150):
-        scene.frame_set(f)
-        for sh in shaft_objs():
-            if sh.name.startswith("AFX_strikes") and sh[effects.GLOW] > 0.05:
-                tops.append(max((sh.matrix_world @ vtx.co).z for vtx in sh.data.vertices))
-    assert tops and all(abs(t - v.z1) < 1e-3 for t in tops), (v.z1, tops[:5])
-    for p in lit_positions(scene, "blooms"):                          # a bloom floats above it
-        assert p[2] >= near(p)[2] + effects.BLOOM_LIFT * v.span_z - 1e-3, p
-    lows = {}
-    for p in lit_positions(scene, "downward"):                        # trails fall onto it
-        s = near(p)
-        lows[s] = min(lows.get(s, 1e9), p[2])
-    assert any(abs(low - s[2]) < 0.3 for s, low in lows.items()), lows
-    assert all(low >= s[2] - 1e-3 for s, low in lows.items()), lows  # never through it
-    for p in lit_positions(scene, "trails"):                          # path layers ignore targets
-        assert abs(p[2] - v.path_z) < 1e-3, p
-
-
-def test_spawn_on_edits_and_own_objects():
-    scene = build_stage()
-    spawn_targets(scene)
-    effects.build(scene)
-    assert not effects.outdated(scene)
-    bpy.data.objects["target1"].location.x += 2.0                   # moving a target is an edit
-    bpy.context.view_layer.update()
-    assert effects.outdated(scene)
-    scene.afterglow.effects.spawn_on = effects._collections(scene)[0]
-    assert effects._spawn_targets(scene) == []                       # never its own lights
 
 
 # ---------------------------------------------------------------- slice 5: operators & UI
@@ -1001,29 +936,19 @@ def companions_of(sh):
     return out
 
 
-def test_strike_companions_cover_part_of_the_height():
+def test_strike_companion_covers_part_of_the_height():
     scene = beams_stage()
-    scene.afterglow.effects.beam_count = 4                           # main + 3 companions
     effects.build(scene)
     v = effects.make_venue(scene)
     sides = set()
     for sh in [s for s in shaft_objs() if s.name.startswith("AFX_strikes")]:
-        comps = companions_of(sh)
-        assert len(comps) == 3, len(comps)
-        dists = sorted(c.length for c, _ in comps)                   # each in a ring of its own
-        for k, d in enumerate(dists):
-            assert abs(d - (effects.COMPANION_RING + k * effects.COMPANION_STEP)) < 1e-3, dists
-        lo, hi = effects.COMPANION_SPAN
-        for _, ext in comps:                                         # only part of the height
-            assert lo * v.span_z - 1e-3 <= ext <= hi * v.span_z + 1e-3, (ext, v.span_z)
-        sides.add(round(math.atan2(comps[0][0].y, comps[0][0].x), 3))
+        (comp,) = companions_of(sh)                                  # exactly one companion
+        centre, ext = comp
+        assert abs(centre.length - effects.COMPANION_RING) < 1e-3, centre.length
+        lo, hi = effects.COMPANION_SPAN                              # only part of the height
+        assert lo * v.span_z - 1e-3 <= ext <= hi * v.span_z + 1e-3, (ext, v.span_z)
+        sides.add(round(math.atan2(centre.y, centre.x), 3))
     assert len(sides) == effects.POOL["strikes"]                       # sides differ per light
-    fx = scene.afterglow.effects
-    fx.beam_count = 1
-    assert effects.outdated(scene)
-    effects.build(scene)
-    sh = next(s for s in shaft_objs() if s.name.startswith("AFX_strikes"))
-    assert [m.name.rsplit("_", 1)[1] for m in sh.data.materials] == ["filament", "sleeve"]
 
 
 def strike_material(kind):

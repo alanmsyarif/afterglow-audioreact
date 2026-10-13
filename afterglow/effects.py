@@ -430,22 +430,6 @@ def fit_cage(scene):
     return cage
 
 
-def _spawn_targets(scene):
-    """[(x, y, top)] of the Spawn On collection's objects: each one's world bounding-box
-    centre and top, sorted by name so the draw is deterministic."""
-    coll = scene.afterglow.effects.spawn_on
-    if coll is None:
-        return []
-    bpy.context.view_layer.update()
-    out = []
-    for ob in sorted(coll.all_objects, key=lambda o: o.name):
-        if ob.get(TAG) or ob.get(EMITTER_TAG):
-            continue  # Afterglow's own lights and cage are never targets
-        pts = [ob.matrix_world @ Vector(c) for c in ob.bound_box]
-        out.append((sum(p.x for p in pts) / 8, sum(p.y for p in pts) / 8, max(p.z for p in pts)))
-    return out
-
-
 LIGHT_KIND = {"strikes": "SPOT", "blooms": "POINT", "flashes": "POINT",
               "trails": "POINT", "downward": "POINT", "gun": "SPOT"}
 SPOT_SIZE = {"strikes": 0.5, "gun": 0.18}
@@ -482,8 +466,7 @@ GAP_CUT = (0.3, 0.7)
 BEAD_EXTRA_CUT = 0.1     # companions cut deeper than the main filament: short beads, long gaps
 # Companion: a fainter filament beside each Strike, mostly gaps, so it reads as a string of
 # bright beads (the reference's beaded strikes). Its side is seeded per light.
-COMPANION_RING = 0.625   # m: first companion's distance from the Strike...
-COMPANION_STEP = 0.25    # ...each next one this much further (one pattern bin each, see below)
+COMPANION_RING = 0.625   # m: the companion's distance from the Strike (centre of a pattern bin)
 COMPANION_SPAN = (0.35, 0.75)  # share of the Strike's height a companion covers
 BEAD_SCALE = 2.3         # bead features per dash feature: beads are shorter than dashes
 BEAD_EMISSION = 18.0
@@ -509,7 +492,6 @@ class _Keys:
         self.channels = {}
         self.shafts = {}  # light object name -> its Visible Beams shaft object
         self.beams = False  # building this layer with Visible Beams
-        self.targets = []   # Spawn On: [(x, y, top)] that footprint layers land on
         self.energy = 1.0   # light energy scale for this layer (Visible Beams strikes sit low)
 
     def add(self, struct, idblock, path, index, frame, value, interp):
@@ -776,11 +758,9 @@ def _make_shaft(coll, light_ob, tubes, mats):
     return ob
 
 
-def _beam_kinds(name, count):
+def _beam_kinds(name):
     """The material parts of a layer's beams, in mesh slot order."""
-    if name == "strikes":
-        return ("filament", "sleeve", "beads") if count > 1 else ("filament", "sleeve")
-    return ("tracer",)
+    return ("filament", "sleeve", "beads") if name == "strikes" else ("tracer",)
 
 
 def _strike_base(venue):
@@ -788,27 +768,22 @@ def _strike_base(venue):
     return min(STRIKE_BASE, 0.25 * venue.span_z)
 
 
-def _beam_tubes(name, venue, rng, count):
+def _beam_tubes(name, venue, rng):
     """One beam's tubes: a Strike's full-height filament inside its glow sleeve, from the
-    floor to the venue top around its light (_strike_base up), plus count - 1 beaded
-    companion filaments around it, each covering a stretch of COMPANION_SPAN of the height,
-    on sides and stretches drawn from rng; or a Gun tracer cone along the spot's aim (-Z).
-    Companion k sits COMPANION_RING + k * COMPANION_STEP out, the centre of its own
-    pattern bin (_beam_material), so no two share a bead pattern."""
+    floor to the venue top around its light (_strike_base up), plus one beaded companion
+    filament COMPANION_RING out, covering a stretch of COMPANION_SPAN of the height, on a
+    side and stretch drawn from rng; or a Gun tracer cone along the spot's aim (-Z)."""
     if name == "strikes":
         span = venue.span_z
         base = _strike_base(venue)
         lo, hi = -base, span - base
         core, sleeve = FILAMENT_RADIUS, SLEEVE_RADIUS
         tubes = [_tube(((lo, core), (hi, core)), 0), _tube(((lo, sleeve), (hi, sleeve)), 1)]
-        a0 = 2 * math.pi * rng.random()
-        for k in range(count - 1):
-            a = a0 + 2 * math.pi * (k + 0.3 * rng.random()) / (count - 1)
-            d = COMPANION_RING + k * COMPANION_STEP
-            share = rng.uniform(*COMPANION_SPAN)
-            z0 = lo + rng.uniform(0.0, 1.0 - share) * (hi - lo)
-            tubes.append(_tube(((z0, core), (z0 + share * (hi - lo), core)), 2,
-                               (d * math.cos(a), d * math.sin(a))))
+        a, d = 2 * math.pi * rng.random(), COMPANION_RING
+        share = rng.uniform(*COMPANION_SPAN)
+        z0 = lo + rng.uniform(0.0, 1.0 - share) * (hi - lo)
+        tubes.append(_tube(((z0, core), (z0 + share * (hi - lo), core)), 2,
+                           (d * math.cos(a), d * math.sin(a))))
         return tubes
     length = GUN_TRACER * venue.radius
     half = math.tan(BEAM_SPOT_SIZE[name] / 2)
@@ -854,19 +829,6 @@ def _key_static_loc(keys, lights, pos, t0, dur, frame_of):
         keys.add_vec(ob, ob, "location", frame_of(t0 + dur), pos, "LINEAR")
 
 
-SPAWN_GAP = 0.25   # m: a Strike on an object glows this far above its top
-BLOOM_LIFT = 0.1   # a Bloom on an object floats at least this far above it
-
-
-def _spawn(venue, rng, targets):
-    """(ground point, top or None) where a footprint layer's event lands: one of the Spawn
-    On objects when set (top = its top), else a random point inside the venue."""
-    if targets:
-        x, y, top = targets[min(int(rng.random() * len(targets)), len(targets) - 1)]
-        return Vector((x, y, venue.z0)), top
-    return venue.footprint(rng), None
-
-
 def _layer_keys(name, keys, lights, venue, ev, b, timing, rng, fps, start):
     """Motion + brightness channels for one event of one layer. Lights only: no
     geometry is keyed, so the venue's own surfaces stay the only visible things."""
@@ -878,18 +840,12 @@ def _layer_keys(name, keys, lights, venue, ev, b, timing, rng, fps, start):
     span = venue.span_z
     if name in ("strikes", "blooms", "flashes"):
         if name == "strikes":
-            p, top = _spawn(venue, rng, keys.targets)
+            p = venue.footprint(rng)
             # the spot crowns the strike, aimed down; a Visible Beams strike glows from its base
-            base = venue.z0 + _strike_base(venue) if top is None else top + SPAWN_GAP
-            pos = Vector((p.x, p.y, base if keys.beams else venue.z1))
-            shaft = keys.shafts.get(lights[0].name)
-            if shaft:  # the filament ends at the venue top, wherever this strike lands
-                reach = max(venue.z1 - base, 0.01 * span) / (span - _strike_base(venue))
-                keys.add_vec(shaft, shaft, "scale", frame_of(t0), (1.0, 1.0, reach), "CONSTANT")
+            pos = Vector((p.x, p.y, venue.z0 + _strike_base(venue) if keys.beams else venue.z1))
         elif name == "blooms":
-            p, top = _spawn(venue, rng, keys.targets)
-            z = venue.z0 + 0.45 * span
-            pos = Vector((p.x, p.y, z if top is None else max(z, top + BLOOM_LIFT * span)))
+            p = venue.footprint(rng)
+            pos = Vector((p.x, p.y, venue.z0 + 0.45 * span))
         else:
             pos = Vector((venue.center.x, venue.center.y, venue.z0 + 0.85 * span))
         _key_static_loc(keys, lights, pos, t0, dur, frame_of)
@@ -904,9 +860,9 @@ def _layer_keys(name, keys, lights, venue, ev, b, timing, rng, fps, start):
             p = venue.path_point(u0 + u_span * frac)
             keys.add_vec(light_ob, light_ob, "location", frame_of(t0 + dur * frac), p, "LINEAR")
     elif name == "downward":
-        p, land = _spawn(venue, rng, keys.targets)
+        p = venue.footprint(rng)
         top = Vector((p.x, p.y, venue.z1))
-        bot = Vector((p.x, p.y, venue.z0 + 0.02 * span if land is None else land))
+        bot = Vector((p.x, p.y, venue.z0 + 0.02 * span))
         # A smooth cascade: every light glides the full height at the SAME constant
         # speed, started one DOWN_LAG apart, head brightest — a falling trail of
         # lights instead of one stretched, scaled cylinder.
@@ -942,17 +898,16 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
     units = [_make_unit(coll, name, slot, tuple(layer.color), beams)
              for slot in range(POOL[name])]
     keys.beams = beams
-    keys.targets = _spawn_targets(scene)
     keys.energy = STRIKE_BEAM_ENERGY if beams and name == "strikes" else 1.0
     if beams:
         speed = FLOW_SPEED * fx.beam_flow * (-1.0 if fx.beam_direction == "UP" else 1.0)
         flow = (start, end, fps, speed) if speed else None
         mats = [_beam_material(name, k, tuple(layer.color), fx.beam_glow, flow, fx.beam_gaps, fx.beam_dash)
-                for k in _beam_kinds(name, fx.beam_count)]
+                for k in _beam_kinds(name)]
         sides = random.Random(f"{fx.seed}:{name}:beams")
         for lights in units:
             for light_ob in lights:
-                tubes = _beam_tubes(name, venue, sides, fx.beam_count)
+                tubes = _beam_tubes(name, venue, sides)
                 keys.shafts[light_ob.name] = _make_shaft(coll, light_ob, tubes, mats)
     rng = random.Random(f"{fx.seed}:{name}:place")
     free = [-1e9] * POOL[name]
@@ -1007,12 +962,10 @@ def settings_sig(scene):
     s = scene.afterglow
     fx = s.effects
     vals = [VERSION, fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4),
-            fx.beams, round(fx.beam_glow, 4), fx.beam_count, round(fx.beam_flow, 4), fx.beam_direction,
+            fx.beams, round(fx.beam_glow, 4), round(fx.beam_flow, 4), fx.beam_direction,
             round(fx.beam_gaps, 4), round(fx.beam_dash, 4)]
     cage = fx.emitter                                   # moving the cage moves the venue
     vals += [tuple(round(x, 4) for row in cage.matrix_world for x in row) if cage else None]
-    vals += [fx.spawn_on.name if fx.spawn_on else None,  # moving a target moves its spawns
-             tuple(tuple(round(c, 4) for c in t) for t in _spawn_targets(scene))]
     for name in LAYERS:
         layer = getattr(fx, name)
         vals += [layer.enabled, layer.trigger_band, tuple(round(c, 4) for c in layer.color)]
