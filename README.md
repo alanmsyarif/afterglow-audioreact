@@ -7,6 +7,8 @@ beat-triggered light layers over the whole venue.
 
 Everything comes from the sound file itself: no live input, no network.
 
+![Environment Effects with Visible Beams: a dashed Data Strike landing on the floor, a Gun Burst tracer and a Data Bloom over a ring of reacting pillars](docs/images/hero.jpg)
+
 ## Install
 
 1. Requires **Blender 5.2** or newer.
@@ -96,6 +98,8 @@ Afterglow collection, never per object):
 
 ### Emitter cage
 
+![The emitter cage, stretched and turned, outlined in amber for this picture only: strikes land inside it and the Gun Burst fires from its rim](docs/images/emitter_cage.jpg)
+
 By default the venue is fitted to the collection (with **Height** and **Margin**). For
 direct control, press **Add Cage**: Afterglow adds an **Afterglow Emitter** object, a
 wireframe outline of the venue (its floor, its top, the ring trails ride and a few
@@ -113,6 +117,8 @@ moving it marks the build outdated. The refresh button beside it snaps it back t
 collection (it asks first); delete it to go back to the fitted venue.
 
 ### Visible Beams
+
+![A Data Strike walking Down: the dashed filament grows from the top and lands on the floor on the beat, where its light flashes](docs/images/strike_walk.gif)
 
 Off by default. **Visible Beams** makes the strikes visible in the air, not just as spill
 on surfaces:
@@ -162,10 +168,12 @@ press Build again. The same sound, settings and Seed always produce the same sho
 ## Demo
 
 Repeatable generator (synthetic pulse fixture track, circular pillar venue, all six
-layers, saved `.blend`, short sequential EEVEE motion proof):
+layers with Visible Beams, saved `.blend`, short sequential EEVEE motion proof). The
+output folder after `--` is optional; it defaults to your temp folder's
+`afterglow-effects-demo`:
 
 ```bash
-blender -b --factory-startup --python-exit-code 1 --python tools/build_effects_demo.py
+blender -b --factory-startup --python-exit-code 1 --python tools/build_effects_demo.py -- <OUT>
 # clip + contact sheet from the rendered frames:
 ffmpeg -framerate 24 -i <OUT>/frames/%04d.png -c:v libx264 -pix_fmt yuv420p <OUT>/motion.mp4
 ffmpeg -i <OUT>/frames/%04d.png -vf "select='not(mod(n,8))',scale=320:-1,tile=4x3" \
