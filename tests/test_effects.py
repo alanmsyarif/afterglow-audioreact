@@ -783,53 +783,103 @@ def test_build_operator_and_outdated_flag():
     assert not [c for c in bpy.data.collections if c.get(effects.TAG)]
 
 
-def haze_objs():
+def shaft_objs():
     return [ob for ob in bpy.data.objects if ob.get(effects.TAG) and ob.type == "MESH"]
 
 
-def test_visible_beams_add_one_haze_volume():
-    scene = build_stage()
+def beams_stage(sound_path=None):
+    scene = build_stage(sound_path=sound_path)
     fx = scene.afterglow.effects
-    fx.beams, fx.beam_density = True, 0.12
+    enable(scene, "gun", "blooms")
+    fx.beams = True
+    return scene
+
+
+def test_visible_beams_give_strikes_and_guns_a_shaft():
+    scene = beams_stage()
     effects.build(scene)
-    (haze,) = haze_objs()
-    assert haze.users_collection[0] is effects._collections(scene)[0]
-    assert haze.display_type == "WIRE" and haze.hide_select      # never hides or blocks the venue
-    (mat,) = haze.data.materials
-    assert mat.get(effects.TAG) and haze.data.get(effects.TAG)
-    out = next(n for n in mat.node_tree.nodes if n.type == "OUTPUT_MATERIAL")
-    assert not out.inputs["Surface"].is_linked                     # haze only, no visible surface
-    scatter = out.inputs["Volume"].links[0].from_node
-    assert scatter.bl_idname == "ShaderNodeVolumeScatter"
-    assert abs(scatter.inputs["Density"].default_value - 0.12) < 1e-6
-    centre = sum((Vector(v.co) for v in haze.data.vertices), Vector()) / 8
-    assert all(p.normal.dot(p.center - centre) > 0 for p in haze.data.polygons)  # closed, outward
-    lo = Vector([min(v.co[i] for v in haze.data.vertices) for i in range(3)])
-    hi = Vector([max(v.co[i] for v in haze.data.vertices) for i in range(3)])
-    lights = [ob for ob in fx_objs() if ob.type == "LIGHT"]
-    for f in range(20, 110, 3):                                   # every light stays in the haze
+    lights = {ob.name: ob for ob in fx_objs() if ob.type == "LIGHT"}
+    shafts = shaft_objs()
+    assert len(shafts) == effects.POOL["strikes"] + effects.POOL["gun"]  # blooms get none
+    mats = set()
+    for sh in shafts:
+        layer = sh.name.split("_")[1]
+        assert layer in effects.BEAM_LAYERS
+        assert sh.parent is lights[sh.name.replace("_shaft", "_light")]   # follows its light
+        if layer == "gun":                                              # the tracer's spot fits it
+            assert abs(sh.parent.data.spot_size - effects.BEAM_SPOT_SIZE["gun"]) < 1e-6
+        else:                                                           # a strike glows from its base
+            assert sh.parent.data.type == "POINT"
+        assert sh.data.get(effects.TAG) and sh.users_collection[0] is effects._collections(scene)[0]
+        assert sh.display_type == "WIRE" and sh.hide_select             # never hides or blocks the venue
+        assert not (sh.visible_shadow or sh.visible_diffuse)            # a glow, not a lamp
+        assert all(p.use_smooth for p in sh.data.polygons)
+        want = ("filament", "sleeve") if layer == "strikes" else ("tracer",)
+        assert [m.name.rsplit("_", 1)[1] for m in sh.data.materials] == list(want)
+        assert {p.material_index for p in sh.data.polygons} == set(range(len(want)))
+        for mat in sh.data.materials:
+            mats.add(mat.name)
+            nodes = {n.bl_idname for n in mat.node_tree.nodes}
+            assert {"ShaderNodeEmission", "ShaderNodeBsdfTransparent", "ShaderNodeAddShader"} <= nodes
+            key = next(n for n in mat.node_tree.nodes if n.bl_idname == "ShaderNodeAttribute")
+            assert (key.attribute_type, key.attribute_name) == ("OBJECT", effects.GLOW)
+            assert ("ShaderNodeObjectInfo" in nodes) == (layer == "strikes")  # dashes differ per strike
+    assert len(mats) == 3                                              # shared per layer and part
+    for ob in lights.values():                                         # other layers stay lights only
+        if ob.name.split("_")[1] not in effects.BEAM_LAYERS:
+            assert not [c for c in ob.children]
+
+
+def test_strike_shaft_reaches_the_floor():
+    scene = beams_stage()
+    effects.build(scene)
+    v = effects.make_venue(scene)
+    sh = next(s for s in shaft_objs() if s.name.startswith("AFX_strikes"))
+    for f in range(20, 60):
         scene.frame_set(f)
-        for ob in lights:
-            p = ob.matrix_world.translation
-            assert all(lo[i] - 1e-4 <= p[i] <= hi[i] + 1e-4 for i in range(3)), (ob.name, f, tuple(p))
+        if sh[effects.GLOW] > 0.1:
+            break
+    zs = [(sh.matrix_world @ vtx.co).z for vtx in sh.data.vertices]
+    assert abs(max(zs) - v.z1) < 1e-3 and abs(min(zs) - v.z0) < 1e-3, (min(zs), max(zs), v.z0, v.z1)
+    light_z = sh.parent.matrix_world.translation.z                     # lit from low down, near its base
+    assert abs(light_z - (v.z0 + effects.STRIKE_BASE * v.span_z)) < 1e-3, light_z
+
+
+def test_shaft_glow_follows_its_light():
+    """The glow is keyed with the light's own envelope, through busy-pool handovers too."""
+    scene = beams_stage(dense_wav())
+    scene.afterglow.effects.strikes.timing = 4.0          # more overlap than strike slots
+    effects.build(scene)
+    pairs = [(sh, sh.parent) for sh in shaft_objs()]
+    lit = 0
+    for f in range(1, 170, 2):
+        scene.frame_set(f)
+        for sh, light in pairs:
+            layer = sh.name.split("_")[1]
+            scale = effects.STRIKE_BEAM_ENERGY if layer == "strikes" else 1.0
+            want = light.data.energy / (effects.ENERGY[layer] * scale)
+            assert abs(sh[effects.GLOW] - want) < 1e-3, (sh.name, f, sh[effects.GLOW], want)
+            lit += want > 0.05
+    assert lit > 20, lit
 
 
 def test_visible_beams_lifecycle():
-    scene = build_stage()
+    scene = beams_stage()
+    scene.afterglow.effects.beams = False
     effects.build(scene)
-    assert not haze_objs()                                         # off by default: lights only
+    assert not shaft_objs()                                          # off by default: lights only
     fx = scene.afterglow.effects
     fx.beams = True
     assert effects.outdated(scene)
     effects.build(scene)
-    assert len(haze_objs()) == 1                                   # rebuilds never stack hazes
+    n = len(shaft_objs())
     effects.build(scene)
-    assert len(haze_objs()) == 1
-    fx.beam_density = 0.2
+    assert len(shaft_objs()) == n                                    # rebuilds never stack shafts
+    fx.beam_glow = 2.0
     assert effects.outdated(scene)
     assert bpy.ops.afterglow.remove_effects() == {"FINISHED"}
-    assert not haze_objs()
-    for store in (bpy.data.meshes, bpy.data.materials):
+    assert not shaft_objs()
+    for store in (bpy.data.meshes, bpy.data.materials, bpy.data.actions):
         assert not [d for d in store if d.get(effects.TAG)], store
 
 

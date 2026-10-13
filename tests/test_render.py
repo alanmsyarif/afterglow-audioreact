@@ -212,9 +212,9 @@ def test_meter_on_flat_object_falls_back_to_level():
     assert max(vals) - min(vals) < 0.02 and 0.6 < min(vals) < 0.85, (min(vals), max(vals))
 
 
-def air_brightness(beams):
-    """Mean brightness of the air above the floor, filmed side-on at the peak of a Data
-    Strike, with or without Visible Beams. Only the haze can light empty air."""
+def air_brightness(beams, engine="BLENDER_EEVEE"):
+    """Mean and peak brightness of the air above the floor, filmed side-on at the peak of
+    a Data Strike, with or without Visible Beams. Only a beam shaft can light empty air."""
     import math
     from afterglow import effects
     helpers.fresh()
@@ -237,10 +237,12 @@ def air_brightness(beams):
     scene.world = bpy.data.worlds.new("w")
     bg = next(n for n in scene.world.node_tree.nodes if n.type == "BACKGROUND")
     bg.inputs["Strength"].default_value = 0.0     # a black world: only the effects light anything
-    scene.render.engine = "BLENDER_EEVEE"
+    scene.render.engine = engine
+    if engine == "CYCLES":
+        scene.cycles.samples = 16
     scene.render.resolution_x = scene.render.resolution_y = 64
     scene.frame_set(frame)
-    scene.render.filepath = os.path.join(tempfile.gettempdir(), f"afterglow_beams_{beams}.png")
+    scene.render.filepath = os.path.join(tempfile.gettempdir(), f"afterglow_beams_{beams}_{engine}.png")
     bpy.ops.render.render(write_still=True)
     img = bpy.data.images.load(scene.render.filepath)
     w, h = img.size
@@ -253,9 +255,10 @@ def air_brightness(beams):
 
 def test_visible_beams_light_the_air():
     off_mean, off_max = air_brightness(False)
-    on_mean, on_max = air_brightness(True)
     assert off_max < 0.01, off_max                # lights only: empty air stays black
-    assert on_max > 0.1 and on_mean > 0.005, (on_mean, on_max)  # a beam shows in the haze
+    for engine in ("BLENDER_EEVEE", "CYCLES"):    # a shaft shows, the same in both engines
+        on_mean, on_max = air_brightness(True, engine)
+        assert on_max > 0.3 and on_mean > 0.005, (engine, on_mean, on_max)
 
 
 helpers.run(globals())

@@ -96,16 +96,22 @@ Afterglow collection, never per object):
 
 ### Visible Beams
 
-Off by default. **Visible Beams** fills the venue with a thin haze so the effect lights
-show as beams and glows in the air, not just as spill on surfaces: Strikes become shafts
-of light, Gun Bursts become moving cones. **Haze** sets the density (higher means
-brighter beams and foggier air).
+Off by default. **Visible Beams** makes the strikes visible in the air, not just as spill
+on surfaces:
 
-It adds exactly one object to the effects collection: a box over the venue with a Volume
-Scatter material, drawn as a wireframe and unselectable so it never hides or blocks your
-venue in the viewport. Remove Effects deletes it with the lights. Volumes make renders
-slower; in EEVEE, a finer *Volumes → Resolution* in Render Properties (e.g. 1:4 instead of
-the default 1:8) gives crisper beams.
+- Each **Data Strike** becomes a thin, white-hot filament from the venue top to the floor,
+  broken into short dashes (a different pattern per light) inside a faint glow. Its light
+  moves down near the filament's base and becomes a point light, so it lights the floor
+  and the sides of nearby objects from low down.
+- Each **Gun Burst** gets a glowing tracer that flies along its aim with a fading tail,
+  and its spot tightens to the tracer's cone.
+
+**Glow** sets the beams' brightness. The beams are emissive meshes parented to their
+lights, with brightness keyed on the same envelope as the light, so they look the same in
+EEVEE and Cycles and cost almost nothing to render. They cast no shadows and light nothing
+themselves (the lights do that). They're drawn as wireframes and can't be selected, so
+they never hide or block your venue in the viewport, and Remove Effects deletes them with
+the lights.
 
 ### Usage
 
@@ -113,8 +119,8 @@ the default 1:8) gives crisper beams.
 2. Open the *Afterglow Environment Effects* panel, choose the venue shape, enable layers,
    and set colours and bands.
 3. **Build Effects** analyses the sound once, then keys pooled real point/spot lights into
-   a collection named `Afterglow Effects` in the current scene (plus the haze box when
-   Visible Beams is on).
+   a collection named `Afterglow Effects` in the current scene (plus their beam meshes
+   when Visible Beams is on).
 4. Scrub or play. The effects are plain F-curve animation on a layered action, so they
    render in any engine and never touch the Sample Sound node.
 5. **Remove Effects** deletes this scene's effects collection and every datablock it owns
@@ -176,12 +182,12 @@ it as a GitHub Release.
 ## Limitations (honest)
 
 - Generated effects are **lights only** unless Visible Beams is on, and even then Build
-  only adds its own tagged haze box: it never edits your objects, materials or World.
-- Without Visible Beams, effects have no visible "beam" or streak shape of their own (the
-  reference video's thin segmented shafts and beaded trails are a geometry/volumetric
-  look): Strikes and Gun Bursts read as aimed spots, Downward Trails as a cascade of
-  falling points of light. With it, beams are soft haze shafts rather than thin
-  segmented ones.
+  only adds its own tagged beam meshes: it never edits your objects, materials or World.
+- Without Visible Beams, effects have no visible "beam" or streak shape of their own:
+  Strikes and Gun Bursts read as aimed spots, Downward Trails as a cascade of falling
+  points of light. Visible Beams covers Strikes and Gun Bursts only.
+- Beam meshes are glows, not volumes: they don't light fog, and objects in front of a
+  beam don't shadow it. Seen from straight above or below, a strike filament is a dot.
 - The effect timing and placement are an **interpretation** of the reference video's
   look (cool selective light in a dark venue).
 - Effect lights have shadows disabled (dozens of shadow-casting lights would crawl); they

@@ -178,7 +178,7 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         row.prop(fx, "beams")
         sub = row.row(align=True)
         sub.active = fx.beams
-        sub.prop(fx, "beam_density")
+        sub.prop(fx, "beam_glow")
         for name in effects.LAYERS:
             layer = getattr(fx, name)
             box = col.box()
@@ -201,7 +201,7 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         row = col.row(align=True)
         row.operator("afterglow.build_effects")
         row.operator("afterglow.remove_effects")
-        col.label(text="Effects are real lights; Visible Beams adds one haze box", icon="LIGHT")
+        col.label(text="Effects are real lights; Visible Beams adds glowing shafts", icon="LIGHT")
         col.label(text="Weight/Intensity/Timing are keyframeable:", icon="INFO")
         col.label(text="Build samples their animation per event")
 
