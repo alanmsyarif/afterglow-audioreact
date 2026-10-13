@@ -165,6 +165,13 @@ class AFTERGLOW_OT_fit_emitter(bpy.types.Operator):
                       "Then move, turn and scale it in the viewport: effects spawn inside it")
     bl_options = {"REGISTER", "UNDO"}
 
+    def invoke(self, context, event):
+        if context.scene.afterglow.effects.emitter:  # never throw away a shaped cage by accident
+            return context.window_manager.invoke_confirm(
+                self, event, title="Snap the cage back?",
+                message="Your cage's place, turn and size are reset to the collection fit")
+        return self.execute(context)
+
     def execute(self, context):
         try:
             cage = effects.fit_cage(context.scene)
@@ -202,10 +209,15 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         sub = row.row(align=True)
         sub.active = fx.beams
         sub.prop(fx, "beam_glow")
-        sub.prop(fx, "beam_companions", toggle=True)
-        row = col.row(align=True)
-        row.active = fx.beams
+        sub.prop(fx, "beam_count")
+        beam = col.column(align=True)
+        beam.active = fx.beams
+        row = beam.row(align=True)
         row.prop(fx, "beam_flow")
+        row.prop(fx, "beam_direction", expand=True)
+        row = beam.row(align=True)
+        row.prop(fx, "beam_gaps")
+        row.prop(fx, "beam_dash")
         for name in effects.LAYERS:
             layer = getattr(fx, name)
             box = col.box()

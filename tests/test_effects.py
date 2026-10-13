@@ -13,7 +13,7 @@ from mathutils import Vector  # noqa: E402
 import helpers  # noqa: E402  (puts repo root on sys.path)
 import afterglow  # noqa: E402
 from helpers import emission_material, plane  # noqa: E402
-from afterglow import effects  # noqa: E402
+from afterglow import core, effects  # noqa: E402
 
 BASS_PULSES = (1.0, 2.0, 3.0, 4.0)        # 80 Hz pulses, 0.12 s each
 TREBLE_PULSES = (1.5, 2.5)                # 4 kHz pulses, 0.12 s each
@@ -988,26 +988,109 @@ def test_strike_shaft_reaches_the_floor():
     assert abs(light_z - (v.z0 + effects._strike_base(v))) < 1e-3, light_z
 
 
-def test_strike_companion_beads_beside_it():
+def companions_of(sh):
+    """[(centre xy, z extent)] of a Strike shaft's companion tubes (one per 2 * SEG verts)."""
+    me = sh.data
+    vs = sorted({vi for p in me.polygons if p.material_index == 2 for vi in p.vertices})
+    n = 2 * effects.SHAFT_SEGMENTS
+    out = []
+    for k in range(0, len(vs), n):
+        pts = [me.vertices[i].co for i in vs[k:k + n]]
+        c = sum(pts, Vector()) / len(pts)
+        out.append((c.xy, max(p.z for p in pts) - min(p.z for p in pts)))
+    return out
+
+
+def test_strike_companions_cover_part_of_the_height():
     scene = beams_stage()
+    scene.afterglow.effects.beam_count = 4                           # main + 3 companions
     effects.build(scene)
     v = effects.make_venue(scene)
     sides = set()
     for sh in [s for s in shaft_objs() if s.name.startswith("AFX_strikes")]:
-        beads = [p for p in sh.data.polygons if p.material_index == 2]
-        main = [p for p in sh.data.polygons if p.material_index == 0]
-        bc = sum((p.center for p in beads), Vector()) / len(beads)
-        mc = sum((p.center for p in main), Vector()) / len(main)
-        d = (bc.xy - mc.xy).length
-        lo, hi = effects.COMPANION_OFFSET
-        assert lo - 1e-3 <= d <= hi + 1e-3, d                         # a parallel filament nearby
-        sides.add(round(math.atan2(bc.y - mc.y, bc.x - mc.x), 3))
-    assert len(sides) == effects.POOL["strikes"]                       # a side of its own per light
-    scene.afterglow.effects.beam_companions = False
+        comps = companions_of(sh)
+        assert len(comps) == 3, len(comps)
+        dists = sorted(c.length for c, _ in comps)                   # each in a ring of its own
+        for k, d in enumerate(dists):
+            assert abs(d - (effects.COMPANION_RING + k * effects.COMPANION_STEP)) < 1e-3, dists
+        lo, hi = effects.COMPANION_SPAN
+        for _, ext in comps:                                         # only part of the height
+            assert lo * v.span_z - 1e-3 <= ext <= hi * v.span_z + 1e-3, (ext, v.span_z)
+        sides.add(round(math.atan2(comps[0][0].y, comps[0][0].x), 3))
+    assert len(sides) == effects.POOL["strikes"]                       # sides differ per light
+    fx = scene.afterglow.effects
+    fx.beam_count = 1
     assert effects.outdated(scene)
     effects.build(scene)
     sh = next(s for s in shaft_objs() if s.name.startswith("AFX_strikes"))
     assert [m.name.rsplit("_", 1)[1] for m in sh.data.materials] == ["filament", "sleeve"]
+
+
+def strike_material(kind):
+    return next(m for m in bpy.data.materials if m.get(effects.TAG) and m.name.endswith("strikes_" + kind))
+
+
+def test_beam_direction_and_noise_controls():
+    scene = beams_stage()
+    fx = scene.afterglow.effects
+    effects.build(scene)
+    for prop, value in (("beam_direction", "UP"), ("beam_gaps", 0.8), ("beam_dash", 2.0)):
+        setattr(fx, prop, value)
+        assert effects.outdated(scene), prop                         # every control is an edit
+    effects.build(scene)
+    fps = scene.render.fps / scene.render.fps_base
+    for kind in ("filament", "sleeve", "beads"):                     # Up: the pattern streams up
+        (fc,) = effects._fcurves_of(strike_material(kind).node_tree)
+        assert abs(fc.evaluate(11) - fc.evaluate(10) + effects.FLOW_SPEED / fps) < 1e-4, kind
+    cut = effects.GAP_CUT[0] + (effects.GAP_CUT[1] - effects.GAP_CUT[0]) * 0.8
+    for kind, want_cut, per_metre in (("filament", cut, 1 / 2.0),
+                                      ("beads", cut + effects.BEAD_EXTRA_CUT, effects.BEAD_SCALE / 2.0)):
+        nt = strike_material(kind).node_tree
+        step = next(n for n in nt.nodes if n.bl_idname == "ShaderNodeMapRange")
+        assert abs(step.inputs["From Min"].default_value - want_cut) < 1e-5, kind  # Gaps
+        line = next(n for n in nt.nodes if n.bl_idname == "ShaderNodeCombineXYZ" and n.inputs["Z"].is_linked)
+        scale = line.inputs["Z"].links[0].from_node
+        assert abs(scale.inputs[1].default_value - per_metre) < 1e-5, kind   # Dash Size
+    fx.beam_flow = 0.0                                               # still: no flow either way
+    effects.build(scene)
+    assert "Flow" not in strike_material("filament").node_tree.nodes
+
+
+def test_emitter_cage_keeps_your_changes():
+    """Applied scale, Edit Mode resizing and Shape changes keep the cage's venue; Build,
+    Remove Effects, Apply and Remove never delete or reset it."""
+    from mathutils import Matrix
+    scene = build_stage(shape="RECT")
+    cage = effects.fit_cage(scene)
+    cage.location = (2.0, 1.0, 0.0)
+    cage.rotation_euler.z = 0.4
+    bpy.context.view_layer.update()
+    before = effects.make_venue(scene)
+    s = Vector(cage.scale)                                           # Ctrl+A: apply scale
+    cage.data.transform(Matrix.Diagonal((s.x, s.y, s.z, 1.0)))
+    cage.scale = (1.0, 1.0, 1.0)
+    after = effects.make_venue(scene)
+    for a, b in zip(before.polygon(), after.polygon()):
+        assert (a - b).length < 1e-4, (tuple(a), tuple(b))
+    assert abs(after.z1 - before.z1) < 1e-4
+    for vtx in cage.data.vertices:                                    # Edit Mode: shrink it in X
+        vtx.co.x *= 0.5
+    half = effects.make_venue(scene)
+    assert abs(half.rx - before.rx * 0.5) < 1e-4 and abs(half.ry - before.ry) < 1e-4
+    scene.afterglow.effects.venue_shape = "CIRCLE"                    # Shape keeps that size
+    circ = effects.make_venue(scene)
+    assert abs(circ.rx - half.rx) < 1e-4 and abs(circ.ry - half.ry) < 1e-4
+    assert abs(circ.z1 - half.z1) < 1e-4 and (circ.center - half.center).length < 1e-4
+    keep = (tuple(cage.matrix_world.col[3]), len(cage.data.vertices), [tuple(v.co) for v in cage.data.vertices])
+    enable(scene, "strikes")
+    effects.build(scene)
+    effects.remove(scene)
+    core.apply(scene)
+    core.remove(scene)
+    bpy.context.view_layer.update()
+    assert bpy.data.objects.get(cage.name) is cage and scene.afterglow.effects.emitter is cage
+    assert (tuple(cage.matrix_world.col[3]), len(cage.data.vertices),
+            [tuple(v.co) for v in cage.data.vertices]) == keep
 
 
 def test_strike_dashes_flow_down():

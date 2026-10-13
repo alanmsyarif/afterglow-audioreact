@@ -325,17 +325,20 @@ def _fitted_venue(scene):
 
 
 def make_venue(scene):
-    """The venue every layer emits in: the emitter cage when there is one (its location,
-    Z rotation, XY scale and Z scale are the venue's centre and floor, turn, half-extents
-    and height), else fitted to the scene's collection."""
+    """The venue every layer emits in: the emitter cage when there is one, else fitted to
+    the scene's collection. The cage's outline (in its own frame, so applied scale and Edit
+    Mode changes count) sets the venue's floor centre, half-extents and height, and its
+    transform places, turns (about Z) and scales that."""
     fx = scene.afterglow.effects
     cage = fx.emitter
     if cage is None:
         return _fitted_venue(scene)
     bpy.context.view_layer.update()  # matrix_world is stale right after the cage is moved
+    ox, oy, oz, sx, sy, h = _cage_frame(cage, fx.venue_shape)
     loc, rot, scale = cage.matrix_world.decompose()
-    rx, ry, h = (max(abs(v), 0.05) for v in scale)
-    return Venue(fx.venue_shape, loc.x, loc.y, rx, ry, loc.z, loc.z + h,
+    floor = cage.matrix_world @ Vector((ox, oy, oz))
+    rx, ry, h = (max(abs(a * b), 0.05) for a, b in zip((sx, sy, h), scale))
+    return Venue(fx.venue_shape, floor.x, floor.y, rx, ry, floor.z, floor.z + h,
                  exact=True, angle=rot.to_euler().z)
 
 
@@ -343,6 +346,7 @@ def make_venue(scene):
 
 EMITTER_TAG = "afterglow_emitter"
 EMITTER_NAME = "Afterglow Emitter"
+SHAPE_TAG = "afterglow_emitter_shape"  # the Venue Shape the cage was last drawn as
 CAGE_POSTS = 8  # vertical edges drawn on a circle cage
 
 
@@ -361,17 +365,38 @@ def _cage_geometry(shape):
     return verts, edges
 
 
+def _cage_frame(cage, shape):
+    """(ox, oy, oz, sx, sy, h) of a cage in its own frame: the floor centre, the outline's
+    half-extents and its height. Read from its mesh as drawn for the shape it was last drawn
+    as (so applied scale and Edit Mode moves count); a cage without geometry is unit."""
+    me = cage.data if cage.type == "MESH" else None
+    if not (me and len(me.vertices)):
+        return 0.0, 0.0, 0.0, 1.0, 1.0, 1.0
+    drawn = cage.get(SHAPE_TAG, shape)
+    ux = [x for x, _ in _unit_outline(drawn)]
+    uy = [y for _, y in _unit_outline(drawn)]
+    xs = [v.co.x for v in me.vertices]
+    ys = [v.co.y for v in me.vertices]
+    zs = [v.co.z for v in me.vertices]
+    sx = (max(xs) - min(xs)) / (max(ux) - min(ux))
+    sy = (max(ys) - min(ys)) / (max(uy) - min(uy))
+    return (min(xs) - min(ux) * sx, min(ys) - min(uy) * sy, min(zs), sx, sy, max(zs) - min(zs))
+
+
 def refresh_cage(scene):
-    """Redraw the scene's emitter cage for the current Venue Shape (cages Afterglow made)."""
+    """Redraw the scene's emitter cage for the current Venue Shape (cages Afterglow made),
+    keeping its size and place: applied scale or Edit Mode resizing survive a shape change."""
     fx = scene.afterglow.effects
     cage = fx.emitter
     if not (cage and cage.get(EMITTER_TAG) and cage.type == "MESH"):
         return
+    ox, oy, oz, sx, sy, h = _cage_frame(cage, fx.venue_shape)
     me = cage.data
     verts, edges = _cage_geometry(fx.venue_shape)
     me.clear_geometry()
-    me.from_pydata(verts, edges, [])
+    me.from_pydata([(ox + x * sx, oy + y * sy, oz + z * h) for x, y, z in verts], edges, [])
     me.update()
+    cage[SHAPE_TAG] = fx.venue_shape
 
 
 def fit_cage(scene):
@@ -391,7 +416,14 @@ def fit_cage(scene):
         cage.lock_rotation = (True, True, False)  # the venue turns about Z only
         scene.collection.objects.link(cage)
         fx.emitter = cage
-    refresh_cage(scene)
+    if SHAPE_TAG in cage:
+        del cage[SHAPE_TAG]  # a snap-back redraws it at unit size
+    me = cage.data
+    verts, edges = _cage_geometry(fx.venue_shape)
+    me.clear_geometry()
+    me.from_pydata(verts, edges, [])
+    me.update()
+    cage[SHAPE_TAG] = fx.venue_shape
     cage.location = (v.center.x, v.center.y, v.z0)
     cage.rotation_euler = (0.0, 0.0, 0.0)
     cage.scale = (hx, hy, v.span_z)
@@ -444,15 +476,18 @@ SLEEVE_RADIUS = 0.06     # m: ...and its glow sleeve's
 FILAMENT_EMISSION = 30.0  # emission strengths at Glow 1 and full event brightness
 SLEEVE_EMISSION = 1.0
 SLEEVE_POWER = 3.0       # sleeve edge falloff: brightest hugging the core, gone at its rim
-DASH_SCALE = 1.3         # dash pattern features per metre along a Strike
-DASH_CUT = 0.45          # pattern values below this are gaps (each Strike light has its own)
+# Dash pattern: noise along each filament, cut into lit runs and gaps. Gaps 0..1 maps the
+# cut over GAP_CUT (0: almost solid, 1: mostly gaps); Dash Size is metres per pattern feature.
+GAP_CUT = (0.3, 0.7)
+BEAD_EXTRA_CUT = 0.1     # companions cut deeper than the main filament: short beads, long gaps
 # Companion: a fainter filament beside each Strike, mostly gaps, so it reads as a string of
 # bright beads (the reference's beaded strikes). Its side is seeded per light.
-COMPANION_OFFSET = (0.6, 1.1)  # m: distance from the Strike
-BEAD_SCALE = 3.0         # bead pattern features per metre
-BEAD_CUT = 0.6           # pattern values below this are gaps: short beads, long gaps
+COMPANION_RING = 0.625   # m: first companion's distance from the Strike...
+COMPANION_STEP = 0.25    # ...each next one this much further (one pattern bin each, see below)
+COMPANION_SPAN = (0.35, 0.75)  # share of the Strike's height a companion covers
+BEAD_SCALE = 2.3         # bead features per dash feature: beads are shorter than dashes
 BEAD_EMISSION = 18.0
-FLOW_SPEED = 6.0         # m/s: dashes and beads stream down this fast at Flow 1
+FLOW_SPEED = 6.0         # m/s: dashes and beads stream this fast at Flow 1
 GUN_TRACER = 1.0         # Gun Burst tracer length, as a fraction of the venue radius
 SHAFT_SEGMENTS = 24
 TRACER_EMISSION = 4.0
@@ -597,15 +632,19 @@ def _make_unit(coll, layer, slot, color, beams=False):
     return tuple(lights)
 
 
-def _beam_material(layer, kind, color, glow, flow=None):
+def _beam_material(layer, kind, color, glow, flow=None, gaps=0.375, dash=0.75):
     """One additive glow material (emission over transparency) per beam part, shared by
     a layer's shafts. Each shaft's keyed GLOW property (an Object attribute) sets its
     brightness. kind: "filament" (a Strike's bright core) or "sleeve" (its faint glow),
     both broken into dashes that differ per shaft; "beads" (its companion: short beads, long
     gaps, a pattern of its own); or "tracer" (a Gun Burst cone, brightest at its light and
     on its core, fading to nothing at its edges and tail). flow = (start, end, fps, metres
-    per second) streams the dash patterns down the Strike: the pattern's height offset is
-    keyed to rise linearly through the song, so the same dashes slide steadily downward."""
+    per second) streams the dash patterns along the Strike: the pattern's height offset is
+    keyed linearly through the song, so the same dashes slide steadily down (positive
+    speed) or up (negative). gaps (0..1) and dash (metres per feature) shape the pattern.
+    Each filament's pattern also depends on its distance from the shaft's axis, in bins of
+    a quarter metre: core and sleeve share bin 0 (their dashes line up), each companion has
+    a bin of its own."""
     mat = bpy.data.materials.new(f"{PREFIX}_{layer}_{kind}")
     mat[TAG] = VERSION
     mat.surface_render_method = "BLENDED"
@@ -643,15 +682,23 @@ def _beam_material(layer, kind, color, glow, flow=None):
             offset.name = offset.label = "Flow"
             height = op("ADD", height, offset.outputs[0])  # sampling higher up = dashes move down
         line = N.new("ShaderNodeCombineXYZ")
-        L.new(op("MULTIPLY", height, BEAD_SCALE if beads else DASH_SCALE), line.inputs["Z"])
+        L.new(op("MULTIPLY", height, (BEAD_SCALE if beads else 1.0) / max(dash, 0.01)), line.inputs["Z"])
         noise = N.new("ShaderNodeTexNoise")
         noise.noise_dimensions = "4D"
         noise.inputs["Scale"].default_value = 1.0
         noise.inputs["Detail"].default_value = 3.0
         L.new(line.outputs[0], noise.inputs["Vector"])
         seed = op("MULTIPLY", N.new("ShaderNodeObjectInfo").outputs["Random"], 100.0)
-        L.new(op("ADD", seed, 37.0) if beads else seed, noise.inputs["W"])  # beads: their own pattern
-        cut = BEAD_CUT if beads else DASH_CUT
+        axis = N.new("ShaderNodeVectorMath")             # distance from the shaft's axis
+        axis.operation = "LENGTH"
+        flat = N.new("ShaderNodeCombineXYZ")
+        L.new(z.outputs["X"], flat.inputs["X"])
+        L.new(z.outputs["Y"], flat.inputs["Y"])
+        L.new(flat.outputs[0], axis.inputs[0])
+        lane = op("MULTIPLY", op("FLOOR", op("MULTIPLY", axis.outputs["Value"], 4.0), 0.0), 13.0)
+        L.new(op("ADD", op("ADD", seed, lane), 37.0 if beads else 0.0), noise.inputs["W"])
+        cut = GAP_CUT[0] + (GAP_CUT[1] - GAP_CUT[0]) * min(max(gaps, 0.0), 1.0)
+        cut = min(cut + BEAD_EXTRA_CUT, 0.95) if beads else cut
         dash = N.new("ShaderNodeMapRange")              # a steep step: lit, or a gap
         dash.inputs["From Min"].default_value = cut
         dash.inputs["From Max"].default_value = cut + 0.02
@@ -729,10 +776,10 @@ def _make_shaft(coll, light_ob, tubes, mats):
     return ob
 
 
-def _beam_kinds(name, companions):
+def _beam_kinds(name, count):
     """The material parts of a layer's beams, in mesh slot order."""
     if name == "strikes":
-        return ("filament", "sleeve", "beads") if companions else ("filament", "sleeve")
+        return ("filament", "sleeve", "beads") if count > 1 else ("filament", "sleeve")
     return ("tracer",)
 
 
@@ -741,19 +788,27 @@ def _strike_base(venue):
     return min(STRIKE_BASE, 0.25 * venue.span_z)
 
 
-def _beam_tubes(name, venue, rng, companions):
+def _beam_tubes(name, venue, rng, count):
     """One beam's tubes: a Strike's full-height filament inside its glow sleeve, from the
-    floor to the venue top around its light (_strike_base up), plus a beaded companion filament
-    beside it on a side drawn from rng; or a Gun tracer cone along the spot's aim (-Z)."""
+    floor to the venue top around its light (_strike_base up), plus count - 1 beaded
+    companion filaments around it, each covering a stretch of COMPANION_SPAN of the height,
+    on sides and stretches drawn from rng; or a Gun tracer cone along the spot's aim (-Z).
+    Companion k sits COMPANION_RING + k * COMPANION_STEP out, the centre of its own
+    pattern bin (_beam_material), so no two share a bead pattern."""
     if name == "strikes":
         span = venue.span_z
         base = _strike_base(venue)
         lo, hi = -base, span - base
         core, sleeve = FILAMENT_RADIUS, SLEEVE_RADIUS
         tubes = [_tube(((lo, core), (hi, core)), 0), _tube(((lo, sleeve), (hi, sleeve)), 1)]
-        if companions:
-            a, d = 2 * math.pi * rng.random(), rng.uniform(*COMPANION_OFFSET)
-            tubes.append(_tube(((lo, core), (hi, core)), 2, (d * math.cos(a), d * math.sin(a))))
+        a0 = 2 * math.pi * rng.random()
+        for k in range(count - 1):
+            a = a0 + 2 * math.pi * (k + 0.3 * rng.random()) / (count - 1)
+            d = COMPANION_RING + k * COMPANION_STEP
+            share = rng.uniform(*COMPANION_SPAN)
+            z0 = lo + rng.uniform(0.0, 1.0 - share) * (hi - lo)
+            tubes.append(_tube(((z0, core), (z0 + share * (hi - lo), core)), 2,
+                               (d * math.cos(a), d * math.sin(a))))
         return tubes
     length = GUN_TRACER * venue.radius
     half = math.tan(BEAM_SPOT_SIZE[name] / 2)
@@ -890,14 +945,14 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
     keys.targets = _spawn_targets(scene)
     keys.energy = STRIKE_BEAM_ENERGY if beams and name == "strikes" else 1.0
     if beams:
-        speed = FLOW_SPEED * fx.beam_flow
-        flow = (start, end, fps, speed) if speed > 0 else None
-        mats = [_beam_material(name, k, tuple(layer.color), fx.beam_glow, flow)
-                for k in _beam_kinds(name, fx.beam_companions)]
+        speed = FLOW_SPEED * fx.beam_flow * (-1.0 if fx.beam_direction == "UP" else 1.0)
+        flow = (start, end, fps, speed) if speed else None
+        mats = [_beam_material(name, k, tuple(layer.color), fx.beam_glow, flow, fx.beam_gaps, fx.beam_dash)
+                for k in _beam_kinds(name, fx.beam_count)]
         sides = random.Random(f"{fx.seed}:{name}:beams")
         for lights in units:
             for light_ob in lights:
-                tubes = _beam_tubes(name, venue, sides, fx.beam_companions)
+                tubes = _beam_tubes(name, venue, sides, fx.beam_count)
                 keys.shafts[light_ob.name] = _make_shaft(coll, light_ob, tubes, mats)
     rng = random.Random(f"{fx.seed}:{name}:place")
     free = [-1e9] * POOL[name]
@@ -952,7 +1007,8 @@ def settings_sig(scene):
     s = scene.afterglow
     fx = s.effects
     vals = [VERSION, fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4),
-            fx.beams, round(fx.beam_glow, 4), fx.beam_companions, round(fx.beam_flow, 4)]
+            fx.beams, round(fx.beam_glow, 4), fx.beam_count, round(fx.beam_flow, 4), fx.beam_direction,
+            round(fx.beam_gaps, 4), round(fx.beam_dash, 4)]
     cage = fx.emitter                                   # moving the cage moves the venue
     vals += [tuple(round(x, 4) for row in cage.matrix_world for x in row) if cage else None]
     vals += [fx.spawn_on.name if fx.spawn_on else None,  # moving a target moves its spawns
