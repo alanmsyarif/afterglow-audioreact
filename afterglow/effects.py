@@ -3,11 +3,12 @@
 Six independent layers (Data Strikes, Data Blooms, Rapid Flashes, Travelling Light
 Trails, Downward Trails, Gun Bursts) analyse the scene's sound once, place events
 deterministically inside the shared venue bounds, and key pooled real lights in a
-tagged, removable collection. Generated effects are lights only: no meshes or
-materials are ever created, so the venue itself is left exactly as the user built it
-and the visible result is real light spill on existing objects. Everything is
-world-space over the venue, never normalised per object, and silent audio produces
-no events.
+tagged, removable collection. Generated effects are lights only by default: the venue
+itself is left exactly as the user built it and the visible result is real light spill
+on existing objects. The opt-in Visible Beams adds exactly one more thing to that
+collection, a haze volume box over the venue, so the lights show as beams in the air.
+Everything is world-space over the venue, never normalised per object, and silent audio
+produces no events.
 """
 import math
 import random
@@ -315,6 +316,8 @@ DUR = {"strikes": 0.45, "blooms": 1.1, "flashes": 0.22, "trails": 1.8, "downward
 ATTACK = {"strikes": 0.03, "blooms": 0.12, "flashes": 0.02, "trails": 0.15, "downward": 0.05, "gun": 0.015}
 HOLD = {"strikes": 0.5, "blooms": 0.45, "flashes": 0.35, "trails": 0.7, "downward": 0.8, "gun": 0.85}
 TAIL_S = 2.5             # keep the timeline this long past the song so tails finish
+HAZE_PAD = 0.05          # haze box margin around the venue, as a fraction of its size
+HAZE_ANISOTROPY = 0.3    # forward scattering: beams glow brighter looking toward the light
 CUT_FADE = 0.03          # s an event cut short by a stolen pool slot takes to fade out
 CUT_EPS = 0.05           # frames: a cut event is dark and still this long before the handover
                          # (FCurve.update() merges keys closer than 0.01 frame)
@@ -433,6 +436,42 @@ def _make_unit(coll, layer, slot, color):
         coll.objects.link(light_ob)
         lights.append(light_ob)
     return tuple(lights)
+
+
+def _make_haze(coll, venue, density):
+    """Visible Beams: one box over the whole venue (footprint and height, padded) filled
+    with a Volume Scatter haze, so the effect lights read as beams in the air. Tagged like
+    the lights, so Remove Effects deletes it. Drawn as a wireframe and unselectable, so it
+    never hides or blocks the venue in the viewport."""
+    poly = venue.polygon()
+    xs, ys = [p.x for p in poly], [p.y for p in poly]
+    lo = Vector((min(xs), min(ys), venue.z0))
+    hi = Vector((max(xs), max(ys), venue.z1))
+    pad = (hi - lo) * HAZE_PAD
+    lo, hi = lo - pad, hi + pad
+    verts = [(x, y, z) for x in (lo.x, hi.x) for y in (lo.y, hi.y) for z in (lo.z, hi.z)]
+    faces = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+    name = f"{PREFIX}_haze"
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(verts, [], faces)
+    me[TAG] = VERSION
+    mat = bpy.data.materials.new(name)
+    mat[TAG] = VERSION
+    nt = mat.node_tree
+    nt.nodes.clear()
+    scatter = nt.nodes.new("ShaderNodeVolumeScatter")
+    scatter.inputs["Density"].default_value = density
+    scatter.inputs["Anisotropy"].default_value = HAZE_ANISOTROPY
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    out.location = (300, 0)
+    nt.links.new(scatter.outputs[0], out.inputs["Volume"])
+    me.materials.append(mat)
+    ob = bpy.data.objects.new(name, me)
+    ob[TAG] = VERSION
+    ob.display_type = "WIRE"
+    ob.hide_select = True
+    coll.objects.link(ob)
+    return ob
 
 
 def _assign(free, t0, dur):
@@ -583,7 +622,8 @@ def settings_sig(scene):
     included so builds from older add-on versions always report outdated."""
     s = scene.afterglow
     fx = s.effects
-    vals = [VERSION, fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4)]
+    vals = [VERSION, fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4),
+            fx.beams, round(fx.beam_density, 4)]
     for name in LAYERS:
         layer = getattr(fx, name)
         vals += [layer.enabled, layer.trigger_band, tuple(round(c, 4) for c in layer.color)]
@@ -608,8 +648,8 @@ def outdated(scene):
 
 def build(scene):
     """(Re)build the effects collection: analyse once, then key pooled real lights for
-    every enabled layer. Lights only — no meshes or materials are generated, so the
-    venue is left untouched. Deterministic for a given (sound, settings, seed)."""
+    every enabled layer, plus the haze volume when Visible Beams is on. The venue is left
+    untouched. Deterministic for a given (sound, settings, seed)."""
     s = scene.afterglow
     if s.sound is None:
         raise ValueError("Pick a sound file first")
@@ -624,6 +664,8 @@ def build(scene):
     coll[TAG] = VERSION
     coll[SIG] = settings_sig(scene)
     scene.collection.children.link(coll)
+    if s.effects.beams:
+        _make_haze(coll, venue, s.effects.beam_density)
     counts = {}
     for name in LAYERS:
         if getattr(scene.afterglow.effects, name).enabled:

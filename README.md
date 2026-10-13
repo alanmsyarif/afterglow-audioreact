@@ -62,10 +62,11 @@ Select an Afterglow object to tune it in the panel:
 ## Environment Effects
 
 Audio-only environment effects for the whole venue: independent, stackable light layers
-triggered by onsets in the track. Generated effects are **real lights only** (point and
-spot lamps with keyed energy, location and rotation). No meshes, materials or other
-geometry are ever added, so your venue stays exactly as you built it and the look comes
-from real light spill on your existing objects.
+triggered by onsets in the track. By default, generated effects are **real lights only**
+(point and spot lamps with keyed energy, location and rotation). No meshes, materials or
+other geometry are added, so your venue stays exactly as you built it and the look comes
+from real light spill on your existing objects. Turn on **Visible Beams** to also see the
+light in the air (below).
 
 ### Layers
 
@@ -93,13 +94,27 @@ Afterglow collection, never per object):
 - **Rectangular**: trails ride the venue bounds' own rectangle.
 - **Triangular**: trails ride a triangle; spawns fill the triangle.
 
+### Visible Beams
+
+Off by default. **Visible Beams** fills the venue with a thin haze so the effect lights
+show as beams and glows in the air, not just as spill on surfaces: Strikes become shafts
+of light, Gun Bursts become moving cones. **Haze** sets the density (higher means
+brighter beams and foggier air).
+
+It adds exactly one object to the effects collection: a box over the venue with a Volume
+Scatter material, drawn as a wireframe and unselectable so it never hides or blocks your
+venue in the viewport. Remove Effects deletes it with the lights. Volumes make renders
+slower; in EEVEE, a smaller *Volumetrics → Resolution* (tile size) in Render Properties
+gives crisper beams.
+
 ### Usage
 
 1. Pick your Collection and Sound in the *Afterglow* panel as usual.
 2. Open the *Afterglow Environment Effects* panel, choose the venue shape, enable layers,
    and set colours and bands.
 3. **Build Effects** analyses the sound once, then keys pooled real point/spot lights into
-   a collection named `Afterglow Effects` in the current scene.
+   a collection named `Afterglow Effects` in the current scene (plus the haze box when
+   Visible Beams is on).
 4. Scrub or play. The effects are plain F-curve animation on a layered action, so they
    render in any engine and never touch the Sample Sound node.
 5. **Remove Effects** deletes this scene's effects collection and every datablock it owns
@@ -160,17 +175,17 @@ it as a GitHub Release.
 
 ## Limitations (honest)
 
-- Generated effects are **lights only**: Build never adds meshes, materials or any other
-  geometry, so it cannot clutter or alter your venue. What you see is real light spill on
-  your existing objects and floor.
-- Because no geometry is generated, effects have no visible "beam" or streak shape of
-  their own (the reference video's thin segmented shafts and beaded trails are a
-  geometry/volumetric look). Downward Trails read as a smooth cascade of falling points
-  of light instead; Strikes and Gun Bursts read as aimed spots.
+- Generated effects are **lights only** unless Visible Beams is on, and even then Build
+  only adds its own tagged haze box: it never edits your objects, materials or World.
+- Without Visible Beams, effects have no visible "beam" or streak shape of their own (the
+  reference video's thin segmented shafts and beaded trails are a geometry/volumetric
+  look): Strikes and Gun Bursts read as aimed spots, Downward Trails as a cascade of
+  falling points of light. With it, beams are soft haze shafts rather than thin
+  segmented ones.
 - The effect timing and placement are an **interpretation** of the reference video's
   look (cool selective light in a dark venue).
 - Effect lights have shadows disabled (dozens of shadow-casting lights would crawl); they
-  provide environmental spill only.
+  provide environmental spill only, and their beams pass through objects.
 - Keyframed layer controls are sampled **per event at Build time**: re-Build after
   animating Weight/Intensity/Timing (the *Build outdated* hint tracks their keyframes).
   The hint does not track moved venue objects.

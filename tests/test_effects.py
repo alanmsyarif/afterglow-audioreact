@@ -783,6 +783,56 @@ def test_build_operator_and_outdated_flag():
     assert not [c for c in bpy.data.collections if c.get(effects.TAG)]
 
 
+def haze_objs():
+    return [ob for ob in bpy.data.objects if ob.get(effects.TAG) and ob.type == "MESH"]
+
+
+def test_visible_beams_add_one_haze_volume():
+    scene = build_stage()
+    fx = scene.afterglow.effects
+    fx.beams, fx.beam_density = True, 0.12
+    effects.build(scene)
+    (haze,) = haze_objs()
+    assert haze.users_collection[0] is effects._collections(scene)[0]
+    assert haze.display_type == "WIRE" and haze.hide_select      # never hides or blocks the venue
+    (mat,) = haze.data.materials
+    assert mat.get(effects.TAG) and haze.data.get(effects.TAG)
+    out = next(n for n in mat.node_tree.nodes if n.type == "OUTPUT_MATERIAL")
+    assert not out.inputs["Surface"].is_linked                     # haze only, no visible surface
+    scatter = out.inputs["Volume"].links[0].from_node
+    assert scatter.bl_idname == "ShaderNodeVolumeScatter"
+    assert abs(scatter.inputs["Density"].default_value - 0.12) < 1e-6
+    centre = sum((Vector(v.co) for v in haze.data.vertices), Vector()) / 8
+    assert all(p.normal.dot(p.center - centre) > 0 for p in haze.data.polygons)  # closed, outward
+    lo = Vector([min(v.co[i] for v in haze.data.vertices) for i in range(3)])
+    hi = Vector([max(v.co[i] for v in haze.data.vertices) for i in range(3)])
+    lights = [ob for ob in fx_objs() if ob.type == "LIGHT"]
+    for f in range(20, 110, 3):                                   # every light stays in the haze
+        scene.frame_set(f)
+        for ob in lights:
+            p = ob.matrix_world.translation
+            assert all(lo[i] - 1e-4 <= p[i] <= hi[i] + 1e-4 for i in range(3)), (ob.name, f, tuple(p))
+
+
+def test_visible_beams_lifecycle():
+    scene = build_stage()
+    effects.build(scene)
+    assert not haze_objs()                                         # off by default: lights only
+    fx = scene.afterglow.effects
+    fx.beams = True
+    assert effects.outdated(scene)
+    effects.build(scene)
+    assert len(haze_objs()) == 1                                   # rebuilds never stack hazes
+    effects.build(scene)
+    assert len(haze_objs()) == 1
+    fx.beam_density = 0.2
+    assert effects.outdated(scene)
+    assert bpy.ops.afterglow.remove_effects() == {"FINISHED"}
+    assert not haze_objs()
+    for store in (bpy.data.meshes, bpy.data.materials):
+        assert not [d for d in store if d.get(effects.TAG)], store
+
+
 def test_outdated_follows_keyframes_not_frame():
     scene = build_stage()
     path = "afterglow.effects.strikes.weight"

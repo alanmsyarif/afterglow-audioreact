@@ -212,4 +212,50 @@ def test_meter_on_flat_object_falls_back_to_level():
     assert max(vals) - min(vals) < 0.02 and 0.6 < min(vals) < 0.85, (min(vals), max(vals))
 
 
+def air_brightness(beams):
+    """Mean brightness of the air above the floor, filmed side-on at the peak of a Data
+    Strike, with or without Visible Beams. Only the haze can light empty air."""
+    import math
+    from afterglow import effects
+    helpers.fresh()
+    scene = bpy.context.scene
+    coll = bpy.data.collections.new("Venue")
+    scene.collection.children.link(coll)
+    plane("floor", coll)
+    scene.afterglow.collection = coll
+    scene.afterglow.sound = sound()               # 100 Hz in the first second: one strike
+    fx = scene.afterglow.effects
+    fx.strikes.enabled, fx.strikes.weight = True, 1.0
+    fx.beams = beams
+    assert effects.build(scene)["strikes"] >= 1
+    light = next(ob for ob in bpy.data.objects if ob.type == "LIGHT")
+    frame = max(range(1, 40), key=lambda f: scene.frame_set(f) or light.data.energy)
+    cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))
+    cam.location, cam.rotation_euler = (0, -14, 4), (math.pi / 2, 0, 0)
+    scene.collection.objects.link(cam)
+    scene.camera = cam
+    scene.world = bpy.data.worlds.new("w")
+    bg = next(n for n in scene.world.node_tree.nodes if n.type == "BACKGROUND")
+    bg.inputs["Strength"].default_value = 0.0     # a black world: only the effects light anything
+    scene.render.engine = "BLENDER_EEVEE"
+    scene.render.resolution_x = scene.render.resolution_y = 64
+    scene.frame_set(frame)
+    scene.render.filepath = os.path.join(tempfile.gettempdir(), f"afterglow_beams_{beams}.png")
+    bpy.ops.render.render(write_still=True)
+    img = bpy.data.images.load(scene.render.filepath)
+    w, h = img.size
+    px = img.pixels[:]
+    bpy.data.images.remove(img)
+    rows = range(int(h * 0.45), int(h * 0.85))    # z ~ 2.5-7.5 m: above the floor, below the spot
+    vals = [sum(px[(y * w + x) * 4:(y * w + x) * 4 + 3]) / 3 for y in rows for x in range(w)]
+    return sum(vals) / len(vals), max(vals)
+
+
+def test_visible_beams_light_the_air():
+    off_mean, off_max = air_brightness(False)
+    on_mean, on_max = air_brightness(True)
+    assert off_max < 0.01, off_max                # lights only: empty air stays black
+    assert on_max > 0.1 and on_mean > 0.005, (on_mean, on_max)  # a beam shows in the haze
+
+
 helpers.run(globals())
