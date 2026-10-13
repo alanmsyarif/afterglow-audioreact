@@ -102,11 +102,12 @@ on surfaces:
 - Each **Data Strike** becomes a thin, white-hot filament from the venue top to the floor,
   broken into short dashes (a different pattern per light) inside a faint glow. Its light
   moves down near the filament's base and becomes a point light, so it lights the floor
-  and the sides of nearby objects from low down.
+  and the sides of nearby objects from low down. With **Companions** on (the default), a
+  fainter filament of short bright beads runs beside it, on a different side per light.
 - Each **Gun Burst** gets a glowing tracer that flies along its aim with a fading tail,
   and its spot tightens to the tracer's cone.
 
-**Glow** sets the beams' brightness. The beams are emissive meshes parented to their
+**Glow** sets the beams' brightness; **Companions** turns the beaded filaments on or off. The beams are emissive meshes parented to their
 lights, with brightness keyed on the same envelope as the light, so they look the same in
 EEVEE and Cycles and cost almost nothing to render. They cast no shadows and light nothing
 themselves (the lights do that). They're drawn as wireframes and can't be selected, so

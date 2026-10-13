@@ -814,7 +814,7 @@ def test_visible_beams_give_strikes_and_guns_a_shaft():
         assert sh.display_type == "WIRE" and sh.hide_select             # never hides or blocks the venue
         assert not (sh.visible_shadow or sh.visible_diffuse)            # a glow, not a lamp
         assert all(p.use_smooth for p in sh.data.polygons)
-        want = ("filament", "sleeve") if layer == "strikes" else ("tracer",)
+        want = ("filament", "sleeve", "beads") if layer == "strikes" else ("tracer",)
         assert [m.name.rsplit("_", 1)[1] for m in sh.data.materials] == list(want)
         assert {p.material_index for p in sh.data.polygons} == set(range(len(want)))
         for mat in sh.data.materials:
@@ -824,7 +824,7 @@ def test_visible_beams_give_strikes_and_guns_a_shaft():
             key = next(n for n in mat.node_tree.nodes if n.bl_idname == "ShaderNodeAttribute")
             assert (key.attribute_type, key.attribute_name) == ("OBJECT", effects.GLOW)
             assert ("ShaderNodeObjectInfo" in nodes) == (layer == "strikes")  # dashes differ per strike
-    assert len(mats) == 3                                              # shared per layer and part
+    assert len(mats) == 4                                              # shared per layer and part
     for ob in lights.values():                                         # other layers stay lights only
         if ob.name.split("_")[1] not in effects.BEAM_LAYERS:
             assert not [c for c in ob.children]
@@ -843,6 +843,28 @@ def test_strike_shaft_reaches_the_floor():
     assert abs(max(zs) - v.z1) < 1e-3 and abs(min(zs) - v.z0) < 1e-3, (min(zs), max(zs), v.z0, v.z1)
     light_z = sh.parent.matrix_world.translation.z                     # lit from low down, near its base
     assert abs(light_z - (v.z0 + effects.STRIKE_BASE * v.span_z)) < 1e-3, light_z
+
+
+def test_strike_companion_beads_beside_it():
+    scene = beams_stage()
+    effects.build(scene)
+    v = effects.make_venue(scene)
+    sides = set()
+    for sh in [s for s in shaft_objs() if s.name.startswith("AFX_strikes")]:
+        beads = [p for p in sh.data.polygons if p.material_index == 2]
+        main = [p for p in sh.data.polygons if p.material_index == 0]
+        bc = sum((p.center for p in beads), Vector()) / len(beads)
+        mc = sum((p.center for p in main), Vector()) / len(main)
+        d = (bc.xy - mc.xy).length / v.span_z
+        lo, hi = effects.COMPANION_OFFSET
+        assert lo - 1e-3 <= d <= hi + 1e-3, d                         # a parallel filament nearby
+        sides.add(round(math.atan2(bc.y - mc.y, bc.x - mc.x), 3))
+    assert len(sides) == effects.POOL["strikes"]                       # a side of its own per light
+    scene.afterglow.effects.beam_companions = False
+    assert effects.outdated(scene)
+    effects.build(scene)
+    sh = next(s for s in shaft_objs() if s.name.startswith("AFX_strikes"))
+    assert [m.name.rsplit("_", 1)[1] for m in sh.data.materials] == ["filament", "sleeve"]
 
 
 def test_shaft_glow_follows_its_light():

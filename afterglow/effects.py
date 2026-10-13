@@ -334,6 +334,12 @@ SLEEVE_EMISSION = 1.0
 SLEEVE_POWER = 3.0       # sleeve edge falloff: brightest hugging the core, gone at its rim
 DASH_SCALE = 1.3         # dash pattern features per metre along a Strike
 DASH_CUT = 0.45          # pattern values below this are gaps (each Strike light has its own)
+# Companion: a fainter filament beside each Strike, mostly gaps, so it reads as a string of
+# bright beads (the reference's beaded strikes). Its side is seeded per light.
+COMPANION_OFFSET = (0.05, 0.09)  # distance from the Strike, as a fraction of the venue height
+BEAD_SCALE = 3.0         # bead pattern features per metre
+BEAD_CUT = 0.6           # pattern values below this are gaps: short beads, long gaps
+BEAD_EMISSION = 18.0
 GUN_TRACER = 1.0         # Gun Burst tracer length, as a fraction of the venue radius
 SHAFT_SEGMENTS = 24
 TRACER_EMISSION = 4.0
@@ -473,8 +479,9 @@ def _beam_material(layer, kind, color, glow):
     """One additive glow material (emission over transparency) per beam part, shared by
     a layer's shafts. Each shaft's keyed GLOW property (an Object attribute) sets its
     brightness. kind: "filament" (a Strike's bright core) or "sleeve" (its faint glow),
-    both broken into dashes that differ per shaft; or "tracer" (a Gun Burst cone, brightest
-    at its light and on its core, fading to nothing at its edges and tail)."""
+    both broken into dashes that differ per shaft; "beads" (its companion: short beads, long
+    gaps, a pattern of its own); or "tracer" (a Gun Burst cone, brightest at its light and
+    on its core, fading to nothing at its edges and tail)."""
     mat = bpy.data.materials.new(f"{PREFIX}_{layer}_{kind}")
     mat[TAG] = VERSION
     mat.surface_render_method = "BLENDED"
@@ -505,20 +512,24 @@ def _beam_material(layer, kind, color, glow):
     else:
         z = N.new("ShaderNodeSeparateXYZ")
         L.new(coords.outputs["Object"], z.inputs[0])     # metres along the Strike
+        beads = kind == "beads"
         line = N.new("ShaderNodeCombineXYZ")
-        L.new(op("MULTIPLY", z.outputs["Z"], DASH_SCALE), line.inputs["Z"])
+        L.new(op("MULTIPLY", z.outputs["Z"], BEAD_SCALE if beads else DASH_SCALE), line.inputs["Z"])
         noise = N.new("ShaderNodeTexNoise")
         noise.noise_dimensions = "4D"
         noise.inputs["Scale"].default_value = 1.0
         noise.inputs["Detail"].default_value = 3.0
         L.new(line.outputs[0], noise.inputs["Vector"])
-        L.new(op("MULTIPLY", N.new("ShaderNodeObjectInfo").outputs["Random"], 100.0), noise.inputs["W"])
+        seed = op("MULTIPLY", N.new("ShaderNodeObjectInfo").outputs["Random"], 100.0)
+        L.new(op("ADD", seed, 37.0) if beads else seed, noise.inputs["W"])  # beads: their own pattern
+        cut = BEAD_CUT if beads else DASH_CUT
         dash = N.new("ShaderNodeMapRange")              # a steep step: lit, or a gap
-        dash.inputs["From Min"].default_value = DASH_CUT
-        dash.inputs["From Max"].default_value = DASH_CUT + 0.02
+        dash.inputs["From Min"].default_value = cut
+        dash.inputs["From Max"].default_value = cut + 0.02
         L.new(noise.outputs["Factor"], dash.inputs["Value"])
-        if kind == "filament":
-            shape, gain = op("MULTIPLY", dash.outputs["Result"], inside), FILAMENT_EMISSION
+        if kind in ("filament", "beads"):
+            shape = op("MULTIPLY", dash.outputs["Result"], inside)
+            gain = BEAD_EMISSION if beads else FILAMENT_EMISSION
         else:
             shape = op("MULTIPLY", dash.outputs["Result"], op("POWER", inside, SLEEVE_POWER))
             gain = SLEEVE_EMISSION
@@ -535,10 +546,12 @@ def _beam_material(layer, kind, color, glow):
     return mat
 
 
-def _tube(rings, slot):
-    """Open tube through rings [(z, radius), ...] along local Z: (verts, faces, slot)."""
+def _tube(rings, slot, centre=(0.0, 0.0)):
+    """Open tube through rings [(z, radius), ...] along local Z, around centre in local XY:
+    (verts, faces, slot)."""
     n = SHAFT_SEGMENTS
-    verts = [(r * math.cos(2 * math.pi * i / n), r * math.sin(2 * math.pi * i / n), z)
+    cx, cy = centre
+    verts = [(cx + r * math.cos(2 * math.pi * i / n), cy + r * math.sin(2 * math.pi * i / n), z)
              for z, r in rings for i in range(n)]
     faces = [(k * n + i, (k + 1) * n + i, (k + 1) * n + (i + 1) % n, k * n + (i + 1) % n)
              for k in range(len(rings) - 1) for i in range(n)]
@@ -576,18 +589,29 @@ def _make_shaft(coll, light_ob, tubes, mats):
     return ob
 
 
-def _beam_parts(name, venue):
-    """(tubes, kinds) of one beam: a Strike's full-height filament inside its glow sleeve,
-    from the floor to the venue top around a light STRIKE_BASE up; or a Gun tracer cone
-    along the spot's aim (local -Z)."""
+def _beam_kinds(name, companions):
+    """The material parts of a layer's beams, in mesh slot order."""
+    if name == "strikes":
+        return ("filament", "sleeve", "beads") if companions else ("filament", "sleeve")
+    return ("tracer",)
+
+
+def _beam_tubes(name, venue, rng, companions):
+    """One beam's tubes: a Strike's full-height filament inside its glow sleeve, from the
+    floor to the venue top around a light STRIKE_BASE up, plus a beaded companion filament
+    beside it on a side drawn from rng; or a Gun tracer cone along the spot's aim (-Z)."""
     if name == "strikes":
         span = venue.span_z
         lo, hi = -STRIKE_BASE * span, (1.0 - STRIKE_BASE) * span
         core, sleeve = FILAMENT_RADIUS * span, SLEEVE_RADIUS * span
-        return [_tube(((lo, core), (hi, core)), 0), _tube(((lo, sleeve), (hi, sleeve)), 1)], ("filament", "sleeve")
+        tubes = [_tube(((lo, core), (hi, core)), 0), _tube(((lo, sleeve), (hi, sleeve)), 1)]
+        if companions:
+            a, d = 2 * math.pi * rng.random(), rng.uniform(*COMPANION_OFFSET) * span
+            tubes.append(_tube(((lo, core), (hi, core)), 2, (d * math.cos(a), d * math.sin(a))))
+        return tubes
     length = GUN_TRACER * venue.radius
     half = math.tan(BEAM_SPOT_SIZE[name] / 2)
-    return [_tube(((0.0, 0.02 * length * half), (-length, length * half)), 0)], ("tracer",)
+    return [_tube(((0.0, 0.02 * length * half), (-length, length * half)), 0)]
 
 
 def _assign(free, t0, dur):
@@ -700,10 +724,12 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
     keys.beams = beams
     keys.energy = STRIKE_BEAM_ENERGY if beams and name == "strikes" else 1.0
     if beams:
-        tubes, kinds = _beam_parts(name, venue)
-        mats = [_beam_material(name, k, tuple(layer.color), fx.beam_glow) for k in kinds]
+        mats = [_beam_material(name, k, tuple(layer.color), fx.beam_glow)
+                for k in _beam_kinds(name, fx.beam_companions)]
+        sides = random.Random(f"{fx.seed}:{name}:beams")
         for lights in units:
             for light_ob in lights:
+                tubes = _beam_tubes(name, venue, sides, fx.beam_companions)
                 keys.shafts[light_ob.name] = _make_shaft(coll, light_ob, tubes, mats)
     rng = random.Random(f"{fx.seed}:{name}:place")
     free = [-1e9] * POOL[name]
@@ -758,7 +784,7 @@ def settings_sig(scene):
     s = scene.afterglow
     fx = s.effects
     vals = [VERSION, fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4),
-            fx.beams, round(fx.beam_glow, 4)]
+            fx.beams, round(fx.beam_glow, 4), fx.beam_companions]
     for name in LAYERS:
         layer = getattr(fx, name)
         vals += [layer.enabled, layer.trigger_band, tuple(round(c, 4) for c in layer.color)]
