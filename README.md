@@ -157,8 +157,8 @@ On Linux without a GPU, `tests/test_render.py` needs Mesa's software OpenGL
 - Effect lights have shadows disabled (dozens of shadow-casting lights would crawl); they
   provide environmental spill only.
 - Keyframed layer controls are sampled **per event at Build time**: re-Build after
-  animating Weight/Intensity/Timing. The *Build outdated* hint does not track keyframe
-  edits or moved venue objects, only static settings.
+  animating Weight/Intensity/Timing (the *Build outdated* hint tracks their keyframes).
+  The hint does not track moved venue objects.
 - Event detection is onset-driven per trigger band and tempo-aware when the track
   provides enough repeated pulses to fit a reliable grid. Sparse, sustained, or ambiguous
   material stays onset-driven rather than forcing a guessed beat; silence produces no

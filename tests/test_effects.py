@@ -783,6 +783,26 @@ def test_build_operator_and_outdated_flag():
     assert not [c for c in bpy.data.collections if c.get(effects.TAG)]
 
 
+def test_outdated_follows_keyframes_not_frame():
+    scene = build_stage()
+    path = "afterglow.effects.strikes.weight"
+    scene.afterglow.effects.strikes.weight = 0.0
+    scene.keyframe_insert(path, frame=1)
+    scene.afterglow.effects.strikes.weight = 1.0
+    scene.keyframe_insert(path, frame=100)
+    effects.build(scene)
+    for f in (1, 37, 100, 140):                # scrubbing an animated control is not an edit
+        scene.frame_set(f)
+        assert not effects.outdated(scene), f
+    kp = effects._fcurve(scene, path).keyframe_points[1]
+    kp.co.y = kp.handle_left.y = kp.handle_right.y = 0.5   # editing a key is
+    assert effects.outdated(scene)
+    effects.build(scene)
+    assert not effects.outdated(scene)
+    effects._fcurve(scene, path).keyframe_points[0].interpolation = "CONSTANT"
+    assert effects.outdated(scene)
+
+
 def test_build_operator_reports_missing_sound():
     scene = stage()
     scene.afterglow.sound = None

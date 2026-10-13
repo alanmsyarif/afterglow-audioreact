@@ -566,17 +566,29 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
     return placed
 
 
+def _animated(scene, path, value):
+    """A keyframeable layer control as Build sees it: its keyframes when it has an F-curve
+    (the current value would change with the frame), else its value."""
+    fc = _fcurve(scene, path)
+    if fc is None:
+        return round(value, 4)
+    return (fc.extrapolation, tuple(
+        (kp.interpolation, kp.easing, *(round(x, 4) for v in (kp.co, kp.handle_left, kp.handle_right) for x in v))
+        for kp in fc.keyframe_points))
+
+
 def settings_sig(scene):
-    """Everything a build depends on, for the panel's stale-build hint. Keyframed layer
-    controls are sampled per event at build time, so their animation is not part of this.
-    VERSION is included so builds from older add-on versions always report outdated."""
+    """Everything a build depends on, for the panel's stale-build hint, including the
+    keyframes of the Weight/Intensity/Timing controls Build samples per event. VERSION is
+    included so builds from older add-on versions always report outdated."""
     s = scene.afterglow
     fx = s.effects
     vals = [VERSION, fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4)]
     for name in LAYERS:
         layer = getattr(fx, name)
-        vals += [layer.enabled, round(layer.weight, 4), round(layer.intensity, 4),
-                 tuple(round(c, 4) for c in layer.color), round(layer.timing, 4), layer.trigger_band]
+        vals += [layer.enabled, layer.trigger_band, tuple(round(c, 4) for c in layer.color)]
+        vals += [_animated(scene, f"afterglow.effects.{name}.{p}", getattr(layer, p))
+                 for p in ("weight", "intensity", "timing")]
     vals += [s.sound.filepath if s.sound else "", s.start_frame,
              round(scene.render.fps / scene.render.fps_base, 4),
              s.collection.name if s.collection else ""]
