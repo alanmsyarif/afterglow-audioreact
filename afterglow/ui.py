@@ -158,6 +158,30 @@ class AFTERGLOW_OT_remove_effects(bpy.types.Operator):
         return {"FINISHED"}
 
 
+class AFTERGLOW_OT_fit_emitter(bpy.types.Operator):
+    bl_idname = "afterglow.fit_emitter"
+    bl_label = "Fit Emitter Cage"
+    bl_description = ("Add the emitter cage, or snap it back, to the venue fitted to the collection. "
+                      "Then move, turn and scale it in the viewport: effects spawn inside it")
+    bl_options = {"REGISTER", "UNDO"}
+
+    def invoke(self, context, event):
+        if context.scene.afterglow.effects.emitter:  # never throw away a shaped cage by accident
+            return context.window_manager.invoke_confirm(
+                self, event, title="Snap the cage back?",
+                message="Your cage's place, turn and size are reset to the collection fit")
+        return self.execute(context)
+
+    def execute(self, context):
+        try:
+            cage = effects.fit_cage(context.scene)
+        except ValueError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+        self.report({"INFO"}, f"{cage.name} fitted to the collection")
+        return {"FINISHED"}
+
+
 class AFTERGLOW_PT_effects(bpy.types.Panel):
     bl_label = "Afterglow Environment Effects"
     bl_space_type = "VIEW_3D"
@@ -172,6 +196,11 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         row.prop(fx, "venue_shape", text="Shape")
         row.prop(fx, "seed")
         row = col.row(align=True)
+        row.prop(fx, "emitter", text="Cage")
+        row.operator("afterglow.fit_emitter", text="" if fx.emitter else "Add Cage",
+                     icon="FILE_REFRESH" if fx.emitter else "MESH_CUBE")
+        row = col.row(align=True)
+        row.active = fx.emitter is None  # the cage sets the venue's size instead
         row.prop(fx, "height")
         row.prop(fx, "margin")
         row = col.row(align=True)
@@ -179,10 +208,14 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         sub = row.row(align=True)
         sub.active = fx.beams
         sub.prop(fx, "beam_glow")
-        sub.prop(fx, "beam_companions", toggle=True)
-        row = col.row(align=True)
-        row.active = fx.beams
+        beam = col.column(align=True)
+        beam.active = fx.beams
+        row = beam.row(align=True)
         row.prop(fx, "beam_flow")
+        row.prop(fx, "beam_direction", expand=True)
+        row = beam.row(align=True)
+        row.prop(fx, "beam_gaps")
+        row.prop(fx, "beam_dash")
         for name in effects.LAYERS:
             layer = getattr(fx, name)
             box = col.box()
@@ -278,7 +311,8 @@ class AFTERGLOW_PT_panel(bpy.types.Panel):
 
 CLASSES = (AFTERGLOW_OT_load_sound, AFTERGLOW_OT_apply, AFTERGLOW_OT_respread,
            AFTERGLOW_OT_calibrate, AFTERGLOW_OT_bake, AFTERGLOW_OT_remove, AFTERGLOW_PT_panel,
-           AFTERGLOW_OT_build_effects, AFTERGLOW_OT_remove_effects, AFTERGLOW_PT_effects)
+           AFTERGLOW_OT_build_effects, AFTERGLOW_OT_remove_effects, AFTERGLOW_OT_fit_emitter,
+           AFTERGLOW_PT_effects)
 
 
 def register():

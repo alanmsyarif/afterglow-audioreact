@@ -94,6 +94,24 @@ Afterglow collection, never per object):
 - **Rectangular**: trails ride the venue bounds' own rectangle.
 - **Triangular**: trails ride a triangle; spawns fill the triangle.
 
+### Emitter cage
+
+By default the venue is fitted to the collection (with **Height** and **Margin**). For
+direct control, press **Add Cage**: Afterglow adds an **Afterglow Emitter** object, a
+wireframe outline of the venue (its floor, its top, the ring trails ride and a few
+posts), fitted to exactly the venue you had. Then shape it in the viewport:
+
+- **Move** it to move the venue; its origin sits on the venue floor.
+- **Turn** it about Z to turn the venue (X and Y rotation are locked).
+- **Scale** X and Y to size the footprint (unequal scale makes an ellipse or rectangle),
+  and Z to set the height.
+
+Effects spawn and travel inside it. Your changes are kept: applying its scale (Ctrl+A) or
+resizing it in Edit Mode works too, and changing **Venue Shape** redraws it at the same size
+and place. It never renders, Build, Remove Effects, Apply and Remove leave it alone, and
+moving it marks the build outdated. The refresh button beside it snaps it back to the
+collection (it asks first); delete it to go back to the fitted venue.
+
 ### Visible Beams
 
 Off by default. **Visible Beams** makes the strikes visible in the air, not just as spill
@@ -102,15 +120,22 @@ on surfaces:
 - Each **Data Strike** becomes a thin, white-hot filament from the venue top to the floor,
   broken into short dashes (a different pattern per light) inside a faint glow. Its light
   moves down near the filament's base and becomes a point light, so it lights the floor
-  and the sides of nearby objects from low down. With **Companions** on (the default), a
-  fainter filament of short bright beads runs beside it, on a different side per light.
+  and the sides of nearby objects from low down. A fainter filament of short bright
+  beads runs beside it, covering only part of its height, on a side and stretch of its
+  own per light.
 - Each **Gun Burst** gets a glowing tracer that flies along its aim with a fading tail,
   and its spot tightens to the tracer's cone.
 
-**Glow** sets the beams' brightness, **Companions** turns the beaded filaments on or off,
-and **Flow** sets how fast the dashes and beads stream down each Strike (0 holds them
-still). The beams are emissive meshes parented to their
-lights, with brightness keyed on the same envelope as the light, so they look the same in
+Beam controls:
+
+| Control | What it does |
+|---|---|
+| Glow | Brightness of all beams. |
+| Flow, Direction | How fast the dashes and beads stream (0 holds them still), and whether **Down** or **Up**. |
+| Gaps | How broken up the filaments are: 0 almost solid, 1 mostly gaps (the beaded companion is always a bit more broken up). |
+| Dash Size | Length of the dash pattern's features, in metres. |
+
+The beams are emissive meshes parented to their lights, with brightness keyed on the same envelope as the light, so they look the same in
 EEVEE and Cycles and cost almost nothing to render. They cast no shadows and light nothing
 themselves (the lights do that). They're drawn as wireframes and can't be selected, so
 they never hide or block your venue in the viewport, and Remove Effects deletes them with

@@ -86,8 +86,12 @@ class AfterglowFXLayer(bpy.types.PropertyGroup):
                                description="Which frequency band's onsets fire this layer")
 
 
+def _reshape_cage(self, context):
+    effects.refresh_cage(context.scene)
+
+
 class AfterglowEffects(bpy.types.PropertyGroup):
-    venue_shape: EnumProperty(name="Venue Shape", default="CIRCLE", items=(
+    venue_shape: EnumProperty(name="Venue Shape", default="CIRCLE", update=_reshape_cage, items=(
         ("CIRCLE", "Circular", "Emitters ride a circle around the venue centre"),
         ("SQUARE", "Square", "Emitters ride a square around the venue bounds"),
         ("RECT", "Rectangular", "Emitters ride the venue bounds' own rectangle"),
@@ -105,8 +109,18 @@ class AfterglowEffects(bpy.types.PropertyGroup):
                         "and materials to the effects collection")
     beam_glow: FloatProperty(name="Glow", default=1.0, min=0.0, soft_max=4.0,
                              description="Brightness of the beam shafts")
-    beam_companions: BoolProperty(name="Companions", default=True,
-                                  description="Give each Data Strike a fainter, beaded filament beside it")
+    beam_direction: EnumProperty(name="Direction", default="DOWN", items=(
+        ("DOWN", "Down", "Dashes and beads stream down each Data Strike"),
+        ("UP", "Up", "Dashes and beads stream up each Data Strike"),
+    ), description="Which way the dashes and beads stream")
+    beam_gaps: FloatProperty(name="Gaps", default=0.375, min=0.0, max=1.0, subtype="FACTOR",
+                             description="How broken up the Data Strike filaments are: 0 almost solid, "
+                             "1 mostly gaps (the companion is always more broken up)")
+    beam_dash: FloatProperty(name="Dash Size", default=0.75, min=0.05, soft_max=5.0, unit="LENGTH",
+                             description="Length of the dash pattern's features along a Data Strike")
+    emitter: PointerProperty(type=bpy.types.Object, name="Emitter Cage",
+                             description="Effects spawn inside this cage: move, turn (Z) and scale it in the "
+                             "viewport. Empty: the venue is fitted to the collection (Height, Margin)")
     beam_flow: FloatProperty(name="Flow", default=1.0, min=0.0, soft_max=4.0,
                              description="How fast the dashes and beads stream down each Data Strike "
                              "(0 holds them still)")
