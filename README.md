@@ -12,7 +12,7 @@ Everything comes from the sound file itself: no live input, no network.
 1. Requires **Blender 5.2** or newer.
 2. Download `afterglow-<version>.zip` from
    [Releases](https://github.com/alanmsyarif/afterglow-audioreact/releases)
-   (versions up to 0.9.0 are also in [`dist/`](dist/)).
+   or from [`dist/`](dist/), which keeps every version's zip.
 3. In Blender: *Edit → Preferences → Get Extensions → ⌄ → Install from Disk…* and pick
    the zip (or drag the zip onto the Blender window).
 4. Open the 3D Viewport sidebar (`N`) → **Afterglow** tab.
