@@ -120,6 +120,18 @@ class FakeLayout:
         pass
 
 
+def test_strikes_panel_draws_strike_points():
+    stage()
+    from afterglow import ui
+    fx = bpy.context.scene.afterglow.effects
+    fx.strikes.enabled, fx.strike_placement = True, "POINTS"
+    log = []
+    ui.AFTERGLOW_PT_effects.draw(type("P", (), {"layout": FakeLayout(log)})(), bpy.context)
+    drawn = {n for kind, n in log if kind == "prop"}
+    assert {"strike_placement", "strike_points", "strike_order"} <= drawn, drawn
+    assert ("op", "afterglow.add_strike_point") in log
+
+
 def test_effects_panel_draws_its_sections():
     stage()
     from afterglow import ui

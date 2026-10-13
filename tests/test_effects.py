@@ -842,6 +842,90 @@ def test_emitter_cage_lifecycle():
 
 
 
+# ---------------------------------------------------------------- strike points
+
+SPOTS = ((3.0, -2.0), (-4.0, 1.5), (0.5, 5.0))
+
+
+def place_points(scene, spots=SPOTS):
+    for x, y in spots:
+        scene.cursor.location = (x, y, 7.0)                        # cursor height is ignored
+        assert bpy.ops.afterglow.add_strike_point() == {"FINISHED"}
+    return [p for p in effects.strike_points(scene)]
+
+
+def strike_at_onsets(scene):
+    """XY of the strike light lit at each strike onset, in time order."""
+    fps = scene.render.fps / scene.render.fps_base
+    out = []
+    for t, _ in effects.analyze(scene)["strikes"]:
+        scene.frame_set(int(scene.afterglow.start_frame + t * fps) + 2)
+        lit = [ob for ob in fx_objs("strikes") if ob.type == "LIGHT" and ob.data.energy > 1.0]
+        assert len(lit) == 1, (t, [o.name for o in lit])
+        out.append(tuple(round(c, 4) for c in lit[0].matrix_world.translation.xy))
+    return out
+
+
+def test_add_strike_point_marks_where_a_strike_lands():
+    scene = build_stage()
+    scene.cursor.location = (3.0, -2.0, 7.0)
+    assert bpy.ops.afterglow.add_strike_point() == {"FINISHED"}
+    fx = scene.afterglow.effects
+    v = effects.make_venue(scene)
+    ob = bpy.context.view_layer.objects.active                       # ready to grab
+    assert ob.get(effects.POINT_TAG) and ob.type == "EMPTY" and ob.select_get()
+    assert ob.empty_display_type == "SINGLE_ARROW" and abs(ob.empty_display_size - v.span_z) < 1e-5
+    assert abs(ob.location.x - 3.0) < 1e-6 and abs(ob.location.y + 2.0) < 1e-6
+    assert abs(ob.location.z - v.z0) < 1e-6                          # on the venue floor
+    assert fx.strike_placement == "POINTS" and ob.name in fx.strike_points.objects
+    assert fx.strike_points.name in scene.collection.children
+
+
+def test_strikes_land_on_points_in_sequence():
+    scene = build_stage()
+    pts = place_points(scene)
+    effects.build(scene)
+    got = strike_at_onsets(scene)
+    want = [tuple(round(c, 4) for c in pts[i % len(pts)]) for i in range(len(got))]
+    assert len(got) >= 4 and got == want, (got, want)                # one after another, in name order
+    scene.afterglow.effects.beams = True                             # beams strike there too
+    effects.build(scene)
+    for sh in [s for s in shaft_objs() if s.name.startswith("AFX_strikes")]:
+        assert sh.parent.type == "LIGHT"                             # riding the strike's light
+
+
+def test_strike_points_random_order_edits_and_errors():
+    scene = build_stage()
+    pts = {tuple(round(c, 4) for c in p) for p in place_points(scene)}
+    fx = scene.afterglow.effects
+    fx.strike_order = "RANDOM"
+    effects.build(scene)
+    first = strike_at_onsets(scene)
+    assert set(first) <= pts and len(set(first)) > 1, first          # always one of the points
+    effects.build(scene)
+    assert strike_at_onsets(scene) == first                          # the same every build
+    assert not effects.outdated(scene)
+    pt = sorted(fx.strike_points.objects, key=lambda o: o.name)[0]
+    pt.location.x += 1.0                                             # moving a point is an edit
+    bpy.context.view_layer.update()
+    assert effects.outdated(scene)
+    effects.remove(scene)
+    assert bpy.data.objects.get(pt.name) is pt                       # Remove Effects keeps the points
+    effects.build(scene)
+    built = [o.name for o in fx_objs()]
+    for ob in list(fx.strike_points.objects):                        # no points: a clear error,
+        bpy.data.objects.remove(ob)
+    try:
+        effects.build(scene)
+    except ValueError as e:
+        assert "strike point" in str(e), str(e)
+    else:
+        raise AssertionError("built without strike points")
+    assert [o.name for o in fx_objs()] == built                      # and the last build is kept
+    fx.strike_placement = "RANDOM"                                   # Random needs none
+    effects.build(scene)
+
+
 # ---------------------------------------------------------------- slice 5: operators & UI
 
 def test_operators_registered():

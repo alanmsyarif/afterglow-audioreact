@@ -503,6 +503,9 @@ class _Keys:
         self.beams = False  # building this layer with Visible Beams
         self.energy = 1.0   # light energy scale for this layer (Visible Beams strikes sit low)
         self.walk = None    # Strike beams walk in: ("DOWN" | "UP", seconds the head takes) or None
+        self.points = None  # hand-placed strike points [(x, y)] to strike at, instead of at random
+        self.point_order = "SEQUENCE"
+        self.point_i = 0    # next point in Sequence order
 
     def add(self, struct, idblock, path, index, frame, value, interp):
         ch = self.channels.get((struct, path, index))
@@ -873,6 +876,60 @@ def _key_static_loc(keys, lights, pos, t0, dur, frame_of):
         keys.add_vec(ob, ob, "location", frame_of(t0 + dur), pos, "LINEAR")
 
 
+# --------------------------------------------------------------------------- strike points
+
+POINTS_NAME = "Afterglow Strike Points"
+POINT_TAG = "afterglow_strike_point"
+
+
+def strike_points(scene):
+    """[(x, y)] world positions of the scene's hand-placed strike points, in name order
+    (every object in the Strike Points collection; its height is not used)."""
+    coll = scene.afterglow.effects.strike_points
+    if coll is None:
+        return []
+    bpy.context.view_layer.update()
+    return [tuple(ob.matrix_world.translation.xy) for ob in sorted(coll.all_objects, key=lambda o: o.name)
+            if not ob.get(TAG)]
+
+
+def add_strike_point(scene, location):
+    """Add a strike point marker at location's XY on the venue floor: an Empty drawn as an
+    arrow the venue's height, showing where a Data Strike will land. The scene's Strike
+    Points collection is made on first use, and Placement switches to Points."""
+    fx = scene.afterglow.effects
+    coll = fx.strike_points
+    if coll is None:
+        coll = bpy.data.collections.new(POINTS_NAME)
+        coll[POINT_TAG] = 1
+        scene.collection.children.link(coll)
+        fx.strike_points = coll
+    v = make_venue(scene)
+    ob = bpy.data.objects.new("Strike Point", None)
+    ob[POINT_TAG] = 1
+    ob.empty_display_type = "SINGLE_ARROW"
+    ob.empty_display_size = v.span_z
+    ob.show_in_front = True
+    ob.location = (location[0], location[1], v.z0)
+    coll.objects.link(ob)
+    fx.strike_placement = "POINTS"
+    return ob
+
+
+def _strike_spot(keys, venue, rng):
+    """Where a Data Strike lands: the next hand-placed point (in Sequence order, or drawn
+    from rng in Random order), else a random spot inside the venue."""
+    if not keys.points:
+        return venue.footprint(rng)
+    n = len(keys.points)
+    if keys.point_order == "RANDOM":
+        i = min(int(rng.random() * n), n - 1)
+    else:
+        i, keys.point_i = keys.point_i % n, keys.point_i + 1
+    x, y = keys.points[i]
+    return Vector((x, y, venue.z0))
+
+
 def _layer_keys(name, keys, lights, venue, ev, b, timing, rng, fps, start):
     """Motion + brightness channels for one event of one layer. Lights only: no
     geometry is keyed, so the venue's own surfaces stay the only visible things."""
@@ -884,7 +941,7 @@ def _layer_keys(name, keys, lights, venue, ev, b, timing, rng, fps, start):
     span = venue.span_z
     if name in ("strikes", "blooms", "flashes"):
         if name == "strikes":
-            p = venue.footprint(rng)
+            p = _strike_spot(keys, venue, rng)
             # the spot crowns the strike, aimed down; a Visible Beams strike glows from its base
             pos = Vector((p.x, p.y, venue.z0 + _strike_base(venue) if keys.beams else venue.z1))
             shaft = keys.shafts.get(lights[0].name)
@@ -952,6 +1009,8 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
     units = [_make_unit(coll, name, slot, tuple(layer.color), beams)
              for slot in range(POOL[name])]
     keys.beams = beams
+    if name == "strikes" and fx.strike_placement == "POINTS":
+        keys.points, keys.point_order = strike_points(scene), fx.strike_order
     keys.energy = STRIKE_BEAM_ENERGY if beams and name == "strikes" else 1.0
     if beams:
         speed = FLOW_SPEED * fx.beam_flow * (-1.0 if fx.beam_direction == "UP" else 1.0)
@@ -1024,7 +1083,10 @@ def settings_sig(scene):
     fx = s.effects
     vals = [VERSION, fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4),
             fx.beams, round(fx.beam_glow, 4), round(fx.beam_flow, 4), fx.beam_direction,
-            round(fx.beam_gaps, 4), round(fx.beam_dash, 4), fx.beam_walk, round(fx.beam_walk_time, 4)]
+            round(fx.beam_gaps, 4), round(fx.beam_dash, 4), fx.beam_walk, round(fx.beam_walk_time, 4),
+            fx.strike_placement, fx.strike_order]
+    if fx.strike_placement == "POINTS":                 # moving a point moves its strikes
+        vals += [tuple(tuple(round(c, 4) for c in p) for p in strike_points(scene))]
     cage = fx.emitter                                   # moving the cage moves the venue
     vals += [tuple(round(x, 4) for row in cage.matrix_world for x in row) if cage else None]
     for name in LAYERS:
@@ -1057,6 +1119,9 @@ def build(scene):
     if s.sound is None:
         raise ValueError("Pick a sound file first")
     venue = make_venue(scene)
+    fx = s.effects
+    if fx.strikes.enabled and fx.strike_placement == "POINTS" and not strike_points(scene):
+        raise ValueError("Add a strike point, or set Data Strikes Placement to Random")
     events = analyze(scene)
     mono, rate = bake._load(scene)
     fps = scene.render.fps / scene.render.fps_base
