@@ -435,10 +435,12 @@ TAIL_S = 2.5             # keep the timeline this long past the song so tails fi
 BEAM_LAYERS = ("strikes", "gun")
 BEAM_SPOT_SIZE = {"gun": 0.12}
 BEAM_SPOT_BLEND = 0.2
-STRIKE_BASE = 0.1        # Strike light height above the floor, as a fraction of the venue height
+# Beam sizes are real-world metres: the venue's height only sets how tall a beam is, never
+# how thick it is, how far its companion sits or how fast its dashes stream.
+STRIKE_BASE = 1.2        # m: Strike light height above the floor (at most a quarter of the venue)
 STRIKE_BEAM_ENERGY = 0.4  # its energy relative to the spot it replaces: close to the floor
-FILAMENT_RADIUS = 0.0015  # Strike core radius, as a fraction of the venue height...
-SLEEVE_RADIUS = 0.005    # ...and its glow sleeve's
+FILAMENT_RADIUS = 0.018  # m: Strike core radius...
+SLEEVE_RADIUS = 0.06     # m: ...and its glow sleeve's
 FILAMENT_EMISSION = 30.0  # emission strengths at Glow 1 and full event brightness
 SLEEVE_EMISSION = 1.0
 SLEEVE_POWER = 3.0       # sleeve edge falloff: brightest hugging the core, gone at its rim
@@ -446,11 +448,11 @@ DASH_SCALE = 1.3         # dash pattern features per metre along a Strike
 DASH_CUT = 0.45          # pattern values below this are gaps (each Strike light has its own)
 # Companion: a fainter filament beside each Strike, mostly gaps, so it reads as a string of
 # bright beads (the reference's beaded strikes). Its side is seeded per light.
-COMPANION_OFFSET = (0.05, 0.09)  # distance from the Strike, as a fraction of the venue height
+COMPANION_OFFSET = (0.6, 1.1)  # m: distance from the Strike
 BEAD_SCALE = 3.0         # bead pattern features per metre
 BEAD_CUT = 0.6           # pattern values below this are gaps: short beads, long gaps
 BEAD_EMISSION = 18.0
-FLOW_SPEED = 0.5         # dashes and beads stream down at this many venue heights per second
+FLOW_SPEED = 6.0         # m/s: dashes and beads stream down this fast at Flow 1
 GUN_TRACER = 1.0         # Gun Burst tracer length, as a fraction of the venue radius
 SHAFT_SEGMENTS = 24
 TRACER_EMISSION = 4.0
@@ -734,17 +736,23 @@ def _beam_kinds(name, companions):
     return ("tracer",)
 
 
+def _strike_base(venue):
+    """How high a Visible Beams Strike light sits above the floor, in metres."""
+    return min(STRIKE_BASE, 0.25 * venue.span_z)
+
+
 def _beam_tubes(name, venue, rng, companions):
     """One beam's tubes: a Strike's full-height filament inside its glow sleeve, from the
-    floor to the venue top around a light STRIKE_BASE up, plus a beaded companion filament
+    floor to the venue top around its light (_strike_base up), plus a beaded companion filament
     beside it on a side drawn from rng; or a Gun tracer cone along the spot's aim (-Z)."""
     if name == "strikes":
         span = venue.span_z
-        lo, hi = -STRIKE_BASE * span, (1.0 - STRIKE_BASE) * span
-        core, sleeve = FILAMENT_RADIUS * span, SLEEVE_RADIUS * span
+        base = _strike_base(venue)
+        lo, hi = -base, span - base
+        core, sleeve = FILAMENT_RADIUS, SLEEVE_RADIUS
         tubes = [_tube(((lo, core), (hi, core)), 0), _tube(((lo, sleeve), (hi, sleeve)), 1)]
         if companions:
-            a, d = 2 * math.pi * rng.random(), rng.uniform(*COMPANION_OFFSET) * span
+            a, d = 2 * math.pi * rng.random(), rng.uniform(*COMPANION_OFFSET)
             tubes.append(_tube(((lo, core), (hi, core)), 2, (d * math.cos(a), d * math.sin(a))))
         return tubes
     length = GUN_TRACER * venue.radius
@@ -791,7 +799,7 @@ def _key_static_loc(keys, lights, pos, t0, dur, frame_of):
         keys.add_vec(ob, ob, "location", frame_of(t0 + dur), pos, "LINEAR")
 
 
-SPAWN_GAP = 0.02   # a Strike on an object glows this far above its top (fraction of venue height)
+SPAWN_GAP = 0.25   # m: a Strike on an object glows this far above its top
 BLOOM_LIFT = 0.1   # a Bloom on an object floats at least this far above it
 
 
@@ -817,11 +825,11 @@ def _layer_keys(name, keys, lights, venue, ev, b, timing, rng, fps, start):
         if name == "strikes":
             p, top = _spawn(venue, rng, keys.targets)
             # the spot crowns the strike, aimed down; a Visible Beams strike glows from its base
-            base = venue.z0 + STRIKE_BASE * span if top is None else top + SPAWN_GAP * span
+            base = venue.z0 + _strike_base(venue) if top is None else top + SPAWN_GAP
             pos = Vector((p.x, p.y, base if keys.beams else venue.z1))
             shaft = keys.shafts.get(lights[0].name)
             if shaft:  # the filament ends at the venue top, wherever this strike lands
-                reach = max(venue.z1 - base, 0.01 * span) / ((1.0 - STRIKE_BASE) * span)
+                reach = max(venue.z1 - base, 0.01 * span) / (span - _strike_base(venue))
                 keys.add_vec(shaft, shaft, "scale", frame_of(t0), (1.0, 1.0, reach), "CONSTANT")
         elif name == "blooms":
             p, top = _spawn(venue, rng, keys.targets)
@@ -882,7 +890,7 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
     keys.targets = _spawn_targets(scene)
     keys.energy = STRIKE_BEAM_ENERGY if beams and name == "strikes" else 1.0
     if beams:
-        speed = FLOW_SPEED * fx.beam_flow * venue.span_z
+        speed = FLOW_SPEED * fx.beam_flow
         flow = (start, end, fps, speed) if speed > 0 else None
         mats = [_beam_material(name, k, tuple(layer.color), fx.beam_glow, flow)
                 for k in _beam_kinds(name, fx.beam_companions)]

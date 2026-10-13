@@ -875,7 +875,7 @@ def test_spawn_on_lands_strikes_blooms_and_trails_on_objects():
         for p in pts:
             assert math.dist(p[:2], near(p)[:2]) < 1e-3, (layer, p)    # right over a target
     for p in lit_positions(scene, "strikes"):                         # a strike glows on its top
-        assert abs(p[2] - (near(p)[2] + effects.SPAWN_GAP * v.span_z)) < 1e-3, p
+        assert abs(p[2] - (near(p)[2] + effects.SPAWN_GAP)) < 1e-3, p
     tops = []                                                         # its filament still ends at the top
     for f in range(1, 150):
         scene.frame_set(f)
@@ -985,7 +985,7 @@ def test_strike_shaft_reaches_the_floor():
     zs = [(sh.matrix_world @ vtx.co).z for vtx in sh.data.vertices]
     assert abs(max(zs) - v.z1) < 1e-3 and abs(min(zs) - v.z0) < 1e-3, (min(zs), max(zs), v.z0, v.z1)
     light_z = sh.parent.matrix_world.translation.z                     # lit from low down, near its base
-    assert abs(light_z - (v.z0 + effects.STRIKE_BASE * v.span_z)) < 1e-3, light_z
+    assert abs(light_z - (v.z0 + effects._strike_base(v))) < 1e-3, light_z
 
 
 def test_strike_companion_beads_beside_it():
@@ -998,7 +998,7 @@ def test_strike_companion_beads_beside_it():
         main = [p for p in sh.data.polygons if p.material_index == 0]
         bc = sum((p.center for p in beads), Vector()) / len(beads)
         mc = sum((p.center for p in main), Vector()) / len(main)
-        d = (bc.xy - mc.xy).length / v.span_z
+        d = (bc.xy - mc.xy).length
         lo, hi = effects.COMPANION_OFFSET
         assert lo - 1e-3 <= d <= hi + 1e-3, d                         # a parallel filament nearby
         sides.add(round(math.atan2(bc.y - mc.y, bc.x - mc.x), 3))
@@ -1017,7 +1017,7 @@ def test_strike_dashes_flow_down():
     effects.build(scene)
     v = effects.make_venue(scene)
     fps = scene.render.fps / scene.render.fps_base
-    want = effects.FLOW_SPEED * 2.0 * v.span_z / fps               # metres per frame
+    want = effects.FLOW_SPEED * 2.0 / fps                          # metres per frame
     mats = {m.name.rsplit("_", 2)[1] + "_" + m.name.rsplit("_", 1)[1]: m for m in bpy.data.materials
             if m.get(effects.TAG)}
     for kind in ("strikes_filament", "strikes_sleeve", "strikes_beads"):
@@ -1033,6 +1033,50 @@ def test_strike_dashes_flow_down():
     assert effects.outdated(scene)
     effects.build(scene)
     assert not [m for m in bpy.data.materials if m.get(effects.TAG) and "Flow" in m.node_tree.nodes]
+
+
+def beam_measures(scene):
+    """(core radius, sleeve radius, companion distance, light height above the floor,
+    dash flow per frame) of the first Strike beam, all in metres."""
+    effects.build(scene)
+    v = effects.make_venue(scene)
+    sh = sorted((s for s in shaft_objs() if s.name.startswith("AFX_strikes")), key=lambda s: s.name)[0]
+    me = sh.data
+
+    def ring(slot):
+        vs = {vi for p in me.polygons if p.material_index == slot for vi in p.vertices}
+        pts = [me.vertices[i].co for i in vs]
+        c = sum(pts, Vector()) / len(pts)
+        return c, max((p.xy - c.xy).length for p in pts)
+
+    (c0, core), (_, sleeve), (c2, _) = ring(0), ring(1), ring(2)
+    for f in range(20, 80):
+        scene.frame_set(f)
+        if sh[effects.GLOW] > 0.1:
+            break
+    flow = next(m for m in bpy.data.materials if m.name.endswith("strikes_filament")).node_tree
+    (fc,) = effects._fcurves_of(flow)
+    return (core, sleeve, (c2.xy - c0.xy).length,
+            sh.parent.matrix_world.translation.z - v.z0, fc.evaluate(11) - fc.evaluate(10))
+
+
+def test_beam_size_ignores_venue_height():
+    """Raising the venue (Height, or the cage's Z scale) makes beams taller, never thicker:
+    the core, glow, companion distance, light height and dash speed stay the same."""
+    scene = beams_stage()
+    fx = scene.afterglow.effects
+    fx.height = 6.0
+    low = beam_measures(scene)
+    fx.height = 48.0
+    high = beam_measures(scene)
+    for a, b in zip(low, high):
+        assert abs(a - b) < 1e-4, (low, high)
+    cage = effects.fit_cage(scene)
+    cage.scale.z *= 3.0
+    caged = beam_measures(scene)
+    for a, b in zip(low, caged):
+        assert abs(a - b) < 1e-4, (low, caged)
+    assert abs(low[0] - effects.FILAMENT_RADIUS) < 1e-4 and abs(low[1] - effects.SLEEVE_RADIUS) < 1e-4
 
 
 def test_shaft_glow_follows_its_light():
