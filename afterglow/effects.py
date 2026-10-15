@@ -23,6 +23,7 @@ from . import bake, core, tempo
 
 TAG = "afterglow_effects"
 SIG = TAG + "_sig"
+COUNTS = TAG + "_counts"  # events per layer of the last build, for the panel
 COLLECTION = "Afterglow Effects"
 PREFIX = "AFX"
 VERSION = 2  # lights-only build layout; invalidates older geometry-based builds
@@ -1118,8 +1119,10 @@ def build(scene):
     s = scene.afterglow
     if s.sound is None:
         raise ValueError("Pick a sound file first")
-    venue = make_venue(scene)
     fx = s.effects
+    if not any(getattr(fx, name).enabled for name in LAYERS):  # before remove(): keep the last build
+        raise ValueError("Enable an effect layer first")
+    venue = make_venue(scene)
     if fx.strikes.enabled and fx.strike_placement == "POINTS" and not strike_points(scene):
         raise ValueError("Add a strike point, or set Data Strikes Placement to Random")
     events = analyze(scene)
@@ -1136,7 +1139,14 @@ def build(scene):
     for name in LAYERS:
         if getattr(scene.afterglow.effects, name).enabled:
             counts[name] = _build_layer(coll, scene, venue, name, events[name], fps, start, end)
+    coll[COUNTS] = counts
     return counts
+
+
+def built_counts(scene):
+    """Events per layer of this scene's last build, or {} when there is none."""
+    coll = next(iter(_collections(scene)), None)
+    return dict(coll.get(COUNTS, {})) if coll else {}
 
 
 def remove(scene):

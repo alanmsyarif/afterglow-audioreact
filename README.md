@@ -1,4 +1,4 @@
-# Afterglow (v0.10.0)
+# Afterglow (v0.11.0)
 
 Audio-reactive emission for Blender 5.2. Point Afterglow at a collection and a sound
 file, and every emissive object in it lights up with the music, each one listening to
@@ -35,6 +35,9 @@ Everything comes from the sound file itself: no live input, no network.
    so quiet parts go dark and peaks reach full brightness.
 5. Turn on **Fast Playback** for smooth viewport playback (see below).
 6. **Remove** takes the modifiers off and restores your original materials exactly.
+
+Until setup is done, the panel shows the next step (pick a collection, pick a sound, Apply,
+Calibrate), and Re-spread, Remove and Calibrate stay grayed out until Apply has run.
 
 ## Scene controls
 
@@ -82,7 +85,8 @@ light in the air (below).
 | Gun Bursts | Short, fast, directed spots fired from the rim toward the centre | Low |
 
 Layers are **not** a dropdown: enable any combination and they play simultaneously.
-Each layer has its own Weight, Intensity, Color, Timing and Trigger Band. The floats are
+Each layer has its own Weight, Intensity, Color (each layer starts in its own colour),
+Timing and Trigger Band. The floats are
 keyframeable on the Scene, and Build samples their animation per event, so you can bring
 layers in gradually as the track builds (e.g. keyframe Weight 0 → 1).
 
@@ -176,6 +180,10 @@ the lights.
    (tagged `afterglow_effects`). Your objects, materials and animation, and other scenes'
    effects, are never modified.
 
+After a build, each enabled layer shows how many events it fired; a red *0 events* means
+its Trigger Band never hit, so try another band. Build Effects is grayed out while no
+layer is enabled, so it never wipes your last build by accident.
+
 Changing settings does not silently re-run: the panel shows *Build outdated* until you
 press Build again. The same sound, settings and Seed always produce the same show.
 
@@ -223,7 +231,7 @@ On Linux without a GPU, `tests/test_render.py` needs Mesa's software OpenGL
 2. Tag the commit with that version and push the tag:
 
    ```bash
-   git tag v0.10.0 && git push origin v0.10.0
+   git tag v0.11.0 && git push origin v0.11.0
    ```
 
 [`release.yml`](.github/workflows/release.yml) runs the full test suite, checks the tag

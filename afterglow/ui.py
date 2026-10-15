@@ -129,7 +129,8 @@ class AFTERGLOW_OT_build_effects(bpy.types.Operator):
     bl_idname = "afterglow.build_effects"
     bl_label = "Build Effects"
     bl_description = ("Analyse the sound once and key the enabled environment-effect layers "
-                      "over the venue as pooled real lights (lights only — no geometry is added)")
+                      "over the venue as pooled real lights, plus glowing shafts when Visible Beams is on. "
+                      "Weight, Intensity and Timing are keyframeable: Build samples them per event")
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -247,6 +248,15 @@ class AFTERGLOW_OT_add_strike_point(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def fx_next_step(scene):
+    """The Environment Effects step still missing, as a panel hint, or None once built."""
+    fx = scene.afterglow.effects
+    if not any(getattr(fx, name).enabled for name in effects.LAYERS):
+        return "Enable a layer, then Build Effects"
+    if not effects._collections(scene):
+        return "Press Build Effects"
+
+
 class AFTERGLOW_PT_effects(bpy.types.Panel):
     bl_label = "Afterglow Environment Effects"
     bl_space_type = "VIEW_3D"
@@ -266,12 +276,17 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         if body:
             draw_beams(body.column(), fx)
         col = layout.column()
+        counts = effects.built_counts(context.scene)
         for name in effects.LAYERS:
             layer = getattr(fx, name)
             box = col.box()
             head = box.row(align=True)
             head.prop(layer, "enabled", text="")
             head.label(text=fx.bl_rna.properties[name].name, icon="OUTLINER_OB_LIGHT")
+            if layer.enabled and name in counts:  # 0 = its trigger band never fired
+                n = head.row()
+                n.alert = counts[name] == 0
+                n.label(text=f"{counts[name]} events")
             if layer.enabled:
                 body = box.column(align=True)
                 body.prop(layer, "trigger_band")
@@ -283,16 +298,37 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
                 r.prop(layer, "color", text="")
                 if name == "strikes":
                     draw_strike_points(body, fx)
-        if effects.outdated(context.scene):
+        hint = fx_next_step(context.scene)
+        if hint:
+            col.label(text=hint, icon="FORWARD")
+        elif effects.outdated(context.scene):
             warn = col.row(align=True)
             warn.alert = True
             warn.label(text="Build outdated: settings changed", icon="ERROR")
         row = col.row(align=True)
-        row.operator("afterglow.build_effects")
+        sub = row.row(align=True)
+        sub.enabled = any(getattr(fx, name).enabled for name in effects.LAYERS)
+        sub.operator("afterglow.build_effects")
         row.operator("afterglow.remove_effects")
-        col.label(text="Effects are real lights; Visible Beams adds glowing shafts", icon="LIGHT")
-        col.label(text="Weight/Intensity/Timing are keyframeable:", icon="INFO")
-        col.label(text="Build samples their animation per event")
+
+
+CALIBRATE = "Press Calibrate so quiet parts go dark"
+
+
+def next_step(scene):
+    """The setup step still missing, as a hint for the panel, or None once set up."""
+    s = scene.afterglow
+    if s.collection is None:
+        return "Pick the collection of glowing objects"
+    if s.sound is None:
+        return "Pick a sound (folder button loads a file)"
+    mods = [m for m in map(core.find_modifier, core.targets(s.collection)) if m]
+    if not mods:
+        return "Press Apply"
+    # Untouched defaults everywhere mean Calibrate never ran (or the user never tuned by hand).
+    gain, threshold = (nodes.RIPPLE_PAIR[k] if s.ripple else k for k in ("Gain", "Threshold"))
+    if all(nodes.get_input(m, gain) == 1.0 and nodes.get_input(m, threshold) == 0.0 for m in mods):
+        return CALIBRATE
 
 
 class AFTERGLOW_PT_panel(bpy.types.Panel):
@@ -335,11 +371,18 @@ class AFTERGLOW_PT_panel(bpy.types.Panel):
             warn.alert = True
             warn.label(text=f"Bake outdated ({len(stale)} objects)", icon="ERROR")
             warn.operator("afterglow.bake", text="", icon="FILE_REFRESH")
+        hint = next_step(context.scene) if not playing else None
+        if hint:
+            col.label(text=hint, icon="FORWARD")
         row = col.row(align=True)
         row.operator("afterglow.apply")
-        row.operator("afterglow.respread")
-        row.operator("afterglow.remove")
-        col.operator("afterglow.calibrate", icon="SPEAKER")
+        sub = row.row(align=True)
+        sub.enabled = hint in (None, CALIBRATE)  # nothing to re-spread or remove before Apply
+        sub.operator("afterglow.respread")
+        sub.operator("afterglow.remove")
+        sub = col.row()
+        sub.enabled = hint in (None, CALIBRATE)
+        sub.operator("afterglow.calibrate", icon="SPEAKER")
 
         ob = context.object
         mod = core.find_modifier(ob) if ob else None

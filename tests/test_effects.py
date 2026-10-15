@@ -151,6 +151,8 @@ def test_registered_settings_exist():
         layer = getattr(fx, name)
         for prop in ("enabled", "weight", "intensity", "color", "timing", "trigger_band"):
             assert prop in layer.bl_rna.properties, (name, prop)
+        from afterglow import props  # each layer its own colour: tell them apart
+        assert all(math.isclose(a, b, abs_tol=1e-6) for a, b in zip(layer.color, props.LAYER_COLORS[name])), name
         # keyframeable floats, not fixed constants
         assert layer.bl_rna.properties["intensity"].type == "FLOAT"
 
@@ -367,6 +369,7 @@ def test_build_creates_only_tagged_lights():
     scene = build_stage()
     counts = effects.build(scene)
     assert counts["strikes"] == len(BASS_PULSES), counts
+    assert effects.built_counts(scene) == counts  # kept for the panel
     colls = [c for c in bpy.data.collections if c.get(effects.TAG)]
     assert len(colls) == 1 and colls[0].name == effects.COLLECTION
     objs = fx_objs("strikes")
@@ -437,12 +440,19 @@ def test_remove_restores_user_scene():
     assert [n.name for n in mat.node_tree.nodes] == ["Emission", "Material Output"]
 
 
-def test_disabled_layers_build_nothing():
+def test_disabled_layers_keep_last_build():
     scene = stage()
-    counts = effects.build(scene)
-    assert counts == {}
-    assert not fx_objs()
-    assert [c for c in bpy.data.collections if c.get(effects.TAG)]  # collection exists, empty
+    scene.afterglow.effects.strikes.enabled = True
+    effects.build(scene)
+    built = len(fx_objs())
+    scene.afterglow.effects.strikes.enabled = False
+    try:
+        effects.build(scene)
+    except ValueError as e:
+        assert "Enable an effect layer" in str(e), str(e)
+    else:
+        raise AssertionError("an empty build must refuse")
+    assert built and len(fx_objs()) == built  # the last build survives
 
 
 def test_build_needs_sound():

@@ -69,21 +69,30 @@ def _replace(self, context):
     _rebake(context.scene)
 
 
-class AfterglowFXLayer(bpy.types.PropertyGroup):
-    """One stackable environment-effect layer. Floats are keyframeable on the Scene:
-    effects.build samples their animation per event, so layers can join as a track builds."""
+class AfterglowFXLayer:
+    """One stackable environment-effect layer (mixin: LAYER_TYPES adds each layer's own default
+    colour). Floats are keyframeable on the Scene: effects.build samples their animation per
+    event, so layers can join as a track builds."""
     enabled: BoolProperty(name="Enabled", default=False,
                           description="This layer fires on its trigger band's onsets (Build Effects to apply)")
     weight: FloatProperty(name="Weight", default=0.8, min=0.0, max=1.0,
                           description="Share of onsets this layer answers; keyframe it to bring the layer in later")
     intensity: FloatProperty(name="Intensity", default=1.0, min=0.0, max=4.0,
-                             description="Brightness multiplier for the layer's lights")
-    color: FloatVectorProperty(name="Color", subtype="COLOR", size=3, min=0.0, max=1.0,
-                               default=(0.8, 0.9, 1.0), description="Light colour")
+                             description="Brightness multiplier for the layer's lights; keyframeable, "
+                                         "Build samples it per event")
     timing: FloatProperty(name="Timing", default=1.0, min=0.25, max=4.0,
-                          description="Event duration multiplier")
+                          description="Event duration multiplier; keyframeable, Build samples it per event")
     trigger_band: EnumProperty(name="Trigger Band", default="LOW", items=effects.BAND_ITEMS,
                                description="Which frequency band's onsets fire this layer")
+
+
+LAYER_COLORS = {"strikes": (0.55, 0.85, 1.0), "blooms": (1.0, 0.45, 0.85), "flashes": (1.0, 1.0, 1.0),
+                "trails": (1.0, 0.7, 0.3), "downward": (0.6, 0.5, 1.0), "gun": (1.0, 0.3, 0.2)}
+LAYER_TYPES = {  # one class per layer: a PropertyGroup can't vary a default per instance
+    name: type(f"AfterglowFXLayer_{name}", (AfterglowFXLayer, bpy.types.PropertyGroup), {"__annotations__": {
+        "color": FloatVectorProperty(name="Color", subtype="COLOR", size=3, min=0.0, max=1.0,
+                                     default=c, description="Light colour")}})
+    for name, c in LAYER_COLORS.items()}
 
 
 def _reshape_cage(self, context):
@@ -147,17 +156,17 @@ class AfterglowEffects(bpy.types.PropertyGroup):
     beam_flow: FloatProperty(name="Flow", default=1.0, min=0.0, soft_max=4.0,
                              description="How fast the dashes and beads stream down each Data Strike "
                              "(0 holds them still)")
-    strikes: PointerProperty(type=AfterglowFXLayer, name="Data Strikes",
+    strikes: PointerProperty(type=LAYER_TYPES["strikes"], name="Data Strikes",
                              description="Spots of light that snap on over the venue and shine straight down")
-    blooms: PointerProperty(type=AfterglowFXLayer, name="Data Blooms",
+    blooms: PointerProperty(type=LAYER_TYPES["blooms"], name="Data Blooms",
                             description="Soft pulses of light that swell and fade inside the venue")
-    flashes: PointerProperty(type=AfterglowFXLayer, name="Rapid Flashes",
+    flashes: PointerProperty(type=LAYER_TYPES["flashes"], name="Rapid Flashes",
                              description="Very short whole-venue light bursts")
-    trails: PointerProperty(type=AfterglowFXLayer, name="Travelling Light Trails",
+    trails: PointerProperty(type=LAYER_TYPES["trails"], name="Travelling Light Trails",
                             description="A bright moving light riding the venue path")
-    downward: PointerProperty(type=AfterglowFXLayer, name="Downward Trails",
+    downward: PointerProperty(type=LAYER_TYPES["downward"], name="Downward Trails",
                               description="A smooth cascade of lights falling from the top of the venue to the ground")
-    gun: PointerProperty(type=AfterglowFXLayer, name="Gun Bursts",
+    gun: PointerProperty(type=LAYER_TYPES["gun"], name="Gun Bursts",
                          description="Short fast directed spots fired from the rim toward the centre")
 
 
@@ -229,7 +238,7 @@ class AfterglowObject(bpy.types.PropertyGroup):
     meter_invert: BoolProperty(name="Invert", description="Fill from the far end (top down)", update=_meter)
 
 
-CLASSES = (AfterglowFXLayer, AfterglowEffects, AfterglowScene, AfterglowObject)
+CLASSES = (*LAYER_TYPES.values(), AfterglowEffects, AfterglowScene, AfterglowObject)
 
 
 def register():

@@ -120,6 +120,39 @@ class FakeLayout:
         pass
 
 
+def test_next_step_walks_setup():
+    from afterglow import ui
+    scene = bpy.context.scene
+    assert "collection" in ui.next_step(scene)
+    stage()
+    assert "sound" in ui.next_step(scene)
+    bpy.ops.afterglow.load_sound(filepath=tone_wav())
+    assert "Apply" in ui.next_step(scene)
+    bpy.ops.afterglow.apply()
+    assert ui.next_step(scene) == ui.CALIBRATE
+    bpy.ops.afterglow.calibrate()
+    assert ui.next_step(scene) is None
+    log = []
+    ui.AFTERGLOW_PT_panel.draw(type("P", (), {"layout": FakeLayout(log)})(), bpy.context)
+    assert ("op", "afterglow.calibrate") in log
+
+
+def test_fx_next_step_and_empty_build():
+    from afterglow import effects, ui
+    scene = bpy.context.scene
+    stage()
+    bpy.ops.afterglow.load_sound(filepath=tone_wav())
+    assert "Enable a layer" in ui.fx_next_step(scene)
+    try:
+        effects.build(scene)
+    except ValueError as e:
+        assert "Enable an effect layer" in str(e), str(e)
+    else:
+        raise AssertionError("an empty build must refuse, not wipe the last build")
+    scene.afterglow.effects.strikes.enabled = True
+    assert ui.fx_next_step(scene) == "Press Build Effects"
+
+
 def test_strikes_panel_draws_strike_points():
     stage()
     from afterglow import ui
