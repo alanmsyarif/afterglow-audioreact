@@ -137,6 +137,22 @@ def test_next_step_walks_setup():
     assert ("op", "afterglow.calibrate") in log
 
 
+def test_fx_next_step_and_empty_build():
+    from afterglow import effects, ui
+    scene = bpy.context.scene
+    stage()
+    bpy.ops.afterglow.load_sound(filepath=tone_wav())
+    assert "Enable a layer" in ui.fx_next_step(scene)
+    try:
+        effects.build(scene)
+    except ValueError as e:
+        assert "Enable an effect layer" in str(e), str(e)
+    else:
+        raise AssertionError("an empty build must refuse, not wipe the last build")
+    scene.afterglow.effects.strikes.enabled = True
+    assert ui.fx_next_step(scene) == "Press Build Effects"
+
+
 def test_strikes_panel_draws_strike_points():
     stage()
     from afterglow import ui

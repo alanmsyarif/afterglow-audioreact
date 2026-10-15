@@ -247,6 +247,15 @@ class AFTERGLOW_OT_add_strike_point(bpy.types.Operator):
         return {"FINISHED"}
 
 
+def fx_next_step(scene):
+    """The Environment Effects step still missing, as a panel hint, or None once built."""
+    fx = scene.afterglow.effects
+    if not any(getattr(fx, name).enabled for name in effects.LAYERS):
+        return "Enable a layer, then Build Effects"
+    if not effects._collections(scene):
+        return "Press Build Effects"
+
+
 class AFTERGLOW_PT_effects(bpy.types.Panel):
     bl_label = "Afterglow Environment Effects"
     bl_space_type = "VIEW_3D"
@@ -283,12 +292,17 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
                 r.prop(layer, "color", text="")
                 if name == "strikes":
                     draw_strike_points(body, fx)
-        if effects.outdated(context.scene):
+        hint = fx_next_step(context.scene)
+        if hint:
+            col.label(text=hint, icon="FORWARD")
+        elif effects.outdated(context.scene):
             warn = col.row(align=True)
             warn.alert = True
             warn.label(text="Build outdated: settings changed", icon="ERROR")
         row = col.row(align=True)
-        row.operator("afterglow.build_effects")
+        sub = row.row(align=True)
+        sub.enabled = any(getattr(fx, name).enabled for name in effects.LAYERS)
+        sub.operator("afterglow.build_effects")
         row.operator("afterglow.remove_effects")
         col.label(text="Effects are real lights; Visible Beams adds glowing shafts", icon="LIGHT")
         col.label(text="Weight/Intensity/Timing are keyframeable:", icon="INFO")

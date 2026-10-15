@@ -1118,8 +1118,10 @@ def build(scene):
     s = scene.afterglow
     if s.sound is None:
         raise ValueError("Pick a sound file first")
-    venue = make_venue(scene)
     fx = s.effects
+    if not any(getattr(fx, name).enabled for name in LAYERS):  # before remove(): keep the last build
+        raise ValueError("Enable an effect layer first")
+    venue = make_venue(scene)
     if fx.strikes.enabled and fx.strike_placement == "POINTS" and not strike_points(scene):
         raise ValueError("Add a strike point, or set Data Strikes Placement to Random")
     events = analyze(scene)
