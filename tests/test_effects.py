@@ -151,6 +151,8 @@ def test_registered_settings_exist():
         layer = getattr(fx, name)
         for prop in ("enabled", "weight", "intensity", "color", "timing", "trigger_band"):
             assert prop in layer.bl_rna.properties, (name, prop)
+        from afterglow import props  # each layer its own colour: tell them apart
+        assert all(math.isclose(a, b, abs_tol=1e-6) for a, b in zip(layer.color, props.LAYER_COLORS[name])), name
         # keyframeable floats, not fixed constants
         assert layer.bl_rna.properties["intensity"].type == "FLOAT"
 
