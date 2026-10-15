@@ -129,7 +129,8 @@ class AFTERGLOW_OT_build_effects(bpy.types.Operator):
     bl_idname = "afterglow.build_effects"
     bl_label = "Build Effects"
     bl_description = ("Analyse the sound once and key the enabled environment-effect layers "
-                      "over the venue as pooled real lights (lights only — no geometry is added)")
+                      "over the venue as pooled real lights, plus glowing shafts when Visible Beams is on. "
+                      "Weight, Intensity and Timing are keyframeable: Build samples them per event")
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -309,9 +310,6 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         sub.enabled = any(getattr(fx, name).enabled for name in effects.LAYERS)
         sub.operator("afterglow.build_effects")
         row.operator("afterglow.remove_effects")
-        col.label(text="Effects are real lights; Visible Beams adds glowing shafts", icon="LIGHT")
-        col.label(text="Weight/Intensity/Timing are keyframeable:", icon="INFO")
-        col.label(text="Build samples their animation per event")
 
 
 CALIBRATE = "Press Calibrate so quiet parts go dark"

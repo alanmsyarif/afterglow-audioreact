@@ -77,11 +77,12 @@ class AfterglowFXLayer(bpy.types.PropertyGroup):
     weight: FloatProperty(name="Weight", default=0.8, min=0.0, max=1.0,
                           description="Share of onsets this layer answers; keyframe it to bring the layer in later")
     intensity: FloatProperty(name="Intensity", default=1.0, min=0.0, max=4.0,
-                             description="Brightness multiplier for the layer's lights")
+                             description="Brightness multiplier for the layer's lights; keyframeable, "
+                                         "Build samples it per event")
     color: FloatVectorProperty(name="Color", subtype="COLOR", size=3, min=0.0, max=1.0,
                                default=(0.8, 0.9, 1.0), description="Light colour")
     timing: FloatProperty(name="Timing", default=1.0, min=0.25, max=4.0,
-                          description="Event duration multiplier")
+                          description="Event duration multiplier; keyframeable, Build samples it per event")
     trigger_band: EnumProperty(name="Trigger Band", default="LOW", items=effects.BAND_ITEMS,
                                description="Which frequency band's onsets fire this layer")
 
