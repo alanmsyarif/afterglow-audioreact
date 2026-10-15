@@ -295,6 +295,25 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         col.label(text="Build samples their animation per event")
 
 
+CALIBRATE = "Press Calibrate so quiet parts go dark"
+
+
+def next_step(scene):
+    """The setup step still missing, as a hint for the panel, or None once set up."""
+    s = scene.afterglow
+    if s.collection is None:
+        return "Pick the collection of glowing objects"
+    if s.sound is None:
+        return "Pick a sound (folder button loads a file)"
+    mods = [m for m in map(core.find_modifier, core.targets(s.collection)) if m]
+    if not mods:
+        return "Press Apply"
+    # Untouched defaults everywhere mean Calibrate never ran (or the user never tuned by hand).
+    gain, threshold = (nodes.RIPPLE_PAIR[k] if s.ripple else k for k in ("Gain", "Threshold"))
+    if all(nodes.get_input(m, gain) == 1.0 and nodes.get_input(m, threshold) == 0.0 for m in mods):
+        return CALIBRATE
+
+
 class AFTERGLOW_PT_panel(bpy.types.Panel):
     bl_label = "Afterglow"
     bl_space_type = "VIEW_3D"
@@ -335,11 +354,18 @@ class AFTERGLOW_PT_panel(bpy.types.Panel):
             warn.alert = True
             warn.label(text=f"Bake outdated ({len(stale)} objects)", icon="ERROR")
             warn.operator("afterglow.bake", text="", icon="FILE_REFRESH")
+        hint = next_step(context.scene) if not playing else None
+        if hint:
+            col.label(text=hint, icon="FORWARD")
         row = col.row(align=True)
         row.operator("afterglow.apply")
-        row.operator("afterglow.respread")
-        row.operator("afterglow.remove")
-        col.operator("afterglow.calibrate", icon="SPEAKER")
+        sub = row.row(align=True)
+        sub.enabled = hint in (None, CALIBRATE)  # nothing to re-spread or remove before Apply
+        sub.operator("afterglow.respread")
+        sub.operator("afterglow.remove")
+        sub = col.row()
+        sub.enabled = hint in (None, CALIBRATE)
+        sub.operator("afterglow.calibrate", icon="SPEAKER")
 
         ob = context.object
         mod = core.find_modifier(ob) if ob else None

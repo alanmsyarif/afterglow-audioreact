@@ -120,6 +120,23 @@ class FakeLayout:
         pass
 
 
+def test_next_step_walks_setup():
+    from afterglow import ui
+    scene = bpy.context.scene
+    assert "collection" in ui.next_step(scene)
+    stage()
+    assert "sound" in ui.next_step(scene)
+    bpy.ops.afterglow.load_sound(filepath=tone_wav())
+    assert "Apply" in ui.next_step(scene)
+    bpy.ops.afterglow.apply()
+    assert ui.next_step(scene) == ui.CALIBRATE
+    bpy.ops.afterglow.calibrate()
+    assert ui.next_step(scene) is None
+    log = []
+    ui.AFTERGLOW_PT_panel.draw(type("P", (), {"layout": FakeLayout(log)})(), bpy.context)
+    assert ("op", "afterglow.calibrate") in log
+
+
 def test_strikes_panel_draws_strike_points():
     stage()
     from afterglow import ui
