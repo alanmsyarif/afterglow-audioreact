@@ -367,6 +367,7 @@ def test_build_creates_only_tagged_lights():
     scene = build_stage()
     counts = effects.build(scene)
     assert counts["strikes"] == len(BASS_PULSES), counts
+    assert effects.built_counts(scene) == counts  # kept for the panel
     colls = [c for c in bpy.data.collections if c.get(effects.TAG)]
     assert len(colls) == 1 and colls[0].name == effects.COLLECTION
     objs = fx_objs("strikes")

@@ -275,12 +275,17 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         if body:
             draw_beams(body.column(), fx)
         col = layout.column()
+        counts = effects.built_counts(context.scene)
         for name in effects.LAYERS:
             layer = getattr(fx, name)
             box = col.box()
             head = box.row(align=True)
             head.prop(layer, "enabled", text="")
             head.label(text=fx.bl_rna.properties[name].name, icon="OUTLINER_OB_LIGHT")
+            if layer.enabled and name in counts:  # 0 = its trigger band never fired
+                n = head.row()
+                n.alert = counts[name] == 0
+                n.label(text=f"{counts[name]} events")
             if layer.enabled:
                 body = box.column(align=True)
                 body.prop(layer, "trigger_band")
