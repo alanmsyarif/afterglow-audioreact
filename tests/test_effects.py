@@ -608,6 +608,38 @@ def test_cascade_travels_toward_a_moving_camera():
     assert effects.settings_sig(scene) != sig                        # re-keying the camera is
 
 
+def test_live_controls_retune_the_build_without_rebuilding():
+    scene = stage()
+    enable(scene, "downward", "strikes")
+    fx = scene.afterglow.effects
+    fx.beams = True
+    effects.build(scene)
+    sig = effects.settings_sig(scene)
+    ob = bpy.data.objects["AFX_downward_0_light0"]
+    shaft = next(c for c in bpy.data.objects["AFX_strikes_0_light"].children if c.get(effects.TAG))
+    peak = max(lit_rows(scene, ob.name, lambda o: o.data.energy, lo=24, hi=47))[1]
+    glow_peak = max(kp.co.y for fc in effects._fcurves_of(shaft) if fc.data_path == effects.GLOW_PATH
+                    for kp in fc.keyframe_points)
+    objs_before = set(bpy.data.objects)
+    fx.downward.intensity = 2.0
+    fx.downward.color = (1.0, 0.0, 0.0)
+    fx.cascade_size = 1.5
+    fx.strikes.intensity = 0.0                                       # dark...
+    fx.strikes.intensity = 0.5                                       # ...and back: 0 stays recoverable
+    fx.beam_glow = 3.0
+    assert set(bpy.data.objects) == objs_before                      # retuned in place, not rebuilt
+    assert abs(max(lit_rows(scene, ob.name, lambda o: o.data.energy, lo=24, hi=47))[1] - 2 * peak) < 1e-2 * peak
+    assert tuple(ob.data.color) == (1.0, 0.0, 0.0) and abs(ob.data.shadow_soft_size - 1.5) < 1e-6
+    glow_now = max(kp.co.y for fc in effects._fcurves_of(shaft) if fc.data_path == effects.GLOW_PATH
+                   for kp in fc.keyframe_points)
+    assert abs(glow_now - 0.5 * glow_peak) < 1e-3 * glow_peak, (glow_now, glow_peak)
+    mat = shaft.material_slots[0].material
+    assert abs(mat.node_tree.nodes["Glow"].inputs[1].default_value - 3.0 * mat[effects.GAIN]) < 1e-4
+    assert effects.settings_sig(scene) == sig                        # live edits never mark it outdated
+    fx.downward.timing = 2.0
+    assert effects.settings_sig(scene) != sig                        # Timing still needs Build
+
+
 def test_travelling_trail_rides_circular_path():
     scene = stage()  # objects at x=+-4: circle radius = 5*1.15 = 5.75, path z = 0.72*8
     enable(scene, "trails")
@@ -1007,7 +1039,7 @@ def test_build_operator_and_outdated_flag():
     scene = build_stage()
     assert bpy.ops.afterglow.build_effects() == {"FINISHED"}
     assert not effects.outdated(scene)
-    scene.afterglow.effects.strikes.intensity = 2.5   # settings moved: the build is stale
+    scene.afterglow.effects.strikes.timing = 2.5      # settings moved: the build is stale
     assert effects.outdated(scene)
     assert bpy.ops.afterglow.build_effects() == {"FINISHED"}
     assert not effects.outdated(scene)
@@ -1358,7 +1390,7 @@ def test_visible_beams_lifecycle():
     n = len(shaft_objs())
     effects.build(scene)
     assert len(shaft_objs()) == n                                    # rebuilds never stack shafts
-    fx.beam_glow = 2.0
+    fx.beam_flow = 2.0
     assert effects.outdated(scene)
     assert bpy.ops.afterglow.remove_effects() == {"FINISHED"}
     assert not shaft_objs()
