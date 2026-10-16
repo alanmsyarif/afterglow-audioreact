@@ -1,4 +1,4 @@
-# Afterglow (v0.12.0)
+# Afterglow (v0.13.0)
 
 Audio-reactive emission for Blender 5.2. Point Afterglow at a collection and a sound
 file, and every emissive object in it lights up with the music, each one listening to
@@ -199,8 +199,10 @@ After a build, each enabled layer shows how many events it fired; a red *0 event
 its Trigger Band never hit, so try another band. Build Effects is grayed out while no
 layer is enabled, so it never wipes your last build by accident.
 
-Changing settings does not silently re-run: the panel shows *Build outdated* until you
-press Build again. The same sound, settings and Seed always produce the same show.
+**Live controls** need no rebuild: each layer's **Color** and **Intensity**, Cascade Trails
+**Size** and the beams' **Glow** retune the last build the moment you change them (a
+keyframed Intensity is the exception: Build samples it per event). Other settings do not
+silently re-run: the panel shows *Build outdated* until you press Build again. The same sound, settings and Seed always produce the same show.
 
 ## Demo
 
@@ -246,7 +248,7 @@ On Linux without a GPU, `tests/test_render.py` needs Mesa's software OpenGL
 2. Tag the commit with that version and push the tag:
 
    ```bash
-   git tag v0.12.0 && git push origin v0.12.0
+   git tag v0.13.0 && git push origin v0.13.0
    ```
 
 [`release.yml`](.github/workflows/release.yml) runs the full test suite, checks the tag
