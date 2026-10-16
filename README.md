@@ -1,4 +1,4 @@
-# Afterglow (v0.13.0)
+# Afterglow (v0.14.0)
 
 Audio-reactive emission for Blender 5.2. Point Afterglow at a collection and a sound
 file, and every emissive object in it lights up with the music, each one listening to
@@ -252,7 +252,7 @@ On Linux without a GPU, `tests/test_render.py` needs Mesa's software OpenGL
 2. Tag the commit with that version and push the tag:
 
    ```bash
-   git tag v0.13.0 && git push origin v0.13.0
+   git tag v0.14.0 && git push origin v0.14.0
    ```
 
 [`release.yml`](.github/workflows/release.yml) runs the full test suite, checks the tag
