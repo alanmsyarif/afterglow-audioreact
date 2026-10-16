@@ -1,7 +1,7 @@
 """Environment Effects: stackable, audio-triggered light layers over the whole venue.
 
 Six independent layers (Data Strikes, Data Blooms, Rapid Flashes, Travelling Light
-Trails, Downward Trails, Gun Bursts) analyse the scene's sound once, place events
+Trails, Cascade Trails, Gun Bursts) analyse the scene's sound once, place events
 deterministically inside the shared venue bounds, and key pooled real lights in a
 tagged, removable collection. Generated effects are lights only by default: the venue
 itself is left exactly as the user built it and the visible result is real light spill
@@ -437,9 +437,13 @@ SPOT_SIZE = {"strikes": 0.5, "gun": 0.18}
 SPOT_BLEND = 0.35
 ENERGY = {"strikes": 900.0, "blooms": 350.0, "flashes": 4000.0,
           "trails": 300.0, "downward": 250.0, "gun": 700.0}
-DOWN_LIGHTS = 3        # cascade size of one Downward Trail event: a trail of falling lights
-DOWN_LAG = 0.12        # fraction of the event duration between one cascade light and the next
-DOWN_GAIN = (1.0, 0.55, 0.3)  # head brightest, tail faintest
+# Cascade Trails: a trail of Count lights travelling one line, Spacing apart, head brightest.
+CAMERA_WAYS = ("TO_CAMERA", "FROM_CAMERA")
+CASCADE_TAIL = 0.55      # each light behind the head is this much fainter than the one before
+CASCADE_MIN_RUN = 0.2    # share of the event each light still travels, however wide the Spacing
+CAMERA_NEAR = 0.5        # m: a camera cascade's lens end sits this far in front of the lens...
+CAMERA_INSET = 0.25      # m: ...and its far end this far short of the surface the camera looks at
+CAMERA_HOPS = 8          # effects meshes (beams) the camera ray looks through before giving up
 DUR = {"strikes": 0.45, "blooms": 1.1, "flashes": 0.22, "trails": 1.8, "downward": 0.9, "gun": 0.28}
 ATTACK = {"strikes": 0.03, "blooms": 0.12, "flashes": 0.02, "trails": 0.15, "downward": 0.05, "gun": 0.015}
 HOLD = {"strikes": 0.5, "blooms": 0.45, "flashes": 0.35, "trails": 0.7, "downward": 0.8, "gun": 0.85}
@@ -507,6 +511,7 @@ class _Keys:
         self.points = None  # hand-placed strike points [(x, y)] to strike at, instead of at random
         self.point_order = "SEQUENCE"
         self.point_i = 0    # next point in Sequence order
+        self.cascade = None  # Cascade Trails: (direction, placement, spacing, (scene, camera, moves) or None)
 
     def add(self, struct, idblock, path, index, frame, value, interp):
         ch = self.channels.get((struct, path, index))
@@ -602,12 +607,11 @@ def _tag_action(idblock):
         ad.action[TAG] = VERSION
 
 
-def _make_unit(coll, layer, slot, color, beams=False):
-    """One pool slot: a tuple of real lights (a staggered cascade for Downward Trails,
-    a single light for every other layer). Without Visible Beams nothing else is
-    generated, so the effects can never alter the venue's own look; with it, spots
-    narrow to their shaft's cone."""
-    n = DOWN_LIGHTS if layer == "downward" else 1
+def _make_unit(coll, layer, slot, color, beams=False, n=1, size=None):
+    """One pool slot: a tuple of n real lights (a staggered cascade for Cascade Trails,
+    a single light for every other layer), of radius size when given. Without Visible
+    Beams nothing else is generated, so the effects can never alter the venue's own look;
+    with it, spots narrow to their shaft's cone."""
     lights = []
     for j in range(n):
         name = f"{PREFIX}_{layer}_{slot}_light" + (str(j) if n > 1 else "")
@@ -617,6 +621,8 @@ def _make_unit(coll, layer, slot, color, beams=False):
         li.color = (color[0], color[1], color[2])
         li.energy = 0.0
         li.use_shadow = False  # dozens of shadow-casting lights would crawl; spill only
+        if size is not None:
+            li.shadow_soft_size = size
         if kind == "SPOT":
             li.spot_size = BEAM_SPOT_SIZE[layer] if beams else SPOT_SIZE[layer]
             li.spot_blend = BEAM_SPOT_BLEND if beams else SPOT_BLEND
@@ -877,6 +883,51 @@ def _key_static_loc(keys, lights, pos, t0, dur, frame_of):
         keys.add_vec(ob, ob, "location", frame_of(t0 + dur), pos, "LINEAR")
 
 
+def _moves(ob):
+    """True when ob, or anything it hangs from, can move over time (keys, drivers, constraints)."""
+    while ob:
+        if ob.animation_data or ob.constraints:
+            return True
+        ob = ob.parent
+    return False
+
+
+def _camera_ray(scene, cam, moves, frame, venue):
+    """(near, far) along the camera's view axis at frame: just in front of the lens, and just
+    short of the first surface it looks at (past the venue when it sees none). Effects beams
+    are looked through, so a build never aims at its own geometry."""
+    if moves:  # ponytail: one depsgraph eval per event; bake the camera path if builds crawl
+        scene.frame_set(int(frame), subframe=frame % 1.0)
+    m = cam.matrix_world
+    eye = m.translation.copy()
+    d = (m.to_3x3() @ Vector((0.0, 0.0, -1.0))).normalized()
+    mid = Vector((venue.center.x, venue.center.y, 0.5 * (venue.z0 + venue.z1)))
+    dist = (eye - mid).length + max(venue.span_z, venue.radius)
+    dg = bpy.context.evaluated_depsgraph_get()
+    o = eye
+    for _ in range(CAMERA_HOPS):
+        hit, loc, _, _, ob, _ = scene.ray_cast(dg, o, d)
+        if not hit:
+            break
+        if not ob.get(TAG):
+            dist = (loc - eye).length
+            break
+        o = loc + d * 1e-3
+    return eye + d * CAMERA_NEAR, eye + d * max(dist - CAMERA_INSET, 2.0 * CAMERA_NEAR)
+
+
+def _cascade_ends(keys, venue, rng, frame):
+    """(start, end) world points of one Cascade Trail event."""
+    way, placement, _, cam = keys.cascade
+    if cam:
+        near, far = _camera_ray(*cam, frame, venue)
+        return (far, near) if way == "TO_CAMERA" else (near, far)
+    p = venue.footprint(rng) if placement == "RANDOM" else venue.center
+    top = Vector((p.x, p.y, venue.z1))
+    bot = Vector((p.x, p.y, venue.z0 + 0.02 * venue.span_z))
+    return (top, bot) if way == "DOWN" else (bot, top)
+
+
 # --------------------------------------------------------------------------- strike points
 
 POINTS_NAME = "Afterglow Strike Points"
@@ -967,19 +1018,19 @@ def _layer_keys(name, keys, lights, venue, ev, b, timing, rng, fps, start):
             p = venue.path_point(u0 + u_span * frac)
             keys.add_vec(light_ob, light_ob, "location", frame_of(t0 + dur * frac), p, "LINEAR")
     elif name == "downward":
-        p = venue.footprint(rng)
-        top = Vector((p.x, p.y, venue.z1))
-        bot = Vector((p.x, p.y, venue.z0 + 0.02 * span))
-        # A smooth cascade: every light glides the full height at the SAME constant
-        # speed, started one DOWN_LAG apart, head brightest — a falling trail of
-        # lights instead of one stretched, scaled cylinder.
-        fall = dur * (1.0 - (len(lights) - 1) * DOWN_LAG)
+        a, z = _cascade_ends(keys, venue, rng, frame_of(t0))
+        # A smooth cascade: every light runs the whole line at the SAME constant speed,
+        # started one Spacing apart, head brightest: a travelling trail of lights
+        # instead of one stretched, scaled cylinder.
+        n = len(lights)
+        lag = min(keys.cascade[2], (1.0 - CASCADE_MIN_RUN) / max(n - 1, 1))
+        run = dur * (1.0 - (n - 1) * lag)
         for j, light_ob in enumerate(lights):
-            tj = t0 + j * DOWN_LAG * dur
-            _key_appear(keys, (light_ob,), name, bright * DOWN_GAIN[j],
-                        _envelope(tj, fall, ATTACK[name], HOLD[name]), frame_of)
-            keys.add_vec(light_ob, light_ob, "location", frame_of(tj), top, "LINEAR")
-            keys.add_vec(light_ob, light_ob, "location", frame_of(tj + fall), bot, "LINEAR")
+            tj = t0 + j * lag * dur
+            _key_appear(keys, (light_ob,), name, bright * CASCADE_TAIL ** j,
+                        _envelope(tj, run, ATTACK[name], HOLD[name]), frame_of)
+            keys.add_vec(light_ob, light_ob, "location", frame_of(tj), a, "LINEAR")
+            keys.add_vec(light_ob, light_ob, "location", frame_of(tj + run), z, "LINEAR")
         return
     else:  # gun: short, fast, directed rim -> centre
         light_ob = lights[0]
@@ -1007,9 +1058,16 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
     layer = getattr(fx, name)
     keys = _Keys()
     beams = fx.beams and name in BEAM_LAYERS
-    units = [_make_unit(coll, name, slot, tuple(layer.color), beams)
+    cascade = name == "downward"
+    units = [_make_unit(coll, name, slot, tuple(layer.color), beams,
+                        fx.cascade_count if cascade else 1, fx.cascade_size if cascade else None)
              for slot in range(POOL[name])]
     keys.beams = beams
+    if cascade:
+        cam = scene.camera if fx.cascade_direction in CAMERA_WAYS else None
+        keys.cascade = (fx.cascade_direction, fx.cascade_placement, fx.cascade_spacing,
+                        cam and (scene, cam, _moves(cam)))
+    frame_now = scene.frame_current
     if name == "strikes" and fx.strike_placement == "POINTS":
         keys.points, keys.point_order = strike_points(scene), fx.strike_order
     keys.energy = STRIKE_BEAM_ENERGY if beams and name == "strikes" else 1.0
@@ -1044,6 +1102,8 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
             keys.cut(units[slot], start + s0 * fps, CUT_FADE * fps)
         _layer_keys(name, keys, units[slot], venue, (t0, strength), intensity, timing, rng, fps, start)
         placed += 1
+    if scene.frame_current != frame_now:  # a moving camera was followed event by event
+        scene.frame_set(frame_now)
     # baseline: every light dark outside its events, so silence renders as nothing
     early = keys.walk[1] * fps if keys.walk and keys.walk[0] == "DOWN" else 0.0  # beams walking in
     b0, b1 = start - 1.0 - early, end + 1.0
@@ -1085,7 +1145,13 @@ def settings_sig(scene):
     vals = [VERSION, fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4),
             fx.beams, round(fx.beam_glow, 4), round(fx.beam_flow, 4), fx.beam_direction,
             round(fx.beam_gaps, 4), round(fx.beam_dash, 4), fx.beam_walk, round(fx.beam_walk_time, 4),
-            fx.strike_placement, fx.strike_order]
+            fx.strike_placement, fx.strike_order, fx.cascade_direction, fx.cascade_placement,
+            fx.cascade_count, round(fx.cascade_spacing, 4), round(fx.cascade_size, 4)]
+    cam = scene.camera if fx.cascade_direction in CAMERA_WAYS else None
+    if cam:                                             # the camera aims camera cascades
+        vals += [cam.name, tuple(round(x, 4) for fc in _fcurves_of(cam) for kp in fc.keyframe_points
+                                 for x in kp.co) if _moves(cam)
+                 else tuple(round(x, 4) for row in cam.matrix_world for x in row)]
     if fx.strike_placement == "POINTS":                 # moving a point moves its strikes
         vals += [tuple(tuple(round(c, 4) for c in p) for p in strike_points(scene))]
     cage = fx.emitter                                   # moving the cage moves the venue
@@ -1125,6 +1191,8 @@ def build(scene):
     venue = make_venue(scene)
     if fx.strikes.enabled and fx.strike_placement == "POINTS" and not strike_points(scene):
         raise ValueError("Add a strike point, or set Data Strikes Placement to Random")
+    if fx.downward.enabled and fx.cascade_direction in CAMERA_WAYS and scene.camera is None:
+        raise ValueError("Set an active camera, or set Cascade Trails Direction to Down or Up")
     events = analyze(scene)
     mono, rate = bake._load(scene)
     fps = scene.render.fps / scene.render.fps_base

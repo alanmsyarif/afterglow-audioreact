@@ -1,4 +1,4 @@
-# Afterglow (v0.11.0)
+# Afterglow (v0.12.0)
 
 Audio-reactive emission for Blender 5.2. Point Afterglow at a collection and a sound
 file, and every emissive object in it lights up with the music, each one listening to
@@ -81,7 +81,7 @@ light in the air (below).
 | Data Blooms | Soft pulses of light that swell and fade inside the venue | Low |
 | Rapid Flashes | Very short whole-venue bursts from the centre | Low |
 | Travelling Light Trails | A bright moving light riding the venue rim path | Low |
-| Downward Trails | A smooth cascade of lights falling from the venue top to the ground | Low |
+| Cascade Trails | A trail of lights travelling one line: down, up, or along the camera's view | Low |
 | Gun Bursts | Short, fast, directed spots fired from the rim toward the centre | Low |
 
 Layers are **not** a dropdown: enable any combination and they play simultaneously.
@@ -119,6 +119,21 @@ resizing it in Edit Mode works too, and changing **Venue Shape** redraws it at t
 and place. It never renders, Build, Remove Effects, Apply and Remove leave it alone, and
 moving it marks the build outdated. The refresh button beside it snaps it back to the
 collection (it asks first); delete it to go back to the fitted venue.
+
+### Cascade Trails
+
+Each Cascade Trail event sends **Count** lights along one line, **Spacing** apart, each
+fainter than the one ahead. **Direction** picks the line:
+
+- **Down** / **Up**: from the venue top to the floor, or back up. **Placement** runs it
+  at a random spot inside the venue, or always through the **Center**.
+- **To Camera**: from the first surface the active camera looks at, straight down its
+  view axis to just in front of the lens. Point the camera up a shaft and the light falls
+  toward the lens and floods the frame. **From Camera** runs the other way.
+
+Camera cascades follow a moving camera: each event uses where the camera is at that
+event's frame. Build needs an active scene camera for them, and re-keying the camera marks
+the build outdated. **Size** is each light's radius: larger gives softer spill.
 
 ### Strike points
 
@@ -231,7 +246,7 @@ On Linux without a GPU, `tests/test_render.py` needs Mesa's software OpenGL
 2. Tag the commit with that version and push the tag:
 
    ```bash
-   git tag v0.11.0 && git push origin v0.11.0
+   git tag v0.12.0 && git push origin v0.12.0
    ```
 
 [`release.yml`](.github/workflows/release.yml) runs the full test suite, checks the tag
@@ -243,7 +258,7 @@ it as a GitHub Release.
 - Generated effects are **lights only** unless Visible Beams is on, and even then Build
   only adds its own tagged beam meshes: it never edits your objects, materials or World.
 - Without Visible Beams, effects have no visible "beam" or streak shape of their own:
-  Strikes and Gun Bursts read as aimed spots, Downward Trails as a cascade of falling
+  Strikes and Gun Bursts read as aimed spots, Cascade Trails as a cascade of travelling
   points of light. Visible Beams covers Strikes and Gun Bursts only.
 - Beam meshes are glows, not volumes: they don't light fog, and objects in front of a
   beam don't shadow it. Seen from straight above or below, a strike filament is a dot.
@@ -258,7 +273,7 @@ it as a GitHub Release.
   provides enough repeated pulses to fit a reliable grid. Sparse, sustained, or ambiguous
   material stays onset-driven rather than forcing a guessed beat; silence produces no
   events.
-- Pools are bounded (2–6 slots per layer; a Downward Trail event uses a cascade of 3
+- Pools are bounded (2–6 slots per layer; a Cascade Trail event uses a cascade of Count
   lights in one slot). When every slot is still lit, a new event takes over the one
   closest to finishing: that event fades out quickly and the new one starts cleanly,
   rather than spawning unbounded lights.
