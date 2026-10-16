@@ -3,7 +3,7 @@ import bpy
 
 GROUP_NAME = "Afterglow AudioReact"
 TAG = "afterglow"
-VERSION = 7  # bump when the interface changes; get_group() migrates older groups
+VERSION = 8  # bump when the interface changes; get_group() migrates older groups
 SAMPLES = 8  # ponytail: fixed smoothing sample count; expose it if long tails get steppy
 BEAT_NODE = "Beat Length"
 TEMPO_TAGS = ("afterglow_tempo_path", "afterglow_tempo_start", "afterglow_tempo_size")  # set by tempo.bake
@@ -44,6 +44,8 @@ INPUTS = (
     ("Meter", "NodeSocketBool", False),      # Level Meter: fill the object along an axis by loudness
     ("Meter Axis", "NodeSocketInt", 2),      # 0 X, 1 Y, 2 Z (object space)
     ("Meter Invert", "NodeSocketBool", False),
+    ("Intensity", "NodeSocketFloat", 1.0),   # emission brightness multiplier (colour mix unaffected)
+    ("Glow", "NodeSocketFloat", 0.0),        # idle glow: brightness never drops below this level
 )
 METER_INPUTS = ("Meter", "Meter Axis", "Meter Invert")  # driven by the object's afterglow props
 BAKE_INPUTS = ("Baked Peak",) + tuple(f"Baked Tap {k}" for k in range(TAPS))
@@ -113,8 +115,8 @@ def get_input(mod, name):
     return _socket(mod, name).value
 
 
-def draw_input(layout, mod, name):
-    layout.prop(_socket(mod, name), "value", text=name)
+def draw_input(layout, mod, name, text=None):
+    layout.prop(_socket(mod, name), "value", text=text or name)
 
 
 def _build():
@@ -197,6 +199,9 @@ def _build():
     L.new(ro.outputs["Peak"], baked.inputs["False"])
     L.new(g["Baked Peak"], baked.inputs["True"])
     level = op("MULTIPLY", op("MAXIMUM", op("SUBTRACT", baked.outputs[0], threshold), 0.0), gain)
+
+    def bright(x):  # what the emission shows: the level, floored at Glow, times Intensity
+        return op("MULTIPLY", op("MAXIMUM", x, g["Glow"]), g["Intensity"])
     mix = N.new("ShaderNodeMix")
     mix.data_type = "RGBA"
     L.new(level, mix.inputs[0])         # Factor (clamped to 0..1)
@@ -246,7 +251,8 @@ def _build():
         ("ar_level", "FLOAT", level),                  # classic material layout reads these 3
         ("ar_color", "FLOAT_COLOR", mix.outputs[2]),
         ("ar_tint", "FLOAT", g["Use Colors"]),
-        ("ar_base", "FLOAT_VECTOR", vec(level, g["Use Colors"], mode)),  # wave layout's fallback
+        ("ar_gain", "FLOAT_VECTOR", vec(g["Intensity"], g["Glow"], 0.0)),  # classic layout's brightness
+        ("ar_base", "FLOAT_VECTOR", vec(bright(level), g["Use Colors"], mode)),  # wave layout's fallback
     ):
         store = N.new("GeometryNodeStoreNamedAttribute")
         store.data_type = data_type
@@ -259,7 +265,7 @@ def _build():
     # Through Objects: constant per-object vectors for the Afterglow Wave shader group, packed
     # tight because Eevee caps attributes per material. Reverse is folded into Lo/Span and the
     # axis/origin share one vector (mode says which). Skipped unless Through and baked.
-    lv = [op("MULTIPLY", op("MAXIMUM", op("SUBTRACT", g[f"Baked Tap {k}"], threshold), 0.0), gain)
+    lv = [bright(op("MULTIPLY", op("MAXIMUM", op("SUBTRACT", g[f"Baked Tap {k}"], threshold), 0.0), gain))
           for k in range(TAPS)]
     lo = op("ADD", g["Wave Lo"], op("MULTIPLY", g["Wave Reverse"], g["Wave Span"]))
     span = op("MULTIPLY", g["Wave Span"], op("SUBTRACT", 1.0, op("MULTIPLY", g["Wave Reverse"], 2.0)))

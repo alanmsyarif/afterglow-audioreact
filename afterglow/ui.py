@@ -354,38 +354,16 @@ class AFTERGLOW_PT_panel(bpy.types.Panel):
 
     def draw(self, context):
         s = context.scene.afterglow
-        col = self.layout.column()
+        layout = self.layout
+        # Setup, in the order it is done: what reacts, to which sound, then Apply and Calibrate.
+        col = layout.column()
         col.prop(s, "collection")
         row = col.row(align=True)
         row.prop(s, "sound")
         row.operator("afterglow.load_sound", text="", icon="FILEBROWSER")
         col.prop(s, "start_frame")
-        row = col.row(align=True)
-        row.prop(s, "ripple")
-        sub = row.row(align=True)
-        sub.active = s.ripple
-        sub.prop(s, "beats_per_sweep", text="Beats")
-        if s.ripple:
-            row = col.row(align=True)
-            row.prop(s, "ripple_from", text="From")
-            row.prop(s, "ripple_reverse", text="", icon="ARROW_LEFTRIGHT")
-            if s.ripple_from == "EMPTY":
-                col.prop(s, "ripple_origin")
-            col.prop(s, "through")
-            if s.through and not s.fast_playback:
-                hint = col.row()
-                hint.alert = True
-                hint.label(text="Through Objects needs Fast Playback", icon="INFO")
-        row = col.row(align=True)
-        row.prop(s, "fast_playback")
-        # Skipped during playback: the sidebar redraws every frame and the scan is O(objects).
+        # Skipped during playback: the sidebar redraws every frame and these scans are O(objects).
         playing = getattr(context.screen, "is_animation_playing", False)
-        stale = bake.outdated(context.scene) if s.fast_playback and not playing else []
-        if stale:
-            warn = col.row(align=True)
-            warn.alert = True
-            warn.label(text=f"Bake outdated ({len(stale)} objects)", icon="ERROR")
-            warn.operator("afterglow.bake", text="", icon="FILE_REFRESH")
         hint = next_step(context.scene) if not playing else None
         if hint:
             col.label(text=hint, icon="FORWARD")
@@ -398,25 +376,73 @@ class AFTERGLOW_PT_panel(bpy.types.Panel):
         sub = col.row()
         sub.enabled = hint in (None, CALIBRATE)
         sub.operator("afterglow.calibrate", icon="SPEAKER")
+        col.separator()
+        col.prop(s, "fast_playback")
+        stale = bake.outdated(context.scene) if s.fast_playback and not playing else []
+        if stale:
+            warn = col.row(align=True)
+            warn.alert = True
+            warn.label(text=f"Bake outdated ({len(stale)} objects)", icon="ERROR")
+            warn.operator("afterglow.bake", text="", icon="FILE_REFRESH")
+
+        head, body = layout.panel("AFTERGLOW_ripple", default_closed=True)
+        head.prop(s, "ripple")
+        if body:
+            body = body.column()
+            body.active = s.ripple
+            body.prop(s, "beats_per_sweep")
+            row = body.row(align=True)
+            row.prop(s, "ripple_from", text="From")
+            row.prop(s, "ripple_reverse", text="", icon="ARROW_LEFTRIGHT")
+            if s.ripple_from == "EMPTY":
+                body.prop(s, "ripple_origin")
+            body.prop(s, "through")
+            if s.through and not s.fast_playback:
+                hint = body.row()
+                hint.alert = True
+                hint.label(text="Through Objects needs Fast Playback", icon="INFO")
 
         ob = context.object
         mod = core.find_modifier(ob) if ob else None
         if mod:
-            box = self.layout.box()
-            box.label(text=ob.name, icon="OBJECT_DATA")
-            box.prop(ob.afterglow, "locked")
-            row = box.row(align=True)
-            row.prop(ob.afterglow, "meter")
-            sub = row.row(align=True)
-            sub.active = ob.afterglow.meter and not s.through
-            sub.prop(ob.afterglow, "meter_axis", expand=True)
-            sub.prop(ob.afterglow, "meter_invert", text="", icon="ARROW_LEFTRIGHT")
-            if ob.afterglow.meter and s.through:
-                hint = box.row()
-                hint.alert = True
-                hint.label(text="Level Meter is off while Through Objects is on", icon="INFO")
-            for name in nodes.OBJECT_INPUTS:  # while rippling, show the gain pair actually in use
-                nodes.draw_input(box, mod, nodes.RIPPLE_PAIR.get(name, name) if s.ripple else name)
+            draw_object(layout.box(), s, ob, mod)
+
+
+def draw_object(box, s, ob, mod):
+    """The selected object's reaction: what it hears (band), how it responds, how it looks."""
+    box.label(text=ob.name, icon="OBJECT_DATA")
+    box.label(text="Band (Hz)")
+    row = box.row(align=True)
+    nodes.draw_input(row, mod, "Low")
+    nodes.draw_input(row, mod, "High")
+    row.prop(ob.afterglow, "locked", text="", icon="LOCKED" if ob.afterglow.locked else "UNLOCKED")
+    box.label(text="Response (Ripple)" if s.ripple else "Response")
+    col = box.column(align=True)
+    row = col.row(align=True)  # while rippling, the gain pair actually in use
+    for name in ("Gain", "Threshold"):
+        nodes.draw_input(row, mod, nodes.RIPPLE_PAIR[name] if s.ripple else name, text=name)
+    row = col.row(align=True)
+    nodes.draw_input(row, mod, "Decay")
+    nodes.draw_input(row, mod, "Delay")
+    box.label(text="Look")
+    row = box.row(align=True)
+    nodes.draw_input(row, mod, "Intensity")
+    nodes.draw_input(row, mod, "Glow")
+    nodes.draw_input(box, mod, "Use Colors")
+    row = box.row(align=True)
+    row.active = bool(nodes.get_input(mod, "Use Colors"))
+    nodes.draw_input(row, mod, "Color A")
+    nodes.draw_input(row, mod, "Color B")
+    row = box.row(align=True)
+    row.prop(ob.afterglow, "meter")
+    sub = row.row(align=True)
+    sub.active = ob.afterglow.meter and not s.through
+    sub.prop(ob.afterglow, "meter_axis", expand=True)
+    sub.prop(ob.afterglow, "meter_invert", text="", icon="ARROW_LEFTRIGHT")
+    if ob.afterglow.meter and s.through:
+        hint = box.row()
+        hint.alert = True
+        hint.label(text="Level Meter is off while Through Objects is on", icon="INFO")
 
 
 CLASSES = (AFTERGLOW_OT_load_sound, AFTERGLOW_OT_apply, AFTERGLOW_OT_respread,

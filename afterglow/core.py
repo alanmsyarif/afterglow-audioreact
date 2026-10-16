@@ -330,6 +330,8 @@ def sync(scene):
     missing is never pushed (it would crash Blender); modifiers keep the previous one."""
     nodes.migrate()  # a file saved by an older version may be edited before the next Apply
     s = scene.afterglow
+    for m in {m for o in _managed(scene) for m in _materials(o) if materials.is_patched(m) and not m.library}:
+        materials.patch_material(m, wave=s.through)  # no-op unless an older material layout
     push_sound = s.sound is None or sound_ok(s.sound)
     for ob in _managed(scene):
         mod = find_modifier(ob)

@@ -1,4 +1,4 @@
-# Afterglow (v0.12.0)
+# Afterglow (v0.14.0)
 
 Audio-reactive emission for Blender 5.2. Point Afterglow at a collection and a sound
 file, and every emissive object in it lights up with the music, each one listening to
@@ -52,17 +52,21 @@ Calibrate), and Re-spread, Remove and Calibrate stay grayed out until Apply has 
 
 ## Per-object controls
 
-Select an Afterglow object to tune it in the panel:
+Select an Afterglow object to tune it in the panel. Its box follows the order you tune in:
 
-| Control | What it does |
-|---|---|
-| Lock Band | Keep this object's band when re-spreading. |
-| Low / High | The frequency band (Hz) this object listens to. |
-| Gain / Threshold | Level = (amplitude − Threshold) × Gain. While Ripple is on, the kick band's own Ripple Gain / Ripple Threshold pair is shown instead. |
-| Decay | How long a peak takes to fade (seconds). |
-| Delay | Shift this object's reaction later in time (seconds). |
-| Use Colors / Color A / Color B | Tint from Color A (quiet) to Color B (loud). |
-| Level Meter | Fill the object along an axis by loudness, like an equalizer bar (off while Through Objects is on). |
+| Group | Control | What it does |
+|---|---|---|
+| Band | Low / High | The frequency band (Hz) this object listens to. |
+| Band | Lock (padlock) | Keep this object's band when re-spreading. |
+| Response | Gain / Threshold | Level = (amplitude − Threshold) × Gain. While Ripple is on, the kick band's own Ripple Gain / Ripple Threshold pair is shown instead. |
+| Response | Decay | How long a peak takes to fade (seconds). |
+| Response | Delay | Shift this object's reaction later in time (seconds). |
+| Look | Intensity | Emission brightness multiplier. Unlike Gain it leaves the colour mix and Level Meter fill alone. |
+| Look | Glow | Idle glow: brightness never drops below this level, so quiet parts glow dimly instead of going black. |
+| Look | Use Colors / Color A / Color B | Tint from Color A (quiet) to Color B (loud). |
+| Look | Level Meter | Fill the object along an axis by loudness, like an equalizer bar (off while Through Objects is on). |
+
+The Ripple settings live in their own collapsible **Ripple** section under Fast Playback.
 
 ## Environment Effects
 
@@ -199,8 +203,10 @@ After a build, each enabled layer shows how many events it fired; a red *0 event
 its Trigger Band never hit, so try another band. Build Effects is grayed out while no
 layer is enabled, so it never wipes your last build by accident.
 
-Changing settings does not silently re-run: the panel shows *Build outdated* until you
-press Build again. The same sound, settings and Seed always produce the same show.
+**Live controls** need no rebuild: each layer's **Color** and **Intensity**, Cascade Trails
+**Size** and the beams' **Glow** retune the last build the moment you change them (a
+keyframed Intensity is the exception: Build samples it per event). Other settings do not
+silently re-run: the panel shows *Build outdated* until you press Build again. The same sound, settings and Seed always produce the same show.
 
 ## Demo
 
@@ -246,7 +252,7 @@ On Linux without a GPU, `tests/test_render.py` needs Mesa's software OpenGL
 2. Tag the commit with that version and push the tag:
 
    ```bash
-   git tag v0.12.0 && git push origin v0.12.0
+   git tag v0.14.0 && git push origin v0.14.0
    ```
 
 [`release.yml`](.github/workflows/release.yml) runs the full test suite, checks the tag

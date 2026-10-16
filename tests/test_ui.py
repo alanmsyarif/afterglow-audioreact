@@ -165,6 +165,26 @@ def test_strikes_panel_draws_strike_points():
     assert ("op", "afterglow.add_strike_point") in log
 
 
+def test_object_box_draws_every_object_input():
+    stage()
+    bpy.ops.afterglow.load_sound(filepath=tone_wav())
+    bpy.ops.afterglow.apply()
+    from afterglow import ui
+    ob = bpy.data.objects["a"]
+    mod = core.find_modifier(ob)
+    drawn = []
+    real = nodes.draw_input
+    nodes.draw_input = lambda layout, m, name, text=None: drawn.append(name)
+    try:
+        for ripple in (False, True):
+            bpy.context.scene.afterglow.ripple = ripple
+            ui.draw_object(FakeLayout([]), bpy.context.scene.afterglow, ob, mod)
+    finally:
+        nodes.draw_input = real
+    want = set(nodes.OBJECT_INPUTS) | set(nodes.RIPPLE_PAIR.values())
+    assert want <= set(drawn), want - set(drawn)
+
+
 def test_cascade_panel_draws_its_controls():
     stage()
     from afterglow import ui

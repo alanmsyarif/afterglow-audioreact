@@ -46,6 +46,12 @@ def test_bass_plane_glows_on_bass_only():
     mid = center_brightness(scene, 37)     # 1.5 s, 1 kHz playing
     # AgX view transform compresses highlights, so compare loosely, not against raw strength.
     assert bass > 0.2 and mid < 0.05, (bass, mid)
+    from afterglow import nodes
+    mod = core.find_modifier(bpy.data.objects["a_bass"])
+    nodes.set_input(mod, "Glow", 0.3)
+    assert center_brightness(scene, 37) > 0.1                    # Glow: lit even while bass is silent
+    nodes.set_input(mod, "Intensity", 0.0)
+    assert center_brightness(scene, 13) < 0.01                   # Intensity 0: dark even on bass
 
 
 def through_quad(scene, mat):

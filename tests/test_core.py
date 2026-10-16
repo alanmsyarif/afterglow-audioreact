@@ -523,4 +523,15 @@ def test_sync_skips_missing_sound():  # keep last: without the guard Blender cra
     assert nodes.get_input(core.find_modifier(bpy.data.objects["a_bass"]), "Sound") == good
     at(13)
 
+def test_sync_upgrades_an_older_material_layout():
+    scene, coll = stage()
+    core.apply(scene)
+    mat = bpy.data.materials["mat_a_bass"]
+    for n in mat.node_tree.nodes:
+        if n.get(materials.TAG):
+            n[materials.TAG] = 4  # a 0.13 file: its Level group predates Intensity and Glow
+    core.sync(scene)
+    assert {n[materials.TAG] for n in mat.node_tree.nodes if n.get(materials.TAG)} == {materials.LAYOUT_CLASSIC}
+
+
 helpers.run(globals())

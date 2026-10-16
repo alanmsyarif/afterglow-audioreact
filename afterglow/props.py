@@ -69,6 +69,11 @@ def _replace(self, context):
     _rebake(context.scene)
 
 
+def _live(self, context):
+    """A live effect control changed: retune the last build in place, no rebuild."""
+    effects.live_update(context.scene)
+
+
 class AfterglowFXLayer:
     """One stackable environment-effect layer (mixin: LAYER_TYPES adds each layer's own default
     colour). Floats are keyframeable on the Scene: effects.build samples their animation per
@@ -77,9 +82,9 @@ class AfterglowFXLayer:
                           description="This layer fires on its trigger band's onsets (Build Effects to apply)")
     weight: FloatProperty(name="Weight", default=0.8, min=0.0, max=1.0,
                           description="Share of onsets this layer answers; keyframe it to bring the layer in later")
-    intensity: FloatProperty(name="Intensity", default=1.0, min=0.0, max=4.0,
-                             description="Brightness multiplier for the layer's lights; keyframeable, "
-                                         "Build samples it per event")
+    intensity: FloatProperty(name="Intensity", default=1.0, min=0.0, max=4.0, update=_live,
+                             description="Brightness multiplier for the layer's lights, applied live; "
+                                         "keyframed, Build samples it per event")
     timing: FloatProperty(name="Timing", default=1.0, min=0.25, max=4.0,
                           description="Event duration multiplier; keyframeable, Build samples it per event")
     trigger_band: EnumProperty(name="Trigger Band", default="LOW", items=effects.BAND_ITEMS,
@@ -91,7 +96,7 @@ LAYER_COLORS = {"strikes": (0.55, 0.85, 1.0), "blooms": (1.0, 0.45, 0.85), "flas
 LAYER_TYPES = {  # one class per layer: a PropertyGroup can't vary a default per instance
     name: type(f"AfterglowFXLayer_{name}", (AfterglowFXLayer, bpy.types.PropertyGroup), {"__annotations__": {
         "color": FloatVectorProperty(name="Color", subtype="COLOR", size=3, min=0.0, max=1.0,
-                                     default=c, description="Light colour")}})
+                                     default=c, update=_live, description="Light colour, applied live")}})
     for name, c in LAYER_COLORS.items()}
 
 
@@ -116,8 +121,8 @@ class AfterglowEffects(bpy.types.PropertyGroup):
                         description="Give each Data Strike and Gun Burst light a glowing shaft mesh, so they "
                         "show as beams in the air (the same in EEVEE and Cycles). Adds tagged shaft meshes "
                         "and materials to the effects collection")
-    beam_glow: FloatProperty(name="Glow", default=1.0, min=0.0, soft_max=4.0,
-                             description="Brightness of the beam shafts")
+    beam_glow: FloatProperty(name="Glow", default=1.0, min=0.0, soft_max=4.0, update=_live,
+                             description="Brightness of the beam shafts, applied live")
     beam_direction: EnumProperty(name="Direction", default="DOWN", items=(
         ("DOWN", "Down", "Dashes and beads stream down each Data Strike"),
         ("UP", "Up", "Dashes and beads stream up each Data Strike"),
@@ -185,8 +190,8 @@ class AfterglowEffects(bpy.types.PropertyGroup):
                                    description="Delay between one cascade light and the next, as a share "
                                    "of the event: wider spacing stretches the trail")
     cascade_size: FloatProperty(name="Size", default=0.25, min=0.0, soft_max=2.0, unit="LENGTH",
-                                description="Radius of each cascade light: larger gives softer spill and "
-                                "a bigger highlight")
+                                update=_live, description="Radius of each cascade light, applied live: "
+                                "larger gives softer spill and a bigger highlight")
     gun: PointerProperty(type=LAYER_TYPES["gun"], name="Gun Bursts",
                          description="Short fast directed spots fired from the rim toward the centre")
 

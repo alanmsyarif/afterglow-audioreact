@@ -24,6 +24,8 @@ from . import bake, core, tempo
 TAG = "afterglow_effects"
 SIG = TAG + "_sig"
 COUNTS = TAG + "_counts"  # events per layer of the last build, for the panel
+LIVE = TAG + "_live"      # Intensity each layer's keys are scaled to now, for live edits
+GAIN = TAG + "_gain"      # a beam material's emission gain at Glow 1
 COLLECTION = "Afterglow Effects"
 PREFIX = "AFX"
 VERSION = 2  # lights-only build layout; invalidates older geometry-based builds
@@ -727,7 +729,10 @@ def _beam_material(layer, kind, color, glow, flow=None, gaps=0.375, dash=0.75, w
     key.attribute_type, key.attribute_name = "OBJECT", GLOW
     emission = N.new("ShaderNodeEmission")
     emission.inputs["Color"].default_value = (color[0], color[1], color[2], 1.0)
-    L.new(op("MULTIPLY", shape, op("MULTIPLY", key.outputs["Factor"], gain * glow)), emission.inputs["Strength"])
+    strength = op("MULTIPLY", key.outputs["Factor"], gain * glow)
+    strength.node.name = "Glow"  # live Glow edits retune this
+    mat[GAIN] = gain
+    L.new(op("MULTIPLY", shape, strength), emission.inputs["Strength"])
     add = N.new("ShaderNodeAddShader")
     L.new(N.new("ShaderNodeBsdfTransparent").outputs[0], add.inputs[0])
     L.new(emission.outputs[0], add.inputs[1])
@@ -1138,15 +1143,16 @@ def _animated(scene, path, value):
 
 def settings_sig(scene):
     """Everything a build depends on, for the panel's stale-build hint, including the
-    keyframes of the Weight/Intensity/Timing controls Build samples per event. VERSION is
+    keyframes of the Weight/Intensity/Timing controls Build samples per event. The live
+    controls (live_update) are left out: they never need a rebuild. VERSION is
     included so builds from older add-on versions always report outdated."""
     s = scene.afterglow
     fx = s.effects
     vals = [VERSION, fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4),
-            fx.beams, round(fx.beam_glow, 4), round(fx.beam_flow, 4), fx.beam_direction,
+            fx.beams, round(fx.beam_flow, 4), fx.beam_direction,
             round(fx.beam_gaps, 4), round(fx.beam_dash, 4), fx.beam_walk, round(fx.beam_walk_time, 4),
             fx.strike_placement, fx.strike_order, fx.cascade_direction, fx.cascade_placement,
-            fx.cascade_count, round(fx.cascade_spacing, 4), round(fx.cascade_size, 4)]
+            fx.cascade_count, round(fx.cascade_spacing, 4)]
     cam = scene.camera if fx.cascade_direction in CAMERA_WAYS else None
     if cam:                                             # the camera aims camera cascades
         vals += [cam.name, tuple(round(x, 4) for fc in _fcurves_of(cam) for kp in fc.keyframe_points
@@ -1158,9 +1164,11 @@ def settings_sig(scene):
     vals += [tuple(round(x, 4) for row in cage.matrix_world for x in row) if cage else None]
     for name in LAYERS:
         layer = getattr(fx, name)
-        vals += [layer.enabled, layer.trigger_band, tuple(round(c, 4) for c in layer.color)]
+        vals += [layer.enabled, layer.trigger_band]  # Color, Size, Glow and Intensity are live
         vals += [_animated(scene, f"afterglow.effects.{name}.{p}", getattr(layer, p))
-                 for p in ("weight", "intensity", "timing")]
+                 for p in ("weight", "timing")]
+        fc = _fcurve(scene, f"afterglow.effects.{name}.intensity")
+        vals += [fc and _animated(scene, f"afterglow.effects.{name}.intensity", layer.intensity)]
     vals += [s.sound.filepath if s.sound else "", s.start_frame,
              round(scene.render.fps / scene.render.fps_base, 4),
              s.collection.name if s.collection else ""]
@@ -1208,7 +1216,55 @@ def build(scene):
         if getattr(scene.afterglow.effects, name).enabled:
             counts[name] = _build_layer(coll, scene, venue, name, events[name], fps, start, end)
     coll[COUNTS] = counts
+    coll[LIVE] = {name: getattr(fx, name).intensity for name in counts}
     return counts
+
+
+def _scale_keys(idblock, path, k):
+    for fc in _fcurves_of(idblock):
+        if fc.data_path != path:
+            continue
+        co = np.empty(2 * len(fc.keyframe_points), np.float64)
+        fc.keyframe_points.foreach_get("co", co)
+        co[1::2] *= k
+        fc.keyframe_points.foreach_set("co", co)
+        fc.update()
+
+
+def live_update(scene):
+    """Push the live controls (each layer's Color and Intensity, Cascade Size, Glow) into
+    this scene's last build, without rebuilding: lights and beam materials are retuned in
+    place and Intensity rescales the keyed brightness. A keyframed Intensity is sampled per
+    event, so it still needs Build (the outdated hint tracks it)."""
+    fx = scene.afterglow.effects
+    for coll in _collections(scene):
+        applied = dict(coll.get(LIVE, {}))
+        for name in applied:
+            layer = getattr(fx, name)
+            lights = [ob for ob in coll.all_objects
+                      if ob.type == "LIGHT" and ob.name.startswith(f"{PREFIX}_{name}_")]
+            shafts = [c for ob in lights for c in ob.children if c.get(TAG)]
+            k = 1.0
+            if _fcurve(scene, f"afterglow.effects.{name}.intensity") is None:
+                k = max(layer.intensity, 1e-6) / max(applied[name], 1e-6)  # 0 stays recoverable
+                applied[name] = layer.intensity
+            for ob in lights:
+                ob.data.color = layer.color
+                if name == "downward":
+                    ob.data.shadow_soft_size = fx.cascade_size
+                if k != 1.0:
+                    _scale_keys(ob.data, "energy", k)
+            for shaft in shafts:
+                if k != 1.0:
+                    _scale_keys(shaft, GLOW_PATH, k)
+            for mat in {slot.material for shaft in shafts for slot in shaft.material_slots if slot.material}:
+                for node in mat.node_tree.nodes:
+                    if node.type == "EMISSION":
+                        node.inputs["Color"].default_value = (*layer.color, 1.0)
+                glow = mat.node_tree.nodes.get("Glow")
+                if glow and GAIN in mat:
+                    glow.inputs[1].default_value = mat[GAIN] * fx.beam_glow
+        coll[LIVE] = applied
 
 
 def built_counts(scene):
