@@ -209,6 +209,19 @@ def draw_strike_points(col, fx):
         col.row(align=True).prop(fx, "strike_order", expand=True)
 
 
+def draw_cascade(col, fx):
+    """Cascade Trails: which line the trail travels, and its shape."""
+    col.separator()
+    col.prop(fx, "cascade_direction", text="")
+    row = col.row(align=True)
+    row.active = fx.cascade_direction not in effects.CAMERA_WAYS  # the camera picks the line
+    row.prop(fx, "cascade_placement", expand=True)
+    row = col.row(align=True)
+    row.prop(fx, "cascade_count")
+    row.prop(fx, "cascade_spacing")
+    col.prop(fx, "cascade_size")
+
+
 def draw_beams(col, fx):
     """Visible Beams section: the strike filaments' look and motion."""
     col.active = fx.beams
@@ -298,6 +311,8 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
                 r.prop(layer, "color", text="")
                 if name == "strikes":
                     draw_strike_points(body, fx)
+                elif name == "downward":
+                    draw_cascade(body, fx)
         hint = fx_next_step(context.scene)
         if hint:
             col.label(text=hint, icon="FORWARD")

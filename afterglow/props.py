@@ -164,8 +164,29 @@ class AfterglowEffects(bpy.types.PropertyGroup):
                              description="Very short whole-venue light bursts")
     trails: PointerProperty(type=LAYER_TYPES["trails"], name="Travelling Light Trails",
                             description="A bright moving light riding the venue path")
-    downward: PointerProperty(type=LAYER_TYPES["downward"], name="Downward Trails",
-                              description="A smooth cascade of lights falling from the top of the venue to the ground")
+    downward: PointerProperty(type=LAYER_TYPES["downward"], name="Cascade Trails",
+                              description="A trail of lights travelling one line: down, up, or along the "
+                              "camera's view")
+    cascade_direction: EnumProperty(name="Direction", default="DOWN", items=(
+        ("DOWN", "Down", "Fall from the venue top to the floor"),
+        ("UP", "Up", "Rise from the floor to the venue top"),
+        ("TO_CAMERA", "To Camera", "Travel from the first surface the active camera looks at straight "
+         "toward the lens (follows a moving camera)"),
+        ("FROM_CAMERA", "From Camera", "Leave the lens and travel to the first surface the active camera "
+         "looks at (follows a moving camera)"),
+    ), description="Which line each Cascade Trail travels")
+    cascade_placement: EnumProperty(name="Placement", default="RANDOM", items=(
+        ("RANDOM", "Random", "Each cascade runs at a random spot inside the venue"),
+        ("CENTER", "Center", "Every cascade runs through the venue centre"),
+    ), description="Where Down and Up cascades run (camera cascades follow the camera's view axis)")
+    cascade_count: IntProperty(name="Count", default=3, min=1, max=8,
+                               description="Lights in one cascade, each fainter than the one ahead")
+    cascade_spacing: FloatProperty(name="Spacing", default=0.12, min=0.0, max=0.8, subtype="FACTOR",
+                                   description="Delay between one cascade light and the next, as a share "
+                                   "of the event: wider spacing stretches the trail")
+    cascade_size: FloatProperty(name="Size", default=0.25, min=0.0, soft_max=2.0, unit="LENGTH",
+                                description="Radius of each cascade light: larger gives softer spill and "
+                                "a bigger highlight")
     gun: PointerProperty(type=LAYER_TYPES["gun"], name="Gun Bursts",
                          description="Short fast directed spots fired from the rim toward the centre")
 

@@ -165,6 +165,17 @@ def test_strikes_panel_draws_strike_points():
     assert ("op", "afterglow.add_strike_point") in log
 
 
+def test_cascade_panel_draws_its_controls():
+    stage()
+    from afterglow import ui
+    bpy.context.scene.afterglow.effects.downward.enabled = True
+    log = []
+    ui.AFTERGLOW_PT_effects.draw(type("P", (), {"layout": FakeLayout(log)})(), bpy.context)
+    drawn = {n for kind, n in log if kind == "prop"}
+    assert {"cascade_direction", "cascade_placement", "cascade_count", "cascade_spacing",
+            "cascade_size"} <= drawn, drawn
+
+
 def test_effects_panel_draws_its_sections():
     stage()
     from afterglow import ui

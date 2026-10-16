@@ -392,7 +392,7 @@ def test_build_generates_no_meshes_or_materials():
     assert not [m for m in bpy.data.materials if m.get(effects.TAG)]
     assert set(bpy.data.meshes) == user_meshes         # the venue is left exactly as built
     assert set(bpy.data.materials) == user_mats
-    want = sum(effects.POOL[n] * (effects.DOWN_LIGHTS if n == "downward" else 1)
+    want = sum(effects.POOL[n] * (scene.afterglow.effects.cascade_count if n == "downward" else 1)
                for n in effects.LAYERS)
     assert len(fx_objs()) == want                      # the expected tagged LIGHT count
 
@@ -509,7 +509,7 @@ def test_downward_trail_is_a_smooth_light_cascade():
     effects.build(scene)
     objs = fx_objs("downward")
     assert all(ob.type == "LIGHT" for ob in objs)     # no geometry anywhere in the layer
-    assert len(objs) == effects.POOL["downward"] * effects.DOWN_LIGHTS
+    assert len(objs) == effects.POOL["downward"] * scene.afterglow.effects.cascade_count
     # head light of the first event: smooth monotonic fall from the venue top to the ground
     rows = lit_rows(scene, "AFX_downward_0_light0", lambda ob: ob.location.z, lo=24, hi=47)
     frames = [f for f, _ in rows]
@@ -541,11 +541,71 @@ def test_downward_rebuild_and_remove_lifecycle():
     assert channel_signature() == sig                                # rebuild is idempotent
     assert len(bpy.data.lights) == n_light
     n = effects.remove(scene)
-    assert n == effects.POOL["downward"] * effects.DOWN_LIGHTS       # remove is safe and total
+    assert n == effects.POOL["downward"] * scene.afterglow.effects.cascade_count       # remove is safe and total
     assert not fx_objs()
     assert not [l for l in bpy.data.lights if l.get(effects.TAG)]
     assert not [a for a in bpy.data.actions if a.get(effects.TAG)]
     assert set(bpy.data.objects) == user_objs                        # the venue survives untouched
+
+
+def test_cascade_up_center_count_and_size():
+    scene = stage()
+    enable(scene, "downward")
+    fx = scene.afterglow.effects
+    fx.cascade_direction, fx.cascade_placement = "UP", "CENTER"
+    fx.cascade_count, fx.cascade_size = 5, 0.8
+    effects.build(scene)
+    objs = fx_objs("downward")
+    assert len(objs) == effects.POOL["downward"] * 5                 # Count lights per slot
+    assert all(abs(ob.data.shadow_soft_size - 0.8) < 1e-6 for ob in objs)     # Size is each light's radius
+    v = effects.make_venue(scene)
+    rows = lit_rows(scene, "AFX_downward_0_light0", lambda ob: tuple(ob.location), lo=24, hi=47)
+    zs = [p[2] for _, p in rows]
+    assert len(zs) >= 5 and all(b >= a - 1e-6 for a, b in zip(zs, zs[1:])), zs  # never falls
+    assert zs[0] < 2.0 and zs[-1] > 6.5, (zs[0], zs[-1])             # floor to venue top
+    for _, (x, y, _) in rows:                                        # Center: the venue's own axis
+        assert math.dist((x, y), (v.center.x, v.center.y)) < 1e-4, (x, y)
+
+
+def test_cascade_travels_toward_a_moving_camera():
+    scene = stage()
+    enable(scene, "downward")
+    fx = scene.afterglow.effects
+    fx.cascade_direction = "TO_CAMERA"
+    try:
+        effects.build(scene)
+    except ValueError as e:
+        assert "active camera" in str(e), str(e)
+    else:
+        raise AssertionError("a camera cascade needs a camera")
+    ceiling = plane("ceiling")
+    ceiling.location, ceiling.scale = (0.0, 0.0, 6.0), (20.0, 20.0, 1.0)
+    cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))
+    scene.collection.objects.link(cam)
+    scene.camera = cam
+    cam.rotation_euler = (math.pi, 0.0, 0.0)                         # looking straight up
+    for f, x in ((1, 0.0), (121, 6.0)):                              # slides along +X
+        cam.location = (x, 0.0, 1.0)
+        cam.keyframe_insert("location", frame=f)
+    for fc in effects._fcurves_of(cam):
+        for kp in fc.keyframe_points:
+            kp.interpolation = "LINEAR"
+    scene.frame_set(7)
+    effects.build(scene)
+    assert scene.frame_current == 7                                  # following the camera restores the frame
+    rows = lit_rows(scene, "AFX_downward_0_light0", lambda ob: tuple(ob.location), lo=24, hi=47)
+    zs = [p[2] for _, p in rows]
+    assert len(zs) >= 5 and all(b <= a + 1e-6 for a, b in zip(zs, zs[1:])), zs  # ceiling -> lens
+    assert abs(zs[0] - (6.0 - effects.CAMERA_INSET)) < 0.3, zs[0]    # starts at the surface it sees
+    assert abs(zs[-1] - (1.0 + effects.CAMERA_NEAR)) < 0.3, zs[-1]   # ends just in front of the lens
+    x_at_event = 6.0 * (rows[0][0] - 1) / 120.0
+    assert all(abs(x - x_at_event) < 0.3 for _, (x, _, _) in rows), rows  # where the camera was
+    sig = effects.settings_sig(scene)
+    scene.frame_set(60)
+    assert effects.settings_sig(scene) == sig                        # scrubbing is not outdated
+    fc = effects._fcurves_of(cam)[0]
+    fc.keyframe_points[1].co.y = 3.0
+    assert effects.settings_sig(scene) != sig                        # re-keying the camera is
 
 
 def test_travelling_trail_rides_circular_path():
