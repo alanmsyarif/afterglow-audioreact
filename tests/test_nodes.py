@@ -186,6 +186,19 @@ def test_through_stores_tap_levels_and_wave():
     assert close(helpers.attr(ob, "ar_color_b"), (0.0, 0.0, 1.0))
 
 
+def test_intensity_and_glow_scale_brightness_only():
+    inputs = {"Use Baked": True, "Through": True, "Baked Peak": 0.7, "Decay": 0.0,
+              "Intensity": 2.0, "Glow": 0.3}
+    inputs.update({f"Baked Tap {k}": k * 0.1 for k in range(8)})
+    ob = reactive("ig", BASS, inputs)
+    at(5)
+    assert math.isclose(attr(ob), 0.7, abs_tol=1e-4)                      # raw level: colour mix, meter
+    assert close(helpers.attr(ob, "ar_gain"), (2.0, 0.3, 0.0))            # classic shader applies these
+    assert close(helpers.attr(ob, "ar_base"), (1.4, 0.0, 1.0))            # max(0.7, 0.3) * 2
+    assert close(helpers.attr(ob, "ar_tap0"), (0.6, 0.6, 0.6))            # taps 0..0.2 floored at Glow, x2
+    assert close(helpers.attr(ob, "ar_tap2"), (1.2, 1.4, 0.0))            # taps 0.6, 0.7
+
+
 def test_through_attributes_absent_unless_baked_and_through():
     only_through = reactive("t", BASS, {"Through": True})
     only_baked = reactive("b", BASS, {"Use Baked": True})

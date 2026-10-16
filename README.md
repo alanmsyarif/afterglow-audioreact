@@ -52,17 +52,21 @@ Calibrate), and Re-spread, Remove and Calibrate stay grayed out until Apply has 
 
 ## Per-object controls
 
-Select an Afterglow object to tune it in the panel:
+Select an Afterglow object to tune it in the panel. Its box follows the order you tune in:
 
-| Control | What it does |
-|---|---|
-| Lock Band | Keep this object's band when re-spreading. |
-| Low / High | The frequency band (Hz) this object listens to. |
-| Gain / Threshold | Level = (amplitude − Threshold) × Gain. While Ripple is on, the kick band's own Ripple Gain / Ripple Threshold pair is shown instead. |
-| Decay | How long a peak takes to fade (seconds). |
-| Delay | Shift this object's reaction later in time (seconds). |
-| Use Colors / Color A / Color B | Tint from Color A (quiet) to Color B (loud). |
-| Level Meter | Fill the object along an axis by loudness, like an equalizer bar (off while Through Objects is on). |
+| Group | Control | What it does |
+|---|---|---|
+| Band | Low / High | The frequency band (Hz) this object listens to. |
+| Band | Lock (padlock) | Keep this object's band when re-spreading. |
+| Response | Gain / Threshold | Level = (amplitude − Threshold) × Gain. While Ripple is on, the kick band's own Ripple Gain / Ripple Threshold pair is shown instead. |
+| Response | Decay | How long a peak takes to fade (seconds). |
+| Response | Delay | Shift this object's reaction later in time (seconds). |
+| Look | Intensity | Emission brightness multiplier. Unlike Gain it leaves the colour mix and Level Meter fill alone. |
+| Look | Glow | Idle glow: brightness never drops below this level, so quiet parts glow dimly instead of going black. |
+| Look | Use Colors / Color A / Color B | Tint from Color A (quiet) to Color B (loud). |
+| Look | Level Meter | Fill the object along an axis by loudness, like an equalizer bar (off while Through Objects is on). |
+
+The Ripple settings live in their own collapsible **Ripple** section under Fast Playback.
 
 ## Environment Effects
 

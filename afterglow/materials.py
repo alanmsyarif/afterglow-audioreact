@@ -2,7 +2,7 @@
 import bpy
 
 TAG = "afterglow"
-LAYOUT_CLASSIC = 4  # Afterglow Level group, 4 attributes (incl. Level Meter); 1 was plain Attribute nodes
+LAYOUT_CLASSIC = 5  # Afterglow Level group, 5 attributes (incl. Level Meter, Intensity/Glow); 1 was plain Attribute nodes
 LAYOUT_WAVE = 3     # Through Objects: the Afterglow Wave group, 9 attributes (2 was v0.6's 12-attribute layout)
 WAVE_GROUP = "Afterglow Wave"
 LEVEL_GROUP = "Afterglow Level"
@@ -129,7 +129,9 @@ def _build_level():
     # lit below the fill line (loudness 0..1 = empty..full), with a soft edge
     fill = op("MULTIPLY", clamp01(level), 1.0 + METER_SOFT)
     lit = clamp01(op("DIVIDE", op("SUBTRACT", fill, t), METER_SOFT))
-    L.new(op("ADD", level, op("MULTIPLY", on, op("SUBTRACT", lit, level))), out.inputs["Level"])
+    shown = op("ADD", level, op("MULTIPLY", on, op("SUBTRACT", lit, level)))
+    intensity, glow, _ = xyz("ar_gain")
+    L.new(op("MULTIPLY", op("MAXIMUM", shown, glow), intensity), out.inputs["Level"])
     L.new(attr("ar_color", "Color"), out.inputs["Color"])
     L.new(attr("ar_tint", "Fac"), out.inputs["Tint"])
     for i, n in enumerate(N):  # ponytail: one row so the tree is at least untangled if opened
