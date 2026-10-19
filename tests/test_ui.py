@@ -196,6 +196,16 @@ def test_cascade_panel_draws_its_controls():
             "cascade_size"} <= drawn, drawn
 
 
+def test_effects_panel_exposes_the_global_timing_offset():
+    stage()
+    from afterglow import ui
+    log = []
+    ui.AFTERGLOW_PT_effects.draw(type("P", (), {"layout": FakeLayout(log)})(), bpy.context)
+    assert ("prop", "timing_offset") in log
+    prop = bpy.context.scene.afterglow.effects.bl_rna.properties["timing_offset"]
+    assert not prop.is_animatable  # one static post-snap shift, not an unsampled F-curve
+
+
 def test_effects_panel_draws_its_sections():
     stage()
     from afterglow import ui
@@ -208,6 +218,24 @@ def test_effects_panel_draws_its_sections():
                  "beam_flow", "beam_direction", "beam_gaps", "beam_dash"):
         assert name in drawn, name
     assert ("op", "afterglow.build_effects") in log
+
+
+def test_signal_panel_exposes_controls_with_graphics_off_by_default():
+    stage()
+    from afterglow import ui
+    fx = bpy.context.scene.afterglow.effects
+    fx.signals.enabled = True
+    assert not fx.signal_graphics
+    for enabled in (False, True):
+        fx.signal_graphics = enabled
+        log = []
+        ui.AFTERGLOW_PT_effects.draw(type("P", (), {"layout": FakeLayout(log)})(), bpy.context)
+        drawn = {name for kind, name in log if kind == "prop"}
+        assert {"signal_anchors", "signal_speed", "signal_route", "signal_direction",
+                "signal_surface", "signal_graphics"} <= drawn, drawn
+        assert ("op", "afterglow.add_signal_anchor") in log
+        if enabled:
+            assert {"signal_width", "signal_tail", "signal_frame_size", "signal_glow"} <= drawn
 
 
 helpers.run(globals())

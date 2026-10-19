@@ -316,4 +316,50 @@ def test_strike_beam_walks_the_chosen_way():
     assert dn_lo > 0.3 and dn_hi < 0.5 * dn_lo, (dn_hi, dn_lo)
 
 
+def test_signal_graphics_render_bright_and_leave_the_background_unchanged_when_dark():
+    from mathutils import Vector
+    from afterglow import effects, network
+    scene = bpy.context.scene
+    coll = bpy.data.collections.new("Signal visibility test")
+    scene.collection.children.link(coll)
+    backdrop = plane("Untouched background", coll, emission_material("Background", strength=0.2))
+    backdrop.rotation_euler.x = 1.5707963267948966
+    backdrop.location.y = 1
+    backdrop.scale = (3, 3, 3)
+    cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))
+    cam.location = (0, -5, 0)
+    cam.rotation_euler = (Vector((0, 0, 0)) - cam.location).to_track_quat('-Z', 'Y').to_euler()
+    cam.data.type, cam.data.ortho_scale = "ORTHO", 3
+    scene.collection.objects.link(cam)
+    scene.camera = cam
+    scene.render.engine = "BLENDER_EEVEE"
+    scene.render.resolution_x = scene.render.resolution_y = 64
+    scene.eevee.taa_render_samples = 16
+    light = effects._make_unit(coll, "signals", 0, (1, 1, 1))[0]
+    mat = network._material(scene.afterglow.effects.signals, 1)
+    path = network._curve(coll, light, "path", 0, [[(-1, 0, 0), (1, 0, 0)]], 0.1, mat)
+    path.hide_render = True
+    baseline = center_brightness(scene, 1)
+    path.hide_render = False
+    path[effects.GLOW] = 1.0
+    bright = center_brightness(scene, 2)
+    assert bright > baseline + 0.3, (baseline, bright)
+    path[effects.GLOW] = 0.0
+    dark = center_brightness(scene, 3)
+    assert abs(dark - baseline) < 1e-4, (baseline, dark)
+    path[effects.GLOW] = 1.0
+    path["afterglow_signal_head_x"] = 1.0
+    behind = center_brightness(scene, 4)  # x=0 lies behind a 0.75-unit tail whose head is at x=1
+    assert abs(behind - baseline) < 1e-4, (baseline, behind)
+    image = bpy.data.images.load(scene.render.filepath)
+    try:
+        def pixel(x):
+            i = ((image.size[1] // 2) * image.size[0] + x) * 4
+            return sum(image.pixels[i:i+3]) / 3
+        head, tail = pixel(50), pixel(40)
+        assert head > tail + 0.1, (head, tail)
+    finally:
+        bpy.data.images.remove(image)
+
+
 helpers.run(globals())

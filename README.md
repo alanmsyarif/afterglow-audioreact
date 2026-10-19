@@ -1,4 +1,4 @@
-# Afterglow (v0.14.0)
+# Afterglow (v0.17.0)
 
 Audio-reactive emission for Blender 5.2. Point Afterglow at a collection and a sound
 file, and every emissive object in it lights up with the music, each one listening to
@@ -74,8 +74,8 @@ Audio-only environment effects for the whole venue: independent, stackable light
 triggered by onsets in the track. By default, generated effects are **real lights only**
 (point and spot lamps with keyed energy, location and rotation). No meshes, materials or
 other geometry are added, so your venue stays exactly as you built it and the look comes
-from real light spill on your existing objects. Turn on **Visible Beams** to also see the
-light in the air (below).
+from real light spill on your existing objects. Opt into **Visible Beams** for shafts,
+or **Signal Graphics** for thin travelling lines and arrival frames (below).
 
 ### Layers
 
@@ -87,12 +87,51 @@ light in the air (below).
 | Travelling Light Trails | A bright moving light riding the venue rim path | Low |
 | Cascade Trails | A trail of lights travelling one line: down, up, or along the camera's view | Low |
 | Gun Bursts | Short, fast, directed spots fired from the rim toward the centre | Low |
+| Signal Network | A light pulse travels through connected anchors and triggers an arrival flash | Low |
 
 Layers are **not** a dropdown: enable any combination and they play simultaneously.
 Each layer has its own Weight, Intensity, Color (each layer starts in its own colour),
 Timing and Trigger Band. The floats are
 keyframeable on the Scene, and Build samples their animation per event, so you can bring
 layers in gradually as the track builds (e.g. keyframe Weight 0 → 1).
+
+### Signal Network
+
+Audio attacks launch a travelling light along a connected, right-angled route. The
+arrival triggers a stronger flash; it is a consequence of the pulse reaching its
+destination, not an unrelated random event. This layer uses three pooled real lights.
+
+1. Enable **Signal Network**. With no **Signal Anchors** collection, four anchors are
+   sampled from the shared venue outline, so it works without extra setup.
+2. For a custom route, position the 3D cursor and press **+** beside **Anchors**. Add at
+   least two anchors. Move, duplicate, delete or rename these non-rendering Empty
+   markers normally: routing uses **name order and full world-space XYZ**, including
+   parent transforms. You can also pick an existing collection of anchor objects.
+3. Pick **Chain** to pass through every anchor, or **Spokes** to send successive attacks
+   from the first anchor to each destination in turn. **Forward**, **Reverse** and
+   **Alternate** control travel direction; Reverse retraces the same route. **Speed**
+   sets scene units per second; layer **Timing** multiplies the travel duration.
+4. Optionally enable **Signal Graphics**, then **Build Effects**. This is **off by
+   default**, independent of Visible Beams. It adds thin native emissive curves: a
+   moving pulse with a **Tail Length**, plus broken rectangular frames that reveal,
+   expand and fade on arrival. **Line Width**, **Frame Size** and **Signal Glow** shape
+   the look. Signal Glow, Color and Intensity are live; routing/geometry edits need Build.
+
+**Surface Impacts** ray-casts below the destination against evaluated, renderable scene
+geometry. When a surface is found, the pulse descends to it and the arrival frame aligns
+to its normal, just above the surface. A miss leaves the destination floating: no flat
+ground is invented. Turn this off for upright floating signal frames. The source venue
+and its materials are never edited; Remove Effects deletes owned lights, curves,
+materials and actions, but **keeps your anchor markers**.
+
+Anchors and surfaces are sampled at the **build frame**, not followed live. Rebuild
+after moving anchors or editing terrain. Moving anchors and changing network controls
+mark the build outdated; arbitrary terrain edits are not automatically detected. The
+connections are orthogonal, not obstacle-avoiding or surface-conforming routes, and
+can cross existing scenery. Spokes are sequential, not simultaneous branching. Up to
+16 anchors and three simultaneous pulses are supported; when the pool is full, the
+oldest pulse fades out before its slot is reused. Graphics are pooled per used route
+and direction, not spawned every frame. Silence produces no signals or graphics.
 
 ### Venue shapes
 
@@ -166,10 +205,32 @@ on surfaces:
   and the sides of nearby objects from low down. A fainter filament of short bright
   beads runs beside it, covering only part of its height, on a side and stretch of its
   own per light.
-- Each **Gun Burst** gets a glowing tracer that flies along its aim with a fading tail,
+- Each **Gun Burst** gets a glowing tracer that flies along its aim with a fading tail
+  **behind** the moving light (never projecting ahead of it),
   and its spot tightens to the tracer's cone.
 
 Beam controls:
+
+**Strike Look** now has real silhouettes: **Filament** (one round core), **Twin** (two
+parallel cores), and **Ribbon** (a flat strip). **Width** changes their thickness;
+**Companions** adds zero to four beaded filaments, with **Spread** setting their distance
+from the main strike. Strike height still reaches from the venue floor to its top.
+
+**Gun Look** offers **Tracer**, **Dart** (wide shoulder near the head and a fine tail),
+and **Streak** (thin, nearly constant width). **Length** and **Width** are independent
+multipliers; **Taper** adjusts tail width and **Tail Fade** controls how quickly its
+emission falls away. All three trail behind the actual moving light.
+
+Each has its own **Variation**, default **0.35**. Every hit gets a fresh, seeded look,
+even when it reuses the same pooled light: Strikes vary width, rotation, dash phase,
+breakup and flow; Gun Bursts vary width, length and fade. Both vary brightness slightly.
+**0** disables per-hit variation. The **Seed** in Venue reproduces the same show; change
+it for a different result. Variation never changes onset times, placement or the number
+of pooled objects, and a look stays fixed during a hit rather than flickering per frame.
+New look controls need **Build Effects**; Glow, layer Color and Intensity remain live.
+These controls affect only opt-in beam graphics and their paired light brightness,
+never the shape or materials of your existing environment. The original per-object
+**Look** section still controls object emission rather than deformation.
 
 | Control | What it does |
 |---|---|
@@ -192,7 +253,7 @@ the lights.
    and set colours and bands.
 3. **Build Effects** analyses the sound once, then keys pooled real point/spot lights into
    a collection named `Afterglow Effects` in the current scene (plus their beam meshes
-   when Visible Beams is on).
+   when Visible Beams is on, and thin curves when Signal Graphics is on).
 4. Scrub or play. The effects are plain F-curve animation on a layered action, so they
    render in any engine and never touch the Sample Sound node.
 5. **Remove Effects** deletes this scene's effects collection and every datablock it owns
@@ -203,10 +264,33 @@ After a build, each enabled layer shows how many events it fired; a red *0 event
 its Trigger Band never hit, so try another band. Build Effects is grayed out while no
 layer is enabled, so it never wipes your last build by accident.
 
+### Audio timing
+
+Environment events follow **rising attacks** in each band's amplitude, rather than
+waiting for the loudest point of a whole passage. Repeated kicks can retrigger over a
+sustained bass note; a held tone, a slow fade or silence does not create repeated beats.
+The existing conservative beat-grid snapping still runs only when there is reliable
+repeated timing evidence; this is not a new variable-tempo beat tracker.
+
+**Timing Offset**, above the layer controls, shifts every environment event *after*
+beat snapping. Negative values fire earlier; positive values fire later. It is in
+seconds (`-0.025 s` advances the effects by 25 ms), defaults to zero, and is a static
+setting: press **Build Effects** to apply it. It never moves the sound strip or the
+existing emissive-object reactions. With an earlier offset, events can begin before
+Start Frame: include that pre-roll in your playback/render range if you want to see it.
+Shows built with the previous peak detector are marked outdated and need rebuilding.
+
 **Live controls** need no rebuild: each layer's **Color** and **Intensity**, Cascade Trails
-**Size** and the beams' **Glow** retune the last build the moment you change them (a
+**Size**, the beams' **Glow**, and **Signal Glow** retune the last build the moment you change them (a
 keyframed Intensity is the exception: Build samples it per event). Other settings do not
 silently re-run: the panel shows *Build outdated* until you press Build again. The same sound, settings and Seed always produce the same show.
+
+**v0.16.1 fixes:** short Timing values keep each light's attack before its hold and
+fade-out, rather than leaving out-of-order brightness keys. Intensity 0 is fully dark
+and can be raised again without rebuilding, even when the show was built at zero or
+saved/reopened while muted. This applies to real lights, Visible Beams and Signal
+Graphics; animated Intensity is still sampled per event and needs Build. Rebuild older
+shows to get these fixes and the corrected trailing Gun Burst geometry.
 
 ## Demo
 
@@ -252,7 +336,7 @@ On Linux without a GPU, `tests/test_render.py` needs Mesa's software OpenGL
 2. Tag the commit with that version and push the tag:
 
    ```bash
-   git tag v0.14.0 && git push origin v0.14.0
+   git tag v0.15.0 && git push origin v0.15.0
    ```
 
 [`release.yml`](.github/workflows/release.yml) runs the full test suite, checks the tag
