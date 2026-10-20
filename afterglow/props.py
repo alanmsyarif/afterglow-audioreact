@@ -92,7 +92,8 @@ class AfterglowFXLayer:
 
 
 LAYER_COLORS = {"strikes": (0.55, 0.85, 1.0), "blooms": (1.0, 0.45, 0.85), "flashes": (1.0, 1.0, 1.0),
-                "trails": (1.0, 0.7, 0.3), "downward": (0.6, 0.5, 1.0), "gun": (1.0, 0.3, 0.2)}
+                "trails": (1.0, 0.7, 0.3), "downward": (0.6, 0.5, 1.0), "gun": (1.0, 0.3, 0.2),
+                "signals": (0.5, 0.9, 1.0)}
 LAYER_TYPES = {  # one class per layer: a PropertyGroup can't vary a default per instance
     name: type(f"AfterglowFXLayer_{name}", (AfterglowFXLayer, bpy.types.PropertyGroup), {"__annotations__": {
         "color": FloatVectorProperty(name="Color", subtype="COLOR", size=3, min=0.0, max=1.0,
@@ -105,6 +106,11 @@ def _reshape_cage(self, context):
 
 
 class AfterglowEffects(bpy.types.PropertyGroup):
+    timing_offset: FloatProperty(name="Timing Offset", default=0.0, min=-2.0, max=2.0,
+                                 soft_min=-0.25, soft_max=0.25, precision=3, unit="TIME_ABSOLUTE",
+                                 options=set(), description="Shift all environment events after beat snapping: "
+                                 "negative fires earlier, positive later (seconds). Build Effects to apply; "
+                                 "does not move the sound or existing object reactions")
     venue_shape: EnumProperty(name="Venue Shape", default="CIRCLE", update=_reshape_cage, items=(
         ("CIRCLE", "Circular", "Emitters ride a circle around the venue centre"),
         ("SQUARE", "Square", "Emitters ride a square around the venue bounds"),
@@ -123,6 +129,36 @@ class AfterglowEffects(bpy.types.PropertyGroup):
                         "and materials to the effects collection")
     beam_glow: FloatProperty(name="Glow", default=1.0, min=0.0, soft_max=4.0, update=_live,
                              description="Brightness of the beam shafts, applied live")
+    strike_style: EnumProperty(name="Style", default="FILAMENT", options=set(), items=(
+        ("FILAMENT", "Filament", "One thin round filament and its glow sleeve"),
+        ("TWIN", "Twin", "Two separated parallel filaments"),
+        ("RIBBON", "Ribbon", "A flat, wider strip of light"),
+    ), description="Data Strike silhouette; Build Effects to apply")
+    strike_width: FloatProperty(name="Width", default=1.0, min=0.1, soft_max=4.0,
+                                options=set(), description="Strike filament thickness multiplier; Build to apply")
+    strike_variation: FloatProperty(name="Variation", default=0.35, min=0.0, max=1.0, subtype="FACTOR",
+                                    options=set(), description="Fresh seeded width, rotation, breakup and brightness per hit; "
+                                    "0 keeps a uniform look. Beat times never move; Build to apply")
+    strike_companions: IntProperty(name="Companions", default=1, min=0, max=4, options=set(),
+                                   description="Beaded filaments beside each strike; Build to apply")
+    strike_spread: FloatProperty(name="Spread", default=0.625, min=0.0, soft_max=3.0, unit="LENGTH",
+                                 options=set(), description="Distance of companion filaments from the strike; Build to apply")
+    gun_style: EnumProperty(name="Style", default="TRACER", options=set(), items=(
+        ("TRACER", "Tracer", "Expanding tail behind a bright pointed head"),
+        ("DART", "Dart", "A broad shoulder near the head, narrowing to a fine tail"),
+        ("STREAK", "Streak", "A thin, nearly constant-width streak"),
+    ), description="Gun Burst silhouette; Build Effects to apply")
+    gun_length: FloatProperty(name="Length", default=1.0, min=0.05, max=4.0, options=set(),
+                              description="Tracer length multiplier, independent of width; Build to apply")
+    gun_width: FloatProperty(name="Width", default=1.0, min=0.1, soft_max=4.0, options=set(),
+                             description="Tracer thickness multiplier; Build to apply")
+    gun_variation: FloatProperty(name="Variation", default=0.35, min=0.0, max=1.0, subtype="FACTOR",
+                                 options=set(), description="Fresh seeded width, tail length, fade and brightness per hit; "
+                                 "0 keeps a uniform look. Beat times never move; Build to apply")
+    gun_taper: FloatProperty(name="Taper", default=1.0, min=0.05, max=3.0, options=set(),
+                             description="Tail width relative to the selected shape; Build to apply")
+    gun_fade: FloatProperty(name="Tail Fade", default=2.0, min=0.25, max=6.0, options=set(),
+                            description="Higher values fade the tracer tail sooner; Build to apply")
     beam_direction: EnumProperty(name="Direction", default="DOWN", items=(
         ("DOWN", "Down", "Dashes and beads stream down each Data Strike"),
         ("UP", "Up", "Dashes and beads stream up each Data Strike"),
@@ -194,6 +230,36 @@ class AfterglowEffects(bpy.types.PropertyGroup):
                                 "larger gives softer spill and a bigger highlight")
     gun: PointerProperty(type=LAYER_TYPES["gun"], name="Gun Bursts",
                          description="Short fast directed spots fired from the rim toward the centre")
+    signals: PointerProperty(type=LAYER_TYPES["signals"], name="Signal Network",
+                             description="Audio attacks send a light pulse along connected anchors")
+    signal_anchors: PointerProperty(type=bpy.types.Collection, name="Signal Anchors",
+                                    description="Anchor objects in name order, using their full world-space "
+                                    "positions. Empty: four anchors fitted to the venue")
+    signal_speed: FloatProperty(name="Speed", default=8.0, min=0.1, soft_max=50.0,
+                                unit="VELOCITY", description="Pulse travel speed in scene units per second; "
+                                "layer Timing multiplies the travel duration")
+    signal_route: EnumProperty(name="Route", default="CHAIN", items=(
+        ("CHAIN", "Chain", "Each attack travels through all anchors in name order"),
+        ("SPOKES", "Spokes", "Successive attacks travel from the first anchor to each other anchor in turn"),
+    ))
+    signal_direction: EnumProperty(name="Direction", default="FORWARD", items=(
+        ("FORWARD", "Forward", "Travel from the first anchor"),
+        ("REVERSE", "Reverse", "Retrace each route toward the first anchor"),
+        ("ALTERNATE", "Alternate", "Alternate forward and reverse travel on successive attacks"),
+    ))
+    signal_surface: BoolProperty(name="Surface Impacts", default=True,
+                                 description="Find scene surfaces below the destination for the arrival flash")
+    signal_graphics: BoolProperty(name="Signal Graphics", default=False,
+                                  description="Opt in to thin emissive pulse lines and arrival frames; "
+                                  "otherwise this layer generates only real lights")
+    signal_width: FloatProperty(name="Line Width", default=0.02, min=0.001, soft_max=0.1,
+                                unit="LENGTH", description="Diameter of the optional thin signal curves")
+    signal_tail: FloatProperty(name="Tail Length", default=0.75, min=0.01, soft_max=10.0,
+                               unit="LENGTH", description="Length of the visible pulse behind its moving head")
+    signal_frame_size: FloatProperty(name="Frame Size", default=0.8, min=0.05, soft_max=5.0,
+                                     unit="LENGTH", description="Size of the broken rectangular arrival glyph")
+    signal_glow: FloatProperty(name="Signal Glow", default=1.0, min=0.0, soft_max=4.0,
+                               update=_live, description="Emission brightness of signal graphics, applied live")
 
 
 def _retempo(self, context):

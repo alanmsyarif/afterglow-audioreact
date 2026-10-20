@@ -86,6 +86,75 @@ def test_analyze_finds_pulse_events():
     assert all(s > 0.5 for _, s in out["strikes"])
 
 
+def test_attacks_retrigger_over_sustained_bass():
+    """Four kicks over a bass bed are four attacks, even without crossing a quiet threshold."""
+    rate = 44100
+    t = np.arange(6 * rate) / rate
+    envelope = np.full(len(t), 0.3)
+    for onset in BASS_PULSES:
+        u = np.maximum(t - onset, 0.0)
+        envelope += 0.55 * (1 - np.exp(-u / 0.004)) * np.exp(-u / 0.09)
+    samples = envelope * np.sin(2 * np.pi * 65 * t)
+    with tempfile.TemporaryDirectory(prefix="afterglow_attacks_") as tmp:
+        path = os.path.join(tmp, "bass_bed.wav")
+        with wave.open(path, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(rate)
+            w.writeframes((samples * 32767).astype("<i2").tobytes())
+        scene = stage(path)
+        scene.afterglow.effects.strikes.enabled = True
+        scene.afterglow.effects.strikes.weight = 1.0
+        ts = times_of(effects.analyze(scene)["strikes"])
+    assert len(ts) == len(BASS_PULSES), ts
+    assert all(abs(got - want) < 0.035 for got, want in zip(ts, BASS_PULSES)), ts
+
+
+def test_attacks_adapt_to_a_quiet_section():
+    times = np.arange(0.0, 6.0, 0.005)
+    amp = np.zeros_like(times)
+    onsets = (0.5, 1.1, 3.0, 4.0)
+    for onset, height in zip(onsets, (1.0, 1.0, 0.01, 0.01)):
+        u = np.maximum(times - onset, 0.0)
+        amp += height * (1 - np.exp(-u / 0.01)) * np.exp(-u / 0.1)
+    ts = times_of(effects._onsets(times, amp))
+    assert len(ts) == len(onsets), ts
+    assert all(abs(got - want) < 0.035 for got, want in zip(ts, onsets)), ts
+
+
+def test_attack_time_is_earlier_than_the_amplitude_peak():
+    scene = stage()
+    mono, rate = effects.bake._load(scene)
+    times, series = effects.bake.band_series(mono, rate, [effects.BANDS["LOW"]])
+    ts = times_of(effects._onsets(times, series[0]))
+    assert len(ts) == len(BASS_PULSES), ts
+    # These Hann pulses peak 60 ms after they begin; the attack must not wait for that peak.
+    assert all(abs(got - want) < 0.04 for got, want in zip(ts, BASS_PULSES)), ts
+
+
+def test_steady_or_falling_envelopes_do_not_invent_attacks():
+    times = np.arange(0.0, 6.0, 0.005)
+    for amp in (np.zeros_like(times), np.ones_like(times), np.exp(-times),
+                0.4 + 0.001 * np.sin(2 * np.pi * 17 * times)):
+        assert effects._onsets(times, amp) == []
+    assert effects._onsets([], []) == []
+    assert effects._onsets([0.0], [1.0]) == []
+
+
+def test_sparse_attack_survives_a_mostly_silent_track():
+    times = np.arange(0.0, 20.0, 0.005)
+    u = (times - 10.0) / 0.12
+    amp = np.where((u >= 0.0) & (u <= 1.0), np.sin(np.pi * u) ** 2, 0.0)
+    ts = times_of(effects._onsets(times, amp))
+    assert len(ts) == 1 and abs(ts[0] - 10.0) < 0.04, ts
+
+
+def test_a_kick_at_the_file_start_is_not_lost():
+    times = np.arange(0.0, 2.0, 0.005)
+    ts = times_of(effects._onsets(times, np.exp(-times / 0.06)))
+    assert ts == [0.0], ts
+
+
 def test_analyze_silence_no_events():
     scene = stage(silent_wav())
     scene.afterglow.effects.strikes.enabled = True
@@ -219,6 +288,22 @@ def test_events_snap_to_detected_beat_grid():
     ft, fs = effects.bake.band_series(mono, rate, [effects.BANDS["FULL"]])
     raw_dev, _ = _grid_dev(beat_wav(), times_of(effects._onsets(ft, fs[0])))
     assert raw_dev > 2 * dev + 0.02, (raw_dev, dev)
+
+
+def test_timing_offset_shifts_events_after_beat_snapping():
+    scene = stage(beat_wav())
+    fx = scene.afterglow.effects
+    fx.strikes.enabled = True
+    fx.strikes.weight = 1.0
+    assert abs(fx.timing_offset) < 1e-7
+    original = effects.analyze(scene)["strikes"]
+    for offset in (-0.125, 0.125):
+        fx.timing_offset = offset
+        shifted = effects.analyze(scene)["strikes"]
+        assert len(shifted) == len(original)
+        for (t, strength), (other_t, other_strength) in zip(original, shifted):
+            assert abs(other_t - t - offset) < 1e-7, (t, other_t, offset)
+            assert strength == other_strength
 
 
 def test_beat_grid_silence_stays_empty():
@@ -395,6 +480,47 @@ def test_build_generates_no_meshes_or_materials():
     want = sum(effects.POOL[n] * (scene.afterglow.effects.cascade_count if n == "downward" else 1)
                for n in effects.LAYERS)
     assert len(fx_objs()) == want                      # the expected tagged LIGHT count
+
+
+def test_early_offset_preserves_the_entire_light_envelope():
+    scene = build_stage()
+    fx = scene.afterglow.effects
+    effects.build(scene)
+    fps = scene.render.fps / scene.render.fps_base
+    first = effects.analyze(scene)["strikes"][0][0]
+    frames = scene.afterglow.start_frame + (first + np.arange(-0.05, 0.5, 0.01)) * fps
+    def values():
+        return np.array([[next(fc for fc in helpers.fcurves(ob.data) if fc.data_path == "energy").evaluate(float(f))
+                          for f in frames] for ob in fx_objs("strikes")])
+    expected = values()
+    fx.timing_offset = -1.125  # the first event now straddles the usual start-1 dark key
+    frames += fx.timing_offset * fps
+    effects.build(scene)
+    actual = values()
+    assert np.allclose(actual, expected, rtol=1e-4, atol=1e-3), float(np.max(np.abs(actual - expected)))
+
+
+def test_late_offset_preserves_an_event_near_the_song_end():
+    with tempfile.TemporaryDirectory(prefix="afterglow_late_") as tmp:
+        path = _write_wav(os.path.join(tmp, "ending_hit.wav"), 4.3, [(4.0, 80.0)])
+        scene = stage(path)
+        fx = scene.afterglow.effects
+        enable(scene, "blooms")
+        effects.build(scene)
+        fps = scene.render.fps / scene.render.fps_base
+        first = effects.analyze(scene)["blooms"][0][0]
+        frames = scene.afterglow.start_frame + (first + np.arange(-0.05, 1.2, 0.01)) * fps
+
+        def values():
+            return np.array([[next(fc for fc in helpers.fcurves(ob.data) if fc.data_path == "energy").evaluate(float(f))
+                              for f in frames] for ob in fx_objs("blooms")])
+
+        expected = values()
+        fx.timing_offset = 2.0
+        frames += fx.timing_offset * fps
+        effects.build(scene)
+        actual = values()
+        assert np.allclose(actual, expected, rtol=1e-4, atol=1e-3), float(np.max(np.abs(actual - expected)))
 
 
 def test_rebuild_is_idempotent():
@@ -1035,6 +1161,19 @@ def test_operators_registered():
     assert hasattr(bpy.ops.afterglow, "remove_effects")
 
 
+def test_timing_offset_marks_the_build_outdated_until_rebuilt():
+    scene = build_stage()
+    effects.build(scene)
+    before = channel_signature()
+    assert not effects.outdated(scene)
+    scene.afterglow.effects.timing_offset = 0.125
+    assert effects.outdated(scene)
+    assert channel_signature() == before  # changing the setting does not silently rebuild
+    effects.build(scene)
+    assert not effects.outdated(scene)
+    assert channel_signature() != before
+
+
 def test_build_operator_and_outdated_flag():
     scene = build_stage()
     assert bpy.ops.afterglow.build_effects() == {"FINISHED"}
@@ -1088,7 +1227,9 @@ def test_visible_beams_give_strikes_and_guns_a_shaft():
             attrs = {(n.attribute_type, n.attribute_name) for n in mat.node_tree.nodes
                      if n.bl_idname == "ShaderNodeAttribute"}
             assert ("OBJECT", effects.GLOW) in attrs
-            assert ("ShaderNodeObjectInfo" in nodes) == (layer == "strikes")  # dashes differ per strike
+            assert "ShaderNodeObjectInfo" not in nodes  # appearance is keyed per hit, not fixed per pool object
+            prop = "phase" if layer == "strikes" else "fade"
+            assert ("OBJECT", f"afterglow_look_{prop}") in attrs
     assert len(mats) == 4                                              # shared per layer and part
     for ob in lights.values():                                         # other layers stay lights only
         if ob.name.split("_")[1] not in effects.BEAM_LAYERS:

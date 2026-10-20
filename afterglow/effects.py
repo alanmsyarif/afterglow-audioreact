@@ -1,12 +1,13 @@
 """Environment Effects: stackable, audio-triggered light layers over the whole venue.
 
-Six independent layers (Data Strikes, Data Blooms, Rapid Flashes, Travelling Light
-Trails, Cascade Trails, Gun Bursts) analyse the scene's sound once, place events
+Seven independent layers (Data Strikes, Data Blooms, Rapid Flashes, Travelling Light
+Trails, Cascade Trails, Gun Bursts, Signal Network) analyse the scene's sound once, place events
 deterministically inside the shared venue bounds, and key pooled real lights in a
 tagged, removable collection. Generated effects are lights only by default: the venue
 itself is left exactly as the user built it and the visible result is real light spill
 on existing objects. The opt-in Visible Beams gives each Data Strike and Gun Burst light
 a glowing shaft mesh, so they read as beams in the air, identically in EEVEE and Cycles.
+Signal Network can separately opt into thin emissive pulse curves and arrival frames.
 Everything is world-space over the venue, never normalised per object, and silent audio
 produces no events.
 """
@@ -25,12 +26,14 @@ TAG = "afterglow_effects"
 SIG = TAG + "_sig"
 COUNTS = TAG + "_counts"  # events per layer of the last build, for the panel
 LIVE = TAG + "_live"      # Intensity each layer's keys are scaled to now, for live edits
+BASE = TAG + "_base"      # unscaled brightness keys, saved with each owned ID for zero recovery
 GAIN = TAG + "_gain"      # a beam material's emission gain at Glow 1
 COLLECTION = "Afterglow Effects"
 PREFIX = "AFX"
-VERSION = 2  # lights-only build layout; invalidates older geometry-based builds
+VERSION = 6  # separate beam silhouettes and seeded per-event appearance channels
 MIN_GAP = 0.18       # s between two events of one layer
-ONSET_REL = 0.3      # a run must exceed this fraction of the band's p95 to count
+ATTACK_S = 0.01     # positive band-envelope change over this many seconds
+ATTACK_WINDOW = 0.25  # local rise baseline, so a held bass note does not mask new attacks
 SNAP_MIN_EVENTS = 8  # shorter streams stay raw: too sparse to trust with a grid
 SNAP_MAX_RMS = 0.15  # grid residual RMS, as a fraction of the period, that still counts as a pulse
 SNAP_TOL = 0.30      # an event never moves more than this fraction of a period
@@ -38,8 +41,8 @@ SNAP_HARM = 0.20     # log2 slack reconciling the grid with the tempo curve (hal
 SNAP_LO_BPM, SNAP_HI_BPM = 40.0, 240.0  # pulse period search bounds
 
 SHAPES = ("CIRCLE", "SQUARE", "RECT", "TRIANGLE")
-LAYERS = ("strikes", "blooms", "flashes", "trails", "downward", "gun")
-POOL = {"strikes": 6, "blooms": 5, "flashes": 2, "trails": 3, "downward": 6, "gun": 3}
+LAYERS = ("strikes", "blooms", "flashes", "trails", "downward", "gun", "signals")
+POOL = {"strikes": 6, "blooms": 5, "flashes": 2, "trails": 3, "downward": 6, "gun": 3, "signals": 3}
 BANDS = {"LOW": (20.0, 150.0), "MID": (150.0, 2000.0),
          "HIGH": (2000.0, 16000.0), "FULL": (20.0, 16000.0)}
 BAND_ITEMS = (
@@ -65,28 +68,40 @@ def sample_prop(scene, path, default, frame):
 
 
 def _onsets(times, amp):
-    """One event per contiguous run above ONSET_REL*p95, timed at the run's peak.
-    Digital silence (p95 ~ 0) yields nothing; there are no fixed-time fake beats."""
-    if not len(amp):
+    """Local positive band-envelope attacks, not the peaks of above-threshold runs.
+
+    A held note does not prevent another attack. A short centred smoothing window
+    suppresses FFT ripple; the local rise baseline gates peaks, with a small band-level
+    floor for numerical noise. Strength still comes from the following amplitude peak,
+    but that peak no longer delays the event. Silence never invents a beat.
+    """
+    if len(amp) < 3:
         return []
-    p95 = float(np.percentile(amp, 95))
-    if p95 <= 1e-6:
+    peak = float(np.max(amp))
+    if peak <= 1e-6:
         return []
-    above = amp > ONSET_REL * p95
-    events, last, i, n = [], -1e9, 0, len(amp)
-    while i < n:
-        if not above[i]:
-            i += 1
-            continue
-        j = i
-        while j < n and above[j]:
-            j += 1
-        k = i + int(np.argmax(amp[i:j]))
-        if times[k] - last >= MIN_GAP:
-            events.append((float(times[k]), min(float(amp[k]) / p95, 2.0)))
-            last = float(times[k])
-        i = j
-    return events
+    p95 = max(float(np.percentile(amp, 95)), 0.1 * peak)  # sparse hits must survive p95 == 0
+    step = float(np.median(np.diff(times)))
+    lag = max(1, round(ATTACK_S / step))
+    smooth = np.convolve(np.pad(amp, (1, 1), mode="edge"), np.ones(3) / 3, mode="valid")
+    rise = np.maximum(smooth - np.pad(smooth, (lag, 0), mode="edge")[:len(amp)], 0.0)
+    width = min(len(amp), max(1, round(ATTACK_WINDOW / step)))
+    baseline = np.convolve(rise, np.ones(width) / width, mode="same")
+    gate = np.maximum(1.5 * baseline, 0.015 * p95)
+    candidates = np.flatnonzero((rise[1:-1] > rise[:-2]) & (rise[1:-1] >= rise[2:])
+                               & (rise[1:-1] > gate[1:-1])) + 1
+    # A transient may already be ringing at sample zero (no rising edge exists in the
+    # file). Admit a quickly decaying head, but not a steady tone or a slow fade.
+    head = min(len(amp) - 1, max(1, round(MIN_GAP / step)))
+    peaks = [0] if amp[0] > 0.1 * p95 and amp[head] < 0.5 * amp[0] else []
+    for k in candidates:
+        if not peaks or times[k] - times[peaks[-1]] >= MIN_GAP:
+            peaks.append(k)
+        elif rise[k] > rise[peaks[-1]]:
+            peaks[-1] = k  # keep one strongest attack per refractory interval
+    lookahead = max(1, round(0.08 / step))
+    return [(max(float(times[0]), float(times[k] - lag * step / 2)),
+             min(float(np.max(amp[k:k + lookahead])) / p95, 2.0)) for k in peaks]
 
 
 def _grid_fit(ts):
@@ -157,8 +172,9 @@ def analyze(scene):
     given (sound, seed, settings). Weight is sampled per event from its scene F-curve, so
     a weight keyframed 0 -> 1 lets a layer join as the track builds, and the random draw
     happens for every candidate regardless, keeping the stream stable as weight changes.
-    Onset times are snapped to the detected pulse grid where that grid is reliable,
-    before weight thinning, so every layer of one band shares exactly one event stream.
+    Attack times are snapped where a pulse grid is reliable, then shifted by the
+    global timing offset before weight thinning. Animated controls are sampled at
+    the final event frames, so every layer of one band shares one timed stream.
     """
     fx = scene.afterglow.effects
     out = {name: [] for name in LAYERS}
@@ -174,7 +190,8 @@ def analyze(scene):
         band = BANDS[layer.trigger_band]
         if band not in cache:
             times, series = bake.band_series(mono, rate, [band])
-            cache[band] = _tempo_snap(_onsets(times, series[0]), mono, rate, curve_box)
+            snapped = _tempo_snap(_onsets(times, series[0]), mono, rate, curve_box)
+            cache[band] = [(t + fx.timing_offset, strength) for t, strength in snapped]
         rng = random.Random(f"{fx.seed}:{name}")
         ev = []
         for t, s in cache[band]:
@@ -434,7 +451,7 @@ def fit_cage(scene):
 
 
 LIGHT_KIND = {"strikes": "SPOT", "blooms": "POINT", "flashes": "POINT",
-              "trails": "POINT", "downward": "POINT", "gun": "SPOT"}
+              "trails": "POINT", "downward": "POINT", "gun": "SPOT", "signals": "POINT"}
 SPOT_SIZE = {"strikes": 0.5, "gun": 0.18}
 SPOT_BLEND = 0.35
 ENERGY = {"strikes": 900.0, "blooms": 350.0, "flashes": 4000.0,
@@ -507,6 +524,7 @@ class _Keys:
     def __init__(self):
         self.channels = {}
         self.shafts = {}  # light object name -> its Visible Beams shaft object
+        self.extras = {}  # light name -> extra animated objects/data owned by that pool slot
         self.beams = False  # building this layer with Visible Beams
         self.energy = 1.0   # light energy scale for this layer (Visible Beams strikes sit low)
         self.walk = None    # Strike beams walk in: ("DOWN" | "UP", seconds the head takes) or None
@@ -531,6 +549,7 @@ class _Keys:
         pool slot hands over cleanly instead of interleaving two events' keys: energy fades
         to 0 over the fade frames, motion holds still, and the light only moves once dark."""
         structs = {s for ob in lights for s in (ob, ob.data, self.shafts.get(ob.name)) if s}
+        structs.update(s for ob in lights for s in self.extras.get(ob.name, ()))
         end = frame - CUT_EPS
         for (struct, path, _), ch in self.channels.items():
             if struct not in structs:
@@ -636,7 +655,8 @@ def _make_unit(coll, layer, slot, color, beams=False, n=1, size=None):
     return tuple(lights)
 
 
-def _beam_material(layer, kind, color, glow, flow=None, gaps=0.375, dash=0.75, walk=None):
+def _beam_material(layer, kind, color, glow, flow=None, gaps=0.375, dash=0.75, walk=None,
+                   vary=False, tracer_fade=TRACER_FADE):
     """One additive glow material (emission over transparency) per beam part, shared by
     a layer's shafts. Each shaft's keyed GLOW property (an Object attribute) sets its
     brightness. kind: "filament" (a Strike's bright core) or "sleeve" (its faint glow),
@@ -669,14 +689,23 @@ def _beam_material(layer, kind, color, glow, flow=None, gaps=0.375, dash=0.75, w
                 socket.default_value = v
         return n.outputs[0]
 
+    def look(prop):
+        n = N.new("ShaderNodeAttribute")
+        n.attribute_type, n.attribute_name = "OBJECT", f"afterglow_look_{prop}"
+        return n.outputs["Factor"]
+
     facing = N.new("ShaderNodeLayerWeight")
     facing.inputs["Blend"].default_value = 0.5
     inside = op("SUBTRACT", 1.0, facing.outputs["Facing"])  # 1 facing the camera, 0 at the rim
     coords = N.new("ShaderNodeTexCoord")
     if kind == "tracer":
         z = N.new("ShaderNodeSeparateXYZ")
-        L.new(coords.outputs["Generated"], z.inputs[0])  # Generated Z: 1 at the light, 0 tail
-        shape = op("MULTIPLY", op("POWER", inside, TRACER_CORE), op("POWER", z.outputs["Z"], TRACER_FADE))
+        L.new(coords.outputs["Generated"], z.inputs[0])  # Generated Z: 0 at the light, 1 behind it
+        tail = op("SUBTRACT", 1.0, z.outputs["Z"])
+        fade = op("MULTIPLY", look("fade"), tracer_fade) if vary else tracer_fade
+        if vary:
+            fade.node.name = "Tail Fade"
+        shape = op("MULTIPLY", op("POWER", inside, TRACER_CORE), op("POWER", tail, fade))
         gain = TRACER_EMISSION
     else:
         z = N.new("ShaderNodeSeparateXYZ")
@@ -686,15 +715,18 @@ def _beam_material(layer, kind, color, glow, flow=None, gaps=0.375, dash=0.75, w
         if flow:
             offset = N.new("ShaderNodeValue")
             offset.name = offset.label = "Flow"
-            height = op("ADD", height, offset.outputs[0])  # sampling higher up = dashes move down
+            shift = op("MULTIPLY", offset.outputs[0], look("flow")) if vary else offset.outputs[0]
+            height = op("ADD", height, shift)  # sampling higher up = dashes move down
         line = N.new("ShaderNodeCombineXYZ")
+        if vary:
+            height = op("MULTIPLY", height, look("dash"))
         L.new(op("MULTIPLY", height, (BEAD_SCALE if beads else 1.0) / max(dash, 0.01)), line.inputs["Z"])
         noise = N.new("ShaderNodeTexNoise")
         noise.noise_dimensions = "4D"
         noise.inputs["Scale"].default_value = 1.0
         noise.inputs["Detail"].default_value = 3.0
         L.new(line.outputs[0], noise.inputs["Vector"])
-        seed = op("MULTIPLY", N.new("ShaderNodeObjectInfo").outputs["Random"], 100.0)
+        seed = look("phase") if vary else op("MULTIPLY", N.new("ShaderNodeObjectInfo").outputs["Random"], 100.0)
         axis = N.new("ShaderNodeVectorMath")             # distance from the shaft's axis
         axis.operation = "LENGTH"
         flat = N.new("ShaderNodeCombineXYZ")
@@ -708,6 +740,10 @@ def _beam_material(layer, kind, color, glow, flow=None, gaps=0.375, dash=0.75, w
         dash = N.new("ShaderNodeMapRange")              # a steep step: lit, or a gap
         dash.inputs["From Min"].default_value = cut
         dash.inputs["From Max"].default_value = cut + 0.02
+        if vary:
+            threshold = op("ADD", cut, look("gaps"))
+            L.new(threshold, dash.inputs["From Min"])
+            L.new(op("ADD", threshold, 0.02), dash.inputs["From Max"])
         L.new(noise.outputs["Factor"], dash.inputs["Value"])
         if kind in ("filament", "beads"):
             shape = op("MULTIPLY", dash.outputs["Result"], inside)
@@ -787,6 +823,8 @@ def _make_shaft(coll, light_ob, tubes, mats):
     ob[TAG] = VERSION
     ob[GLOW] = 0.0
     ob[WALK] = WALK_FULL  # fully shown unless a walk is keyed
+    from . import looks
+    looks.init(ob)
     ob.parent = light_ob
     for attr in ("visible_shadow", "visible_diffuse", "visible_transmission", "visible_volume_scatter"):
         setattr(ob, attr, False)  # camera and reflections see it; it lights nothing
@@ -806,11 +844,14 @@ def _strike_base(venue):
     return min(STRIKE_BASE, 0.25 * venue.span_z)
 
 
-def _beam_tubes(name, venue, rng):
+def _beam_tubes(name, venue, rng, fx=None):
     """One beam's tubes: a Strike's full-height filament inside its glow sleeve, from the
     floor to the venue top around its light (_strike_base up), plus one beaded companion
     filament COMPANION_RING out, covering a stretch of COMPANION_SPAN of the height, on a
-    side and stretch drawn from rng; or a Gun tracer cone along the spot's aim (-Z)."""
+    side and stretch drawn from rng; or a Gun tracer tail behind the spot's aim (+Z)."""
+    if fx is not None:
+        from . import looks
+        return looks.tubes(name, venue, rng, fx)
     if name == "strikes":
         span = venue.span_z
         base = _strike_base(venue)
@@ -825,7 +866,7 @@ def _beam_tubes(name, venue, rng):
         return tubes
     length = GUN_TRACER * venue.radius
     half = math.tan(BEAM_SPOT_SIZE[name] / 2)
-    return [_tube(((0.0, 0.02 * length * half), (-length, length * half)), 0)]
+    return [_tube(((0.0, 0.02 * length * half), (length, length * half)), 0)]
 
 
 def _assign(free, t0, dur):
@@ -842,6 +883,7 @@ def _assign(free, t0, dur):
 
 def _envelope(t0, dur, attack, hold):
     """Brightness 0 -> 1 -> 1 -> 0 in seconds; BEZIER AUTO_CLAMPED keys give the pulse shape."""
+    attack = min(attack, 0.5 * dur * hold)  # short Timing values still rise before the hold/fade
     return [(t0, 0.0), (t0 + attack, 1.0), (t0 + dur * hold, 1.0), (t0 + dur, 0.0)]
 
 
@@ -1059,6 +1101,9 @@ def _layer_keys(name, keys, lights, venue, ev, b, timing, rng, fps, start):
 
 
 def _build_layer(coll, scene, venue, name, events, fps, start, end):
+    if name == "signals":
+        from . import network
+        return network.build_layer(coll, scene, venue, events, fps, start, end)
     fx = scene.afterglow.effects
     layer = getattr(fx, name)
     keys = _Keys()
@@ -1084,12 +1129,13 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
             base = _strike_base(venue)
             walk = (fx.beam_walk, -base, venue.span_z - base)
             keys.walk = (fx.beam_walk, max(fx.beam_walk_time, 0.02))
-        mats = [_beam_material(name, k, tuple(layer.color), fx.beam_glow, flow, fx.beam_gaps, fx.beam_dash, walk)
+        mats = [_beam_material(name, k, tuple(layer.color), fx.beam_glow, flow, fx.beam_gaps, fx.beam_dash, walk,
+                               vary=True, tracer_fade=fx.gun_fade)
                 for k in _beam_kinds(name)]
         sides = random.Random(f"{fx.seed}:{name}:beams")
         for lights in units:
             for light_ob in lights:
-                tubes = _beam_tubes(name, venue, sides)
+                tubes = _beam_tubes(name, venue, sides, fx=fx)
                 keys.shafts[light_ob.name] = _make_shaft(coll, light_ob, tubes, mats)
     rng = random.Random(f"{fx.seed}:{name}:place")
     free = [-1e9] * POOL[name]
@@ -1098,20 +1144,27 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
         frame0 = start + t0 * fps
         if frame0 > end:
             break
-        intensity = sample_prop(scene, f"afterglow.effects.{name}.intensity", layer.intensity, frame0)
+        intensity = sample_prop(scene, f"afterglow.effects.{name}.intensity", 1.0, frame0)
         timing = sample_prop(scene, f"afterglow.effects.{name}.timing", layer.timing, frame0)
         dur = DUR[name] * max(timing, 0.05)
         s0, s1 = _busy(name, keys, t0, dur)
         slot, busy = _assign(free, s0, s1 - s0)
         if busy:  # every slot still lit: cut the oldest event short rather than interleave
             keys.cut(units[slot], start + s0 * fps, CUT_FADE * fps)
+        if beams:
+            from . import looks
+            gain = looks.key_event(keys, keys.shafts[units[slot][0].name], fx, name,
+                                   t0 - fx.timing_offset, s0, s1, lambda t: start + t * fps)
+            intensity *= gain
         _layer_keys(name, keys, units[slot], venue, (t0, strength), intensity, timing, rng, fps, start)
         placed += 1
     if scene.frame_current != frame_now:  # a moving camera was followed event by event
         scene.frame_set(frame_now)
     # baseline: every light dark outside its events, so silence renders as nothing
     early = keys.walk[1] * fps if keys.walk and keys.walk[0] == "DOWN" else 0.0  # beams walking in
-    b0, b1 = start - 1.0 - early, end + 1.0
+    first = min((t for t, _ in events), default=0.0)
+    b0 = start + min(first, 0.0) * fps - 1.0 - early
+    b1 = max(end, start + max(free) * fps) + 1.0  # offset/long events must finish before the dark key
     for lights in units:
         for light_ob in lights:
             shaft = keys.shafts.get(light_ob.name)
@@ -1149,10 +1202,14 @@ def settings_sig(scene):
     s = scene.afterglow
     fx = s.effects
     vals = [VERSION, fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4),
+            round(fx.timing_offset, 4),
             fx.beams, round(fx.beam_flow, 4), fx.beam_direction,
             round(fx.beam_gaps, 4), round(fx.beam_dash, 4), fx.beam_walk, round(fx.beam_walk_time, 4),
             fx.strike_placement, fx.strike_order, fx.cascade_direction, fx.cascade_placement,
             fx.cascade_count, round(fx.cascade_spacing, 4)]
+    vals += [fx.strike_style, round(fx.strike_width, 4), fx.strike_companions,
+             round(fx.strike_spread, 4), round(fx.strike_variation, 4), fx.gun_style,
+             *(round(getattr(fx, p), 4) for p in ("gun_length", "gun_width", "gun_taper", "gun_fade", "gun_variation"))]
     cam = scene.camera if fx.cascade_direction in CAMERA_WAYS else None
     if cam:                                             # the camera aims camera cascades
         vals += [cam.name, tuple(round(x, 4) for fc in _fcurves_of(cam) for kp in fc.keyframe_points
@@ -1160,6 +1217,9 @@ def settings_sig(scene):
                  else tuple(round(x, 4) for row in cam.matrix_world for x in row)]
     if fx.strike_placement == "POINTS":                 # moving a point moves its strikes
         vals += [tuple(tuple(round(c, 4) for c in p) for p in strike_points(scene))]
+    if fx.signals.enabled:
+        from . import network
+        vals += [network.signature(scene)]
     cage = fx.emitter                                   # moving the cage moves the venue
     vals += [tuple(round(x, 4) for row in cage.matrix_world for x in row) if cage else None]
     for name in LAYERS:
@@ -1201,6 +1261,9 @@ def build(scene):
         raise ValueError("Add a strike point, or set Data Strikes Placement to Random")
     if fx.downward.enabled and fx.cascade_direction in CAMERA_WAYS and scene.camera is None:
         raise ValueError("Set an active camera, or set Cascade Trails Direction to Down or Up")
+    if fx.signals.enabled:
+        from . import network
+        network.validate(scene, venue)  # reject bad anchors before replacing the previous build
     events = analyze(scene)
     mono, rate = bake._load(scene)
     fps = scene.render.fps / scene.render.fps_base
@@ -1216,17 +1279,25 @@ def build(scene):
         if getattr(scene.afterglow.effects, name).enabled:
             counts[name] = _build_layer(coll, scene, venue, name, events[name], fps, start, end)
     coll[COUNTS] = counts
-    coll[LIVE] = {name: getattr(fx, name).intensity for name in counts}
+    coll[LIVE] = {name: 1.0 for name in counts}  # static intensity is applied from recoverable unit keys
+    live_update(scene)
     return counts
 
 
-def _scale_keys(idblock, path, k):
+def _scale_keys(idblock, path, before, after):
+    """Set absolute intensity from saved unit keys, even after an exact zero or file reload."""
+    if BASE not in idblock:
+        idblock[BASE] = {}
+    bases = idblock[BASE]
     for fc in _fcurves_of(idblock):
         if fc.data_path != path:
             continue
         co = np.empty(2 * len(fc.keyframe_points), np.float64)
         fc.keyframe_points.foreach_get("co", co)
-        co[1::2] *= k
+        key = f"{path}:{fc.array_index}"
+        if key not in bases:
+            bases[key] = (co[1::2] / max(before, 1e-6)).tolist()
+        co[1::2] = np.asarray(bases[key]) * after
         fc.keyframe_points.foreach_set("co", co)
         fc.update()
 
@@ -1244,26 +1315,27 @@ def live_update(scene):
             lights = [ob for ob in coll.all_objects
                       if ob.type == "LIGHT" and ob.name.startswith(f"{PREFIX}_{name}_")]
             shafts = [c for ob in lights for c in ob.children if c.get(TAG)]
-            k = 1.0
-            if _fcurve(scene, f"afterglow.effects.{name}.intensity") is None:
-                k = max(layer.intensity, 1e-6) / max(applied[name], 1e-6)  # 0 stays recoverable
+            before = applied[name]
+            retune = (_fcurve(scene, f"afterglow.effects.{name}.intensity") is None
+                      and before != layer.intensity)
+            if retune:
                 applied[name] = layer.intensity
             for ob in lights:
                 ob.data.color = layer.color
                 if name == "downward":
                     ob.data.shadow_soft_size = fx.cascade_size
-                if k != 1.0:
-                    _scale_keys(ob.data, "energy", k)
+                if retune:
+                    _scale_keys(ob.data, "energy", before, layer.intensity)
             for shaft in shafts:
-                if k != 1.0:
-                    _scale_keys(shaft, GLOW_PATH, k)
+                if retune:
+                    _scale_keys(shaft, GLOW_PATH, before, layer.intensity)
             for mat in {slot.material for shaft in shafts for slot in shaft.material_slots if slot.material}:
                 for node in mat.node_tree.nodes:
                     if node.type == "EMISSION":
                         node.inputs["Color"].default_value = (*layer.color, 1.0)
                 glow = mat.node_tree.nodes.get("Glow")
                 if glow and GAIN in mat:
-                    glow.inputs[1].default_value = mat[GAIN] * fx.beam_glow
+                    glow.inputs[1].default_value = mat[GAIN] * (fx.signal_glow if name == "signals" else fx.beam_glow)
         coll[LIVE] = applied
 
 
@@ -1289,7 +1361,7 @@ def remove(scene):
         bpy.data.objects.remove(ob)
         n += 1
     # lights before actions: a light's own energy action only loses its user with the light
-    for store in (bpy.data.meshes, bpy.data.materials, bpy.data.lights, bpy.data.actions):
+    for store in (bpy.data.meshes, bpy.data.curves, bpy.data.materials, bpy.data.lights, bpy.data.actions):
         for db in [d for d in store if d.get(TAG) and d.users == 0]:
             store.remove(db)
     return n

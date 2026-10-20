@@ -222,10 +222,42 @@ def draw_cascade(col, fx):
     col.prop(fx, "cascade_size")
 
 
+def draw_signals(col, fx):
+    """Connected routing first; optional visible graphics stay behind an explicit toggle."""
+    col.separator()
+    row = col.row(align=True)
+    row.prop(fx, "signal_anchors", text="Anchors")
+    row.operator("afterglow.add_signal_anchor", text="", icon="ADD")
+    col.label(text="Name order; includes anchor height" if fx.signal_anchors else "No anchors: uses the venue outline")
+    col.prop(fx, "signal_route", expand=True)
+    col.prop(fx, "signal_direction", text="Direction")
+    col.prop(fx, "signal_speed")
+    col.prop(fx, "signal_surface")
+    col.separator()
+    col.prop(fx, "signal_graphics")
+    if fx.signal_graphics:
+        row = col.row(align=True)
+        row.prop(fx, "signal_width", text="Width")
+        row.prop(fx, "signal_tail", text="Tail")
+        row = col.row(align=True)
+        row.prop(fx, "signal_frame_size", text="Frame")
+        row.prop(fx, "signal_glow", text="Glow")
+
+
 def draw_beams(col, fx):
-    """Visible Beams section: the strike filaments' look and motion."""
+    """Separate beam silhouettes and seeded appearance variation from timing controls."""
     col.active = fx.beams
     col.prop(fx, "beam_glow")
+    col.label(text="Strike Look")
+    col.row(align=True).prop(fx, "strike_style", expand=True)
+    row = col.row(align=True)
+    row.prop(fx, "strike_width")
+    row.prop(fx, "strike_variation")
+    row = col.row(align=True)
+    row.prop(fx, "strike_companions")
+    sub = row.row(align=True)
+    sub.active = fx.strike_companions > 0
+    sub.prop(fx, "strike_spread")
     row = col.row(align=True)
     row.prop(fx, "beam_walk", expand=True)
     sub = col.row(align=True)
@@ -238,6 +270,17 @@ def draw_beams(col, fx):
     row = col.row(align=True)
     row.prop(fx, "beam_gaps")
     row.prop(fx, "beam_dash")
+    col.separator()
+    col.label(text="Gun Look")
+    col.row(align=True).prop(fx, "gun_style", expand=True)
+    row = col.row(align=True)
+    row.prop(fx, "gun_length")
+    row.prop(fx, "gun_width")
+    row = col.row(align=True)
+    row.prop(fx, "gun_taper")
+    row.prop(fx, "gun_fade")
+    col.prop(fx, "gun_variation")
+    col.label(text="Seed in Venue; Build to apply")
 
 
 class AFTERGLOW_OT_add_strike_point(bpy.types.Operator):
@@ -258,6 +301,29 @@ class AFTERGLOW_OT_add_strike_point(bpy.types.Operator):
         ob.select_set(True)
         context.view_layer.objects.active = ob  # ready to grab (G)
         self.report({"INFO"}, f"{ob.name} added at the 3D cursor")
+        return {"FINISHED"}
+
+
+class AFTERGLOW_OT_add_signal_anchor(bpy.types.Operator):
+    bl_idname = "afterglow.add_signal_anchor"
+    bl_label = "Add Signal Anchor"
+    bl_description = ("Add an anchor at the 3D cursor, including its height. Place at least two; "
+                      "rename for route order, move or duplicate them, then Build Effects")
+    bl_options = {"REGISTER", "UNDO"}
+
+    def execute(self, context):
+        from . import network
+        try:
+            ob = network.add_anchor(context.scene, context.scene.cursor.location)
+        except ValueError as e:
+            self.report({"ERROR"}, str(e))
+            return {"CANCELLED"}
+        context.view_layer.update()
+        for other in context.selected_objects:
+            other.select_set(False)
+        ob.select_set(True)
+        context.view_layer.objects.active = ob
+        self.report({"INFO"}, f"{ob.name} added; routes use name order")
         return {"FINISHED"}
 
 
@@ -289,6 +355,7 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         if body:
             draw_beams(body.column(), fx)
         col = layout.column()
+        col.prop(fx, "timing_offset")
         counts = effects.built_counts(context.scene)
         for name in effects.LAYERS:
             layer = getattr(fx, name)
@@ -313,6 +380,8 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
                     draw_strike_points(body, fx)
                 elif name == "downward":
                     draw_cascade(body, fx)
+                elif name == "signals":
+                    draw_signals(body, fx)
         hint = fx_next_step(context.scene)
         if hint:
             col.label(text=hint, icon="FORWARD")
@@ -448,7 +517,7 @@ def draw_object(box, s, ob, mod):
 CLASSES = (AFTERGLOW_OT_load_sound, AFTERGLOW_OT_apply, AFTERGLOW_OT_respread,
            AFTERGLOW_OT_calibrate, AFTERGLOW_OT_bake, AFTERGLOW_OT_remove, AFTERGLOW_PT_panel,
            AFTERGLOW_OT_build_effects, AFTERGLOW_OT_remove_effects, AFTERGLOW_OT_fit_emitter,
-           AFTERGLOW_OT_add_strike_point,
+           AFTERGLOW_OT_add_strike_point, AFTERGLOW_OT_add_signal_anchor,
            AFTERGLOW_PT_effects)
 
 
