@@ -10,6 +10,7 @@ from afterglow import core, nodes, tempo  # noqa: E402
 
 
 def stage():
+    bpy.context.scene.afterglow.show_advanced = True
     coll = bpy.data.collections.new("Lights")
     bpy.context.scene.collection.children.link(coll)
     plane("a", coll, emission_material("ma"))

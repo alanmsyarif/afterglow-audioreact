@@ -287,6 +287,15 @@ class AfterglowSavedLook(bpy.types.PropertyGroup):
 
 
 class AfterglowScene(bpy.types.PropertyGroup):
+    show_advanced: BoolProperty(name="Advanced Controls", default=False, options=set(),
+                                description="Show individual effects, object tuning and manual build/export tools")
+    easy_source: EnumProperty(name="Scene Source", default="AUTO", options=set(), items=(
+        ("AUTO", "Automatic", "Use the chosen collection, or create a starter stage when none is chosen"),
+        ("STAGE", "Starter Stage", "Use the selected starter design"),
+        ("CUSTOM", "My Objects", "Use an existing emissive collection and your own track"),
+    ))
+    easy_glow: BoolProperty(name="Soft Glow", default=True, options=set(),
+                           description="Create Visual adds compositor glow; turn off to remove only Afterglow's glow")
     stage_layout: EnumProperty(name="Stage Design", items=starter.LAYOUT_ITEMS, default="RING", options=set(),
                                description="Choose a design, then Add Starter Stage; browsing keeps your scene intact")
     preview_offset: FloatProperty(name="From", default=0.0, min=0.0, soft_max=600.0,
@@ -295,7 +304,8 @@ class AfterglowScene(bpy.types.PropertyGroup):
                                     unit="TIME_ABSOLUTE", options=set(), description="Playback-only loop duration in seconds")
     delivery_format: EnumProperty(name="Output Size", items=delivery.FORMAT_ITEMS, default="LANDSCAPE", options=set())
     output_format: EnumProperty(name="File Format", items=delivery.OUTPUT_ITEMS, default="PNG_SEQUENCE", options=set())
-    output_path: StringProperty(name="Output Path", default="//afterglow-output/", subtype="FILE_PATH")
+    output_path: StringProperty(name="Output Path", default="//afterglow-output/", subtype="FILE_PATH",
+                                options={"PATH_SUPPORTS_BLEND_RELATIVE"})
     output_include_tail: BoolProperty(name="Include Fade-out", default=True,
                                       description="Keep two seconds after the track for reaction and effect fade-out")
     saved_looks: CollectionProperty(type=AfterglowSavedLook)

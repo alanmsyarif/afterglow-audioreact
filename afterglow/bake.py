@@ -1,5 +1,8 @@
 """Fast Playback: precompute each object's held peak per frame with numpy and key it onto the
 modifier's Baked Peak input, so playback never evaluates the slow Sample Sound node."""
+import os
+
+import bpy
 import numpy as np
 from bpy_extras import anim_utils
 
@@ -49,7 +52,7 @@ def signature(mod, scene):
              "Through", "Tap Min", "Tap Max")]
     vals = [round(v, 5) if isinstance(v, float) else v for v in vals]
     fps = round(scene.render.fps / scene.render.fps_base, 4)  # keys are placed per frame
-    return repr(vals + [s.sound.filepath if s.sound else "", fps])
+    return repr(vals + [os.path.normpath(bpy.path.abspath(s.sound.filepath, library=s.sound.library)) if s.sound else "", fps])
 
 
 def outdated(scene):

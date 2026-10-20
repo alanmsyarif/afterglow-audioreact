@@ -107,6 +107,7 @@ class Layout:
 
 def test_export_panel_disables_heavy_actions_during_playback():
     scene = bpy.context.scene
+    scene.afterglow.show_advanced = True
     starter.create(bpy.context)
     context = SimpleNamespace(scene=scene, screen=SimpleNamespace(is_animation_playing=True))
     log = []
@@ -121,6 +122,7 @@ def test_export_panel_disables_heavy_actions_during_playback():
 
 def test_output_errors_disable_render_button():
     scene = bpy.context.scene
+    scene.afterglow.show_advanced = True
     scene.camera = None
     log = []
     production.AFTERGLOW_PT_delivery.draw(SimpleNamespace(layout=Layout(log)), bpy.context)
