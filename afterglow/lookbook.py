@@ -1,7 +1,8 @@
 """Portable, declarative style snapshots; never project wiring or executable code.
 
-Schema version 1 captures all seven layer styles and a fixed set of effect appearance
-controls. A common object style comes from the first reacting object by name in the
+Schema version 2 captures all eight layer styles and a fixed set of effect appearance
+controls. Version 1 looks retain their styling with the new laser layer disabled.
+A common object style comes from the first reacting object by name in the
 chosen collection. FX-only scenes use object=None. Applying a snapshot styles existing
 reacting objects, but does not create modifiers, build effects, or refresh a bake.
 """
@@ -11,7 +12,7 @@ import math
 from . import core, effects, nodes, presets
 
 FORMAT = "afterglow.look"
-VERSION = 1
+VERSION = 2
 MAX_BYTES = 65536
 
 # Public, stable field names: omit project-specific placement/routing/mixer controls.
@@ -21,7 +22,7 @@ OBJECT_FIELDS = ("Use Colors", "Color A", "Color B", "Glow", "Intensity", "Decay
 # (type, lower/enum choices, upper). Numeric upper bounds also limit pathological
 # external payloads while leaving substantially more range than the UI's soft limits.
 _LIMIT = 1_000_000.0
-EFFECT_SPECS = {
+_V1_EFFECT_SPECS = {
     "beams": ("bool",),
     "beam_glow": ("float", 0.0, _LIMIT),
     "strike_style": ("enum", ("FILAMENT", "TWIN", "RIBBON")),
@@ -49,6 +50,20 @@ EFFECT_SPECS = {
     "signal_tail": ("float", 0.01, _LIMIT),
     "signal_frame_size": ("float", 0.05, _LIMIT),
     "signal_glow": ("float", 0.0, _LIMIT),
+}
+_V1_LAYERS = ("strikes", "blooms", "flashes", "trails", "downward", "gun", "signals")
+_LASER_DEFAULTS = {
+    "laser_count": 7,
+    "laser_spread": 1.0,
+    "laser_sweep": 0.7,
+    "laser_glow": 1.0,
+}
+EFFECT_SPECS = {
+    **_V1_EFFECT_SPECS,
+    "laser_count": ("int", 3, 12),
+    "laser_spread": ("float", 0.1, 2.6),
+    "laser_sweep": ("float", 0.0, 1.6),
+    "laser_glow": ("float", 0.0, _LIMIT),
 }
 EFFECT_FIELDS = tuple(EFFECT_SPECS)
 _LAYER_SPECS = {
@@ -122,12 +137,18 @@ def _record(value, specs, location):
 def validate(data):
     """Return a normalized independent snapshot, or reject it before any mutations."""
     _keys(data, ("format", "version", "layers", "effects", "object"), "look")
-    if data["format"] != FORMAT or type(data["version"]) is not int or data["version"] != VERSION:
-        raise ValueError("Unsupported look format or version; export a version 1 Afterglow look")
-    _keys(data["layers"], effects.LAYERS, "layers")
+    if data["format"] != FORMAT or type(data["version"]) is not int or data["version"] not in (1, VERSION):
+        raise ValueError("Unsupported look format or version; export a version 1 or 2 Afterglow look")
+    legacy = data["version"] == 1
+    layer_names = _V1_LAYERS if legacy else effects.LAYERS
+    _keys(data["layers"], layer_names, "layers")
     layers = {name: _record(data["layers"][name], _LAYER_SPECS, f"layers.{name}")
-              for name in effects.LAYERS}
-    appearance = _record(data["effects"], EFFECT_SPECS, "effects")
+              for name in layer_names}
+    appearance = _record(data["effects"], _V1_EFFECT_SPECS if legacy else EFFECT_SPECS, "effects")
+    if legacy:
+        layers["lasers"] = {"enabled": False, "weight": 0.8, "trigger_band": "LOW",
+                            "timing": 1.0, "intensity": 1.0, "color": [0.3, 1.0, 0.55]}
+        appearance.update(_LASER_DEFAULTS)
     obj = None if data["object"] is None else _record(data["object"], _OBJECT_SPECS, "object")
     return {"format": FORMAT, "version": VERSION, "layers": layers,
             "effects": appearance, "object": obj}

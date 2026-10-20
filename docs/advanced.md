@@ -13,7 +13,7 @@ render settings. Ordinary use only needs Create Visual and Export Video.
 - **Ripple Motion:** choose direction and surface travel.
 - **Manual Build & Cleanup:** build reactions separately, apply look settings,
   calibrate, redistribute bands, refresh playback, or remove reactions.
-- **Advanced Lighting:** edit the seven layers, venue, beam appearance, solo and
+- **Advanced Lighting:** edit the eight layers, venue, beam appearance, solo and
   brightness. Render Finish exposes the compositor glow controls.
 - **Export:** advanced mode exposes PNG sequences, excerpt loops, manual render
   ranges, camera fitting and explicit output preparation.
@@ -53,11 +53,11 @@ The Ripple settings live in their own collapsible **Ripple** section under Fast 
 ## Environment Effects
 
 Audio-only environment effects for the whole venue: independent, stackable light layers
-triggered by onsets in the track. By default, generated effects are **real lights only**
-(point and spot lamps with keyed energy, location and rotation). No meshes, materials or
-other geometry are added, so your venue stays exactly as you built it and the look comes
-from real light spill on your existing objects. Opt into **Visible Beams** for shafts,
-or **Signal Graphics** for thin travelling lines and arrival frames (below).
+triggered by onsets in the track. Most layers generate **real lights only**
+(point and spot lamps with keyed energy, location and rotation). Opt into
+**Visible Beams** for shafts or **Signal Graphics** for travelling lines and arrival
+frames. **Laser Fans** includes thin emissive rays so it works without fog. Generated
+objects live in a separate removable collection; the source venue stays unchanged.
 
 ### Layers
 
@@ -70,12 +70,26 @@ or **Signal Graphics** for thin travelling lines and arrival frames (below).
 | Cascade Trails | A trail of lights travelling one line: down, up, or along the camera's view | Low |
 | Gun Bursts | Short, fast, directed spots fired from the rim toward the centre | Low |
 | Signal Network | A light pulse travels through connected anchors and triggers an arrival flash | Low |
+| Laser Fans | Paired fans of thin visible rays sweep across the stage on each attack | Low |
 
 Layers are **not** a dropdown: enable any combination and they play simultaneously.
 Each layer has its own Weight, Intensity, Color (each layer starts in its own colour),
 Timing and Trigger Band. The floats are
 keyframeable on the Scene, and Build samples their animation per event, so you can bring
 layers in gradually as the track builds (e.g. keyframe Weight 0 → 1).
+
+### Laser Fans
+
+Choose **Laser Show** and **Create Visual** for the complete look. In Advanced Lighting,
+**Laser Fans** can also be combined with any other layer. Each attack opens a pair of
+sweeping fans from the venue rim. Thin native emissive curves make the rays visible in
+EEVEE and Cycles without fog or the Visible Beams switch. Silence stays dark.
+
+**Rays per Fan**, **Spread** and **Sweep** change the fan shape and movement; rebuild
+after editing them. **Glow**, layer **Color** and **Brightness**, and the shared live mix
+update immediately. **Density**, **Listen to** and **Duration** work like the other
+layers. The same audio, settings and Seed reproduce the same sweep. Custom saved looks
+include the laser settings; older look files load with lasers disabled.
 
 ### Signal Network
 
@@ -235,7 +249,7 @@ the lights.
    and set colours and bands.
 3. **Build Effects** analyses the sound once, then keys pooled real point/spot lights into
    a collection named `Afterglow Effects` in the current scene (plus their beam meshes
-   when Visible Beams is on, and thin curves when Signal Graphics is on).
+   when Visible Beams is on, and thin curves for Laser Fans or Signal Graphics).
 4. Scrub or play. The effects are plain F-curve animation on a layered action, so they
    render in any engine and never touch the Sample Sound node.
 5. **Remove Effects** deletes this scene's effects collection and every datablock it owns
@@ -263,7 +277,7 @@ Start Frame: include that pre-roll in your playback/render range if you want to 
 Shows built with the previous peak detector are marked outdated and need rebuilding.
 
 **Live controls** need no rebuild: each layer's **Color** and **Intensity**, Cascade Trails
-**Size**, the beams' **Glow**, and **Signal Glow** retune the last build the moment you change them (a
+**Size**, the beams' **Glow**, **Signal Glow** and **Laser Glow** retune the last build the moment you change them (a
 keyframed Intensity is the exception: Build samples it per event). Other settings do not
 silently re-run: the panel shows *Build outdated* until you press Build again. The same sound, settings and Seed always produce the same show.
 
@@ -271,7 +285,7 @@ silently re-run: the panel shows *Build outdated* until you press Build again. T
 fade-out, rather than leaving out-of-order brightness keys. Intensity 0 is fully dark
 and can be raised again without rebuilding, even when the show was built at zero or
 saved/reopened while muted. This applies to real lights, Visible Beams and Signal
-Graphics; animated Intensity is still sampled per event and needs Build. Rebuild older
+Graphics and Laser Fans; animated Intensity is still sampled per event and needs Build. Rebuild older
 shows to get these fixes and the corrected trailing Gun Burst geometry.
 
 ## Demo
@@ -331,9 +345,10 @@ it as a GitHub Release.
 
 ## Limitations (honest)
 
-- Generated effects are **lights only** unless Visible Beams is on, and even then Build
-  only adds its own tagged beam meshes: it never edits your objects, materials or World.
-- Without Visible Beams, effects have no visible "beam" or streak shape of their own:
+- Generated effects add owned lights and optional graphics. Laser Fans includes ray
+  curves; Signal Graphics and Visible Beams add their own curves or meshes. Build
+  never edits your source objects, materials or World.
+- Without Visible Beams, these layers have no visible "beam" or streak shape of their own:
   Strikes and Gun Bursts read as aimed spots, Cascade Trails as a cascade of travelling
   points of light. Visible Beams covers Strikes and Gun Bursts only.
 - Beam meshes are glows, not volumes: they don't light fog, and objects in front of a

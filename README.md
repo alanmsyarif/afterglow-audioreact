@@ -1,4 +1,4 @@
-# Afterglow 0.21
+# Afterglow 0.22
 
 **Music in. Finished visual out.**
 
@@ -15,6 +15,10 @@ handle calibration, smooth playback, lighting, glow and camera setup.
 
 Change the music or look and press **Update Visual**. It refreshes the whole show.
 There are no separate calibration, baking, lighting-build or glow setup steps.
+
+Try **Laser Show** for sweeping green laser fans and violet washes. Rays appear
+on the beat without fog or extra setup; choose another look to replace the effect.
+[See the rendered Laser Show preview](docs/images/creator-laser-stage.jpg).
 
 Afterglow reuses the selected collection. Advanced Controls lets you use your own
 emissive objects or explicitly add another stage. New stages select their generated
@@ -35,7 +39,7 @@ progress/cancellation interface.
 
 ## Install
 
-1. Download [afterglow-0.21.0.zip](dist/afterglow-0.21.0.zip).
+1. Download [afterglow-0.22.0.zip](dist/afterglow-0.22.0.zip).
 2. In Blender 5.2+, open **Edit → Preferences → Get Extensions → Install from Disk**
    and choose the ZIP.
 3. Open the 3D Viewport sidebar (`N`) and select **Afterglow**.

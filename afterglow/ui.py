@@ -365,6 +365,15 @@ def draw_signals(col, fx):
         row.prop(fx, "signal_glow", text="Glow")
 
 
+def draw_lasers(col, fx):
+    """Optional adjustments for the ready-made laser fan."""
+    col.separator()
+    col.prop(fx, "laser_count", text="Rays per Fan")
+    col.prop(fx, "laser_spread", text="Spread")
+    col.prop(fx, "laser_sweep", text="Sweep")
+    col.prop(fx, "laser_glow", text="Glow")
+
+
 def draw_beams(col, fx):
     """Separate beam silhouettes and seeded appearance variation from timing controls."""
     col.active = fx.beams
@@ -472,6 +481,7 @@ LAYER_NOTES = {
     "downward": "Cascading lights along one direction.",
     "gun": "Fast directed bursts from the venue rim.",
     "signals": "Travelling pulses with connected arrivals.",
+    "lasers": "Thin laser fans sweep on the beat. Visible rays need no fog.",
 }
 
 
@@ -549,6 +559,8 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
                     draw_cascade(body, fx)
                 elif name == "signals":
                     draw_signals(body, fx)
+                elif name == "lasers":
+                    draw_lasers(body, fx)
 
         layout.separator()
         head, body = layout.panel("AFTERGLOW_fx_venue", default_closed=True)

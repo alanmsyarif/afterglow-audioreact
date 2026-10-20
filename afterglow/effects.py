@@ -1,13 +1,14 @@
 """Environment Effects: stackable, audio-triggered light layers over the whole venue.
 
-Seven independent layers (Data Strikes, Data Blooms, Rapid Flashes, Travelling Light
-Trails, Cascade Trails, Gun Bursts, Signal Network) analyse the scene's sound once, place events
+Eight independent layers (Data Strikes, Data Blooms, Rapid Flashes, Travelling Light
+Trails, Cascade Trails, Gun Bursts, Signal Network, Laser Fans) analyse the scene's sound once, place events
 deterministically inside the shared venue bounds, and key pooled real lights in a
-tagged, removable collection. Generated effects are lights only by default: the venue
+tagged, removable collection. The original layers are lights only by default: the venue
 itself is left exactly as the user built it and the visible result is real light spill
 on existing objects. The opt-in Visible Beams gives each Data Strike and Gun Burst light
 a glowing shaft mesh, so they read as beams in the air, identically in EEVEE and Cycles.
 Signal Network can separately opt into thin emissive pulse curves and arrival frames.
+Laser Fans include thin emissive rays so their sweeps render without adding fog.
 Everything is world-space over the venue, never normalised per object, and silent audio
 produces no events.
 """
@@ -32,7 +33,7 @@ BASE = TAG + "_base"      # unscaled brightness keys, saved with each owned ID f
 GAIN = TAG + "_gain"      # a beam material's emission gain at Glow 1
 COLLECTION = "Afterglow Effects"
 PREFIX = "AFX"
-VERSION = 6  # separate beam silhouettes and seeded per-event appearance channels
+VERSION = 7  # pooled laser fans with recoverable light and ray brightness channels
 MIN_GAP = 0.18       # s between two events of one layer
 ATTACK_S = 0.01     # positive band-envelope change over this many seconds
 ATTACK_WINDOW = 0.25  # local rise baseline, so a held bass note does not mask new attacks
@@ -43,8 +44,8 @@ SNAP_HARM = 0.20     # log2 slack reconciling the grid with the tempo curve (hal
 SNAP_LO_BPM, SNAP_HI_BPM = 40.0, 240.0  # pulse period search bounds
 
 SHAPES = ("CIRCLE", "SQUARE", "RECT", "TRIANGLE")
-LAYERS = ("strikes", "blooms", "flashes", "trails", "downward", "gun", "signals")
-POOL = {"strikes": 6, "blooms": 5, "flashes": 2, "trails": 3, "downward": 6, "gun": 3, "signals": 3}
+LAYERS = ("strikes", "blooms", "flashes", "trails", "downward", "gun", "signals", "lasers")
+POOL = {"strikes": 6, "blooms": 5, "flashes": 2, "trails": 3, "downward": 6, "gun": 3, "signals": 3, "lasers": 3}
 BANDS = {"LOW": (20.0, 150.0), "MID": (150.0, 2000.0),
          "HIGH": (2000.0, 16000.0), "FULL": (20.0, 16000.0)}
 BAND_ITEMS = (
@@ -453,8 +454,8 @@ def fit_cage(scene):
 
 
 LIGHT_KIND = {"strikes": "SPOT", "blooms": "POINT", "flashes": "POINT",
-              "trails": "POINT", "downward": "POINT", "gun": "SPOT", "signals": "POINT"}
-SPOT_SIZE = {"strikes": 0.5, "gun": 0.18}
+              "trails": "POINT", "downward": "POINT", "gun": "SPOT", "signals": "POINT", "lasers": "SPOT"}
+SPOT_SIZE = {"strikes": 0.5, "gun": 0.18, "lasers": 0.05}
 SPOT_BLEND = 0.35
 ENERGY = {"strikes": 900.0, "blooms": 350.0, "flashes": 4000.0,
           "trails": 300.0, "downward": 250.0, "gun": 700.0}
@@ -1106,6 +1107,9 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
     if name == "signals":
         from . import network
         return network.build_layer(coll, scene, venue, events, fps, start, end)
+    if name == "lasers":
+        from . import lasers
+        return lasers.build_layer(coll, scene, venue, events, fps, start, end)
     fx = scene.afterglow.effects
     layer = getattr(fx, name)
     keys = _Keys()
@@ -1222,6 +1226,8 @@ def settings_sig(scene):
     if fx.signals.enabled:
         from . import network
         vals += [network.signature(scene)]
+    if fx.lasers.enabled:
+        vals += [fx.laser_count, round(fx.laser_spread, 4), round(fx.laser_sweep, 4)]
     cage = fx.emitter                                   # moving the cage moves the venue
     vals += [tuple(round(x, 4) for row in cage.matrix_world for x in row) if cage else None]
     for name in LAYERS:
@@ -1351,7 +1357,9 @@ def live_update(scene):
                         node.inputs["Color"].default_value = (*layer.color, 1.0)
                 glow = mat.node_tree.nodes.get("Glow")
                 if glow and GAIN in mat:
-                    glow.inputs[1].default_value = mat[GAIN] * (fx.signal_glow if name == "signals" else fx.beam_glow)
+                    amount = (fx.signal_glow if name == "signals" else
+                              fx.laser_glow if name == "lasers" else fx.beam_glow)
+                    glow.inputs[1].default_value = mat[GAIN] * amount
         coll[LIVE] = applied
         coll[MIX] = mixed
 

@@ -330,4 +330,26 @@ def test_simple_export_rejects_a_hidden_solo_or_mute_without_changing_it():
         assert fx.master_brightness == 0.0 and fx.solo_layer == 'strikes'
 
 
+def test_laser_show_is_ready_to_export_from_the_simple_creation_action():
+    scene = bpy.context.scene
+    scene.afterglow.creative_look = 'LASER_SHOW'
+    result = easy.create_visual(bpy.context)
+    assert not scene.afterglow.show_advanced
+    assert result['effects']['lasers'] > 0
+    assert set(result['effects']) == {'lasers', 'blooms'}
+    graphics = [obj for col in effects._collections(scene) for obj in col.objects
+                if obj.type == 'CURVE' and obj.name.startswith('AFX_lasers_')]
+    assert graphics and not scene.afterglow.effects.beams
+    with tempfile.TemporaryDirectory() as folder:
+        scene.afterglow.output_path = folder + '/'
+        assert easy.prepare_export(scene) == str(Path(folder) / 'afterglow.mp4')
+    assert not bake.outdated(scene) and not effects.outdated(scene)
+    collection = scene.afterglow.collection
+    scene.afterglow.creative_look = 'NEON_CLUB'
+    easy.create_visual(bpy.context)
+    assert scene.afterglow.collection == collection
+    assert not any(obj.name.startswith('AFX_lasers_') for col in effects._collections(scene)
+                   for obj in col.objects)
+
+
 helpers.run(globals())

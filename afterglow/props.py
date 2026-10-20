@@ -93,7 +93,7 @@ class AfterglowFXLayer:
 
 LAYER_COLORS = {"strikes": (0.55, 0.85, 1.0), "blooms": (1.0, 0.45, 0.85), "flashes": (1.0, 1.0, 1.0),
                 "trails": (1.0, 0.7, 0.3), "downward": (0.6, 0.5, 1.0), "gun": (1.0, 0.3, 0.2),
-                "signals": (0.5, 0.9, 1.0)}
+                "signals": (0.5, 0.9, 1.0), "lasers": (0.3, 1.0, 0.55)}
 LAYER_TYPES = {  # one class per layer: a PropertyGroup can't vary a default per instance
     name: type(f"AfterglowFXLayer_{name}", (AfterglowFXLayer, bpy.types.PropertyGroup), {"__annotations__": {
         "color": FloatVectorProperty(name="Color", subtype="COLOR", size=3, min=0.0, max=1.0,
@@ -240,6 +240,16 @@ class AfterglowEffects(bpy.types.PropertyGroup):
                          description="Short fast directed spots fired from the rim toward the centre")
     signals: PointerProperty(type=LAYER_TYPES["signals"], name="Signal Network",
                              description="Audio attacks send a light pulse along connected anchors")
+    lasers: PointerProperty(type=LAYER_TYPES["lasers"], name="Laser Fans",
+                            description="Beat-triggered fans of thin rays sweeping across the stage")
+    laser_count: IntProperty(name="Rays per Fan", default=7, min=3, max=12,
+                             description="Number of visible rays in each laser fan; rebuild to apply")
+    laser_spread: FloatProperty(name="Fan Spread", default=1.0, min=0.1, max=2.6, subtype="ANGLE",
+                                description="Angle between the outside rays of each fan; rebuild to apply")
+    laser_sweep: FloatProperty(name="Sweep", default=0.7, min=0.0, max=1.6, subtype="ANGLE",
+                               description="How far each fan sweeps during a beat; rebuild to apply")
+    laser_glow: FloatProperty(name="Laser Glow", default=1.0, min=0.0, soft_max=4.0,
+                              update=_live, description="Brightness of visible laser rays, applied live")
     signal_anchors: PointerProperty(type=bpy.types.Collection, name="Signal Anchors",
                                     description="Anchor objects in name order, using their full world-space "
                                     "positions. Empty: four anchors fitted to the venue")
