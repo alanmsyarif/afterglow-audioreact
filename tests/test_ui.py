@@ -238,4 +238,111 @@ def test_signal_panel_exposes_controls_with_graphics_off_by_default():
             assert {"signal_width", "signal_tail", "signal_frame_size", "signal_glow"} <= drawn
 
 
+class StateLayout(FakeLayout):
+    """Capture effective enabled state and user-facing guidance."""
+    def __init__(self, log, enabled=True):
+        super().__init__(log)
+        self.enabled = enabled
+
+    def _child(self, *a, **k):
+        return StateLayout(self.log, self.enabled)
+
+    row = column = box = _child
+
+    def panel(self, idname, **kwargs):
+        return self._child(), self._child()
+
+    def operator(self, idname, **kwargs):
+        self.log.append(("button", idname, self.enabled))
+
+    def label(self, **kwargs):
+        self.log.append(("text", kwargs.get("text", "")))
+
+
+def test_starter_to_styled_show_operator_workflow():
+    from afterglow import bake, effects, workflow
+    assert bpy.ops.afterglow.create_starter() == {"FINISHED"}
+    scene = bpy.context.scene
+    assert len(workflow.inspect(scene)["eligible"]) == 12
+    assert bpy.ops.afterglow.create_reaction() == {"FINISHED"}
+    assert scene.afterglow.fast_playback and not bake.outdated(scene)
+    scene.afterglow.creative_look = "NEON_CLUB"
+    assert bpy.ops.afterglow.apply_look() == {"FINISHED"}
+    assert not bake.outdated(scene)
+    assert bpy.ops.afterglow.build_effects() == {"FINISHED"}
+    counts = effects.built_counts(scene)
+    assert set(counts) == {"strikes", "blooms", "gun"} and sum(counts.values()) > 0, counts
+    assert not effects.outdated(scene)
+
+
+def test_browsing_look_does_not_modify_the_show():
+    fx = bpy.context.scene.afterglow.effects
+    fx.strikes.enabled = False
+    fx.blooms.color = (0.1, 0.2, 0.3)
+    before = tuple(fx.blooms.color)
+    bpy.context.scene.afterglow.creative_look = "NEON_CLUB"
+    bpy.context.scene.afterglow.creative_look = "SIGNAL_GRID"
+    assert not fx.strikes.enabled and tuple(fx.blooms.color) == before
+
+
+def test_preview_camera_is_an_explicit_choice():
+    from afterglow import starter
+    scene = bpy.context.scene
+    existing = bpy.data.objects.new("User camera", bpy.data.cameras.new("User camera"))
+    scene.collection.objects.link(existing)
+    scene.camera = existing
+    bpy.ops.afterglow.create_starter()
+    assert scene.camera == existing
+    assert bpy.ops.afterglow.preview_stage() == {"FINISHED"}
+    assert scene.camera == starter.camera_for(scene.afterglow.collection)
+    assert scene.camera != existing
+
+
+def test_heavy_buttons_disabled_during_playback_without_preflight_scan():
+    from types import SimpleNamespace
+    from afterglow import ui, workflow
+    scene = bpy.context.scene
+    stage()
+    scene.afterglow.sound = helpers.sound()
+    scene.afterglow.effects.strikes.enabled = True
+    context = SimpleNamespace(scene=scene, object=None, screen=SimpleNamespace(is_animation_playing=True),
+                              region=SimpleNamespace(width=220), preferences=bpy.context.preferences)
+    original = workflow.inspect
+    def unexpected_scan(scene):
+        raise AssertionError("preflight should not run every playback frame")
+    workflow.inspect = unexpected_scan
+    try:
+        log = []
+        panel = type("P", (), {"layout": StateLayout(log)})()
+        ui.AFTERGLOW_PT_panel.draw(panel, context)
+        ui.AFTERGLOW_PT_effects.draw(panel, context)
+    finally:
+        workflow.inspect = original
+    for name in ("create_reaction", "apply_look", "build_effects"):
+        assert ("button", "afterglow." + name, False) in log, (name, log)
+
+
+def test_remove_available_after_switching_away_from_collection():
+    from afterglow import ui
+    stage()
+    bpy.context.scene.afterglow.sound = helpers.sound()
+    bpy.ops.afterglow.create_reaction()
+    bpy.context.scene.afterglow.collection = None
+    log = []
+    ui.AFTERGLOW_PT_panel.draw(type("P", (), {"layout": StateLayout(log)})(), bpy.context)
+    assert ("button", "afterglow.remove", True) in log
+    assert bpy.ops.afterglow.remove() == {"FINISHED"}
+    assert not any(core.find_modifier(ob) for ob in bpy.context.scene.objects)
+
+
+def test_narrow_sidebar_guidance_wraps():
+    from types import SimpleNamespace
+    from afterglow import ui
+    log = []
+    ui.draw_note(StateLayout(log), "Choose a collection of objects to react to your music.",
+                 SimpleNamespace(region=SimpleNamespace(width=180), preferences=bpy.context.preferences))
+    lines = [entry[1] for entry in log]
+    assert len(lines) >= 3 and all(len(line) <= 20 for line in lines), lines
+
+
 helpers.run(globals())

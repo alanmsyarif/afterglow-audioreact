@@ -1,0 +1,163 @@
+import copy
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bpy
+import helpers
+from helpers import emission_material, plane, sound
+from afterglow import bake, core, effects, lookbook, nodes, presets
+
+
+def stage():
+    scene = bpy.context.scene
+    collection = bpy.data.collections.new("Lookbook targets")
+    scene.collection.children.link(collection)
+    objects = [plane(name, collection, emission_material("Material " + name))
+               for name in ("a_first", "z_second")]
+    scene.afterglow.collection = collection
+    scene.afterglow.sound = sound()
+    core.apply(scene)
+    return scene, objects
+
+
+def rejects(call):
+    try:
+        call()
+    except ValueError:
+        return
+    raise AssertionError("Expected look validation to reject this input")
+
+
+def test_capture_roundtrip_restores_fx_and_common_object_style():
+    scene, objects = stage()
+    presets.apply(scene, "NEON_CLUB")
+    fx = scene.afterglow.effects
+    fx.beam_gaps = 0.8
+    fx.signal_width = 0.055
+    first = core.find_modifier(objects[0])
+    second = core.find_modifier(objects[1])
+    nodes.set_input(first, "Glow", 0.13)
+    nodes.set_input(second, "Glow", 0.88)
+    expected = lookbook.loads(lookbook.dumps(scene))
+    assert abs(expected["object"]["Glow"] - 0.13) < 1e-6
+    presets.apply(scene, "AURORA_FLOW")
+    assert lookbook.apply(scene, expected) == 3
+    assert lookbook.capture(scene) == expected
+    assert abs(nodes.get_input(second, "Glow") - 0.13) < 1e-6
+
+
+def test_empty_scene_captures_fx_only_and_does_not_create_modifiers():
+    scene = bpy.context.scene
+    snapshot = lookbook.capture(scene)
+    assert snapshot["object"] is None
+    assert lookbook.loads(lookbook.dumps(scene)) == snapshot
+    assert lookbook.apply(scene, snapshot) == 0
+    assert not bpy.data.objects and not effects._collections(scene)
+
+
+def test_saved_style_preserves_project_sources_routing_and_geometry():
+    scene, objects = stage()
+    snapshot = lookbook.capture(scene)
+    fx = scene.afterglow.effects
+    anchors = bpy.data.collections.new("User anchors")
+    scene.collection.children.link(anchors)
+    fx.signal_anchors = anchors
+    fx.strike_points = anchors
+    fx.strike_placement = "POINTS"
+    fx.signal_route, fx.signal_direction, fx.signal_speed = "SPOKES", "REVERSE", 13.0
+    fx.height, fx.seed, fx.venue_shape, fx.margin = 14.0, 809, "TRIANGLE", 1.7
+    fx.cascade_direction, fx.cascade_placement = "FROM_CAMERA", "CENTER"
+    scene.afterglow.start_frame = 31
+    initial = (scene.afterglow.collection, scene.afterglow.sound, scene.afterglow.start_frame,
+               fx.signal_anchors, fx.strike_points, fx.strike_placement, fx.signal_route,
+               fx.signal_direction, fx.signal_speed, fx.height, fx.seed, fx.venue_shape,
+               fx.margin, fx.emitter, fx.cascade_direction, fx.cascade_placement,
+               scene.camera, scene.world, len(bpy.data.objects))
+    lookbook.apply(scene, snapshot)
+    after = (scene.afterglow.collection, scene.afterglow.sound, scene.afterglow.start_frame,
+             fx.signal_anchors, fx.strike_points, fx.strike_placement, fx.signal_route,
+             fx.signal_direction, fx.signal_speed, fx.height, fx.seed, fx.venue_shape,
+             fx.margin, fx.emitter, fx.cascade_direction, fx.cascade_placement,
+             scene.camera, scene.world, len(bpy.data.objects))
+    assert initial == after
+    assert not effects._collections(scene)
+    assert "filepath" not in json.dumps(snapshot)
+
+
+def test_bad_fields_and_values_rejected_before_any_setting_changes():
+    scene, objects = stage()
+    initial = lookbook.capture(scene)
+    invalid = []
+    data = copy.deepcopy(initial); data["version"] = True; invalid.append(data)
+    data = copy.deepcopy(initial); data["version"] = 2; invalid.append(data)
+    data = copy.deepcopy(initial); data["layers"]["strikes"]["extra"] = 1; invalid.append(data)
+    data = copy.deepcopy(initial); del data["effects"]["beams"]; invalid.append(data)
+    data = copy.deepcopy(initial); data["effects"]["beams"] = 1; invalid.append(data)
+    data = copy.deepcopy(initial); data["effects"]["strike_companions"] = 2.0; invalid.append(data)
+    data = copy.deepcopy(initial); data["effects"]["strike_companions"] = -1; invalid.append(data)
+    data = copy.deepcopy(initial); data["effects"]["gun_style"] = "UNKNOWN"; invalid.append(data)
+    data = copy.deepcopy(initial); data["effects"]["cascade_count"] = 99; invalid.append(data)
+    data = copy.deepcopy(initial); data["layers"]["strikes"]["timing"] = 10; invalid.append(data)
+    data = copy.deepcopy(initial); data["layers"]["gun"]["color"] = [0.1, 0.2]; invalid.append(data)
+    data = copy.deepcopy(initial); data["layers"]["gun"]["color"][0] = float("nan"); invalid.append(data)
+    data = copy.deepcopy(initial); data["layers"]["strikes"]["intensity"] = float("inf"); invalid.append(data)
+    data = copy.deepcopy(initial); data["object"]["Decay"] = -0.1; invalid.append(data)
+    data = copy.deepcopy(initial); data["object"]["Use Colors"] = "true"; invalid.append(data)
+    data = copy.deepcopy(initial); data["object"]["Decay"] = 10 ** 400; invalid.append(data)
+    data = copy.deepcopy(initial); data["audio"] = "do-not-read.wav"; invalid.append(data)
+    for snapshot in invalid:
+        rejects(lambda: lookbook.apply(scene, snapshot))
+        assert lookbook.capture(scene) == initial
+
+
+def test_json_rejects_duplicates_constants_malformed_and_oversize_payloads():
+    for text in ('{}', '{"format":"a","format":"b"}', '{"a":NaN}', '{"a":Infinity}',
+                 '{"a":-Infinity}', '[1,2]', 'not-json', ' ' * (lookbook.MAX_BYTES + 1),
+                 '[' * 1500 + ']' * 1500, '\ud800'):
+        rejects(lambda: lookbook.loads(text))
+    rejects(lambda: lookbook.loads(b'{}'))
+
+
+def test_scene_and_modifier_animation_conflicts_are_atomic():
+    scene, objects = stage()
+    snapshot = lookbook.capture(scene)
+    snapshot["layers"]["strikes"]["enabled"] = True
+    scene.afterglow.effects.blooms.keyframe_insert("intensity", frame=1)
+    before = lookbook.capture(scene)
+    rejects(lambda: lookbook.apply(scene, snapshot))
+    assert lookbook.capture(scene) == before
+    scene.animation_data_clear()
+    mod = core.find_modifier(objects[1])
+    nodes._socket(mod, "Color A").driver_add("value", 0).driver.expression = "0.2"
+    before = lookbook.capture(scene)
+    rejects(lambda: lookbook.apply(scene, snapshot))
+    assert lookbook.capture(scene) == before
+
+
+def test_unrelated_animation_is_preserved_and_bake_state_remains_truthful():
+    scene, objects = stage()
+    scene.afterglow.fast_playback = True
+    objects[0].keyframe_insert("location", frame=1)
+    action = objects[0].animation_data.action
+    snapshot = lookbook.capture(scene)
+    snapshot["object"]["Decay"] = 0.75
+    lookbook.apply(scene, snapshot)
+    assert objects[0].animation_data.action == action
+    assert all(ob in bake.outdated(scene) for ob in objects)
+
+
+def test_preflight_and_builtin_layer_metadata_do_not_apply_values():
+    scene, objects = stage()
+    before = lookbook.capture(scene)
+    presets.preflight(scene, "NEON_CLUB")
+    assert lookbook.capture(scene) == before
+    assert presets.enabled_layers("NEON_CLUB") == ("strikes", "blooms", "gun")
+    rejects(lambda: presets.preflight(scene, "INVALID"))
+    rejects(lambda: presets.enabled_layers("INVALID"))
+    scene.afterglow.effects.blooms.keyframe_insert("weight", frame=1)
+    rejects(lambda: presets.preflight(scene, "NEON_CLUB"))
+
+
+helpers.run(globals())

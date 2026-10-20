@@ -317,9 +317,27 @@ def setup_playback(scene):
         return
     if strip is None:
         channel = max((st.channel for st in se.strips_all), default=0) + 1
-        strip = se.strips.new_sound(STRIP_NAME, bpy.path.abspath(s.sound.filepath, library=s.sound.library),
-                                    channel=channel, frame_start=s.start_frame)
-        strip.sound = s.sound
+        path = bpy.path.abspath(s.sound.filepath, library=s.sound.library)
+        temporary = None
+        try:
+            # The sequencer requires a real path to create a strip, even when the
+            # desired Sound is packed. Bootstrap from its packed bytes so reopening
+            # a portable .blend never depends on the original audio file's location.
+            if s.sound.packed_file:
+                fd, temporary = tempfile.mkstemp(suffix=os.path.splitext(path)[1] or ".wav")
+                with os.fdopen(fd, "wb") as audio:
+                    audio.write(s.sound.packed_file.data)
+                path = temporary
+            strip = se.strips.new_sound(STRIP_NAME, path, channel=channel,
+                                        frame_start=s.start_frame)
+            loaded = strip.sound
+            strip.sound = s.sound
+            # Avoid keeping an orphan Sound that refers to the bootstrap file.
+            if temporary and loaded != s.sound and loaded.users == 0:
+                bpy.data.sounds.remove(loaded)
+        finally:
+            if temporary:
+                os.remove(temporary)
     strip.frame_start = s.start_frame
     scene.sync_mode = "AUDIO_SYNC"
     scene.frame_end = max(scene.frame_end, strip.frame_final_end - 1)
