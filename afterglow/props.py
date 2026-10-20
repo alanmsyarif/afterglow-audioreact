@@ -2,9 +2,9 @@ import time
 
 import bpy
 from bpy.props import (BoolProperty, EnumProperty, FloatProperty, FloatVectorProperty,
-                       IntProperty, PointerProperty)
+                       IntProperty, PointerProperty, StringProperty, CollectionProperty)
 
-from . import bake, core, effects, materials, nodes, tempo
+from . import bake, core, delivery, effects, materials, nodes, presets, starter, tempo
 
 REBAKE_DELAY = 0.3  # s of quiet after the last setting change before the automatic re-bake
 _pending = {}       # scene name -> time of its last change still waiting for a re-bake
@@ -71,7 +71,7 @@ def _replace(self, context):
 
 def _live(self, context):
     """A live effect control changed: retune the last build in place, no rebuild."""
-    effects.live_update(context.scene)
+    effects.live_update(self.id_data)
 
 
 class AfterglowFXLayer:
@@ -106,6 +106,14 @@ def _reshape_cage(self, context):
 
 
 class AfterglowEffects(bpy.types.PropertyGroup):
+    master_brightness: FloatProperty(name="Master Brightness", default=1.0, min=0.0, max=4.0,
+                                     options=set(), update=_live,
+                                     description="Retune all built effect lights and graphics live without rebuilding")
+    solo_layer: EnumProperty(name="Solo Layer", default="ALL", options=set(), update=_live,
+                             items=(("ALL", "All Layers", "See the whole lighting mix"),) + tuple(
+                                 (name, name.replace("downward", "cascade trails").replace("gun", "gun bursts").title(),
+                                  "Preview this built layer without changing the show settings") for name in effects.LAYERS),
+                             description="Preview one built layer while retaining all enabled layers and events")
     timing_offset: FloatProperty(name="Timing Offset", default=0.0, min=-2.0, max=2.0,
                                  soft_min=-0.25, soft_max=0.25, precision=3, unit="TIME_ABSOLUTE",
                                  options=set(), description="Shift all environment events after beat snapping: "
@@ -273,7 +281,28 @@ def _retempo(self, context):
     _rebake(context.scene)
 
 
+class AfterglowSavedLook(bpy.types.PropertyGroup):
+    name: StringProperty(name="Look Name", default="My Look", maxlen=64)
+    payload: StringProperty(name="Style Data", options={"HIDDEN"})
+
+
 class AfterglowScene(bpy.types.PropertyGroup):
+    stage_layout: EnumProperty(name="Stage Design", items=starter.LAYOUT_ITEMS, default="RING", options=set(),
+                               description="Choose a design, then Add Starter Stage; browsing keeps your scene intact")
+    preview_offset: FloatProperty(name="From", default=0.0, min=0.0, soft_max=600.0,
+                                  unit="TIME_ABSOLUTE", options=set(), description="Seconds into the audio track to audition")
+    preview_duration: FloatProperty(name="Length", default=8.0, min=0.1, soft_max=60.0,
+                                    unit="TIME_ABSOLUTE", options=set(), description="Playback-only loop duration in seconds")
+    delivery_format: EnumProperty(name="Output Size", items=delivery.FORMAT_ITEMS, default="LANDSCAPE", options=set())
+    output_format: EnumProperty(name="File Format", items=delivery.OUTPUT_ITEMS, default="PNG_SEQUENCE", options=set())
+    output_path: StringProperty(name="Output Path", default="//afterglow-output/", subtype="FILE_PATH")
+    output_include_tail: BoolProperty(name="Include Fade-out", default=True,
+                                      description="Keep two seconds after the track for reaction and effect fade-out")
+    saved_looks: CollectionProperty(type=AfterglowSavedLook)
+    saved_look_index: IntProperty(name="Saved Look", default=0, min=0)
+    new_look_name: StringProperty(name="Name", default="My Look", maxlen=64)
+    creative_look: EnumProperty(name="Creative Look", items=presets.ITEMS, options=set(),
+                                description="Browse a curated style, then press Apply Look; browsing does not change your scene")
     collection: PointerProperty(type=bpy.types.Collection, name="Collection",
                                 description="Every emissive object in here reacts", update=_sync)
     sound: PointerProperty(type=bpy.types.Sound, name="Sound", update=_retempo)
@@ -330,7 +359,7 @@ class AfterglowObject(bpy.types.PropertyGroup):
     meter_invert: BoolProperty(name="Invert", description="Fill from the far end (top down)", update=_meter)
 
 
-CLASSES = (*LAYER_TYPES.values(), AfterglowEffects, AfterglowScene, AfterglowObject)
+CLASSES = (*LAYER_TYPES.values(), AfterglowEffects, AfterglowSavedLook, AfterglowScene, AfterglowObject)
 
 
 def register():

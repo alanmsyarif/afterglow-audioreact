@@ -1,9 +1,9 @@
 schema_version = "1.0.0"
 
 id = "afterglow"
-version = "0.17.0"
+version = "0.20.0"
 name = "Afterglow"
-tagline = "Audio-reactive emission for every object in a collection"
+tagline = "Music-driven lighting, reusable looks and one-click shows"
 maintainer = "alanmaulanasyarif@gmail.com"
 website = "https://github.com/alanmsyarif/afterglow-audioreact"
 type = "add-on"
@@ -12,7 +12,7 @@ license = ["SPDX:GPL-3.0-or-later"]
 tags = ["Animation", "Lighting", "Material"]
 
 [permissions]
-files = "Read the audio files you pick for analysis"
+files = "Read audio and look files; write looks and rendered media"
 
 [build]
 paths_exclude_pattern = ["__pycache__/"]

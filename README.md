@@ -1,13 +1,92 @@
-# Afterglow (v0.17.0)
+# Afterglow (v0.20.0)
 
-Audio-reactive emission for Blender 5.2. Point Afterglow at a collection and a sound
-file, and every emissive object in it lights up with the music, each one listening to
-its own frequency band. On top of that, **Environment Effects** add stackable,
-beat-triggered light layers over the whole venue.
+Turn a track into an animated lighting scene in **Blender 5.2+**. Start with your own
+emissive objects or a built-in stage, create a calibrated reaction in one click, then
+choose a curated look and build a matching atmosphere. Made for music visualizers,
+loop artists and motion designers who want a strong starting point they can refine.
 
-Everything comes from the sound file itself: no live input, no network.
+Everything comes from the sound file itself: no live input, account or network service.
 
 ![Environment Effects with Visible Beams: a dashed Data Strike landing on the floor, a Gun Burst tracer and a Data Bloom over a ring of reacting pillars](docs/images/hero.jpg)
+
+## New in 0.20
+
+- **Three stage designs:** Orbit Stage, a 16-bar Equalizer Wall with level meters,
+  and a ten-portal Neon Tunnel. Choose a Starter design before adding it; existing
+  scene content, audio and active camera are retained.
+- **Audition a Section:** loop an excerpt by seconds into the track, without changing
+  the animation render range. Restore Previous Loop restores the original playback
+  range, including after saving/reopening a project.
+- **Preview & Export:** explicit Landscape (1920×1080), Portrait (1080×1920), and Square
+  (1080×1080) presets retain frame rate and camera transforms. Fit Stage Camera refits
+  only the generated stage camera when you choose it, protecting animated cameras.
+- **Prepare Output:** configure PNG sequences or H.264 MP4 with AAC audio. PNG frame
+  overwrites are disabled; an existing MP4 filename is rejected. Preparation creates
+  no media files; Render Animation runs Blender's native renderer explicitly.
+
+![Neon Tunnel starter stage with audio-reactive lighting](docs/images/creator-tunnel-stage.jpg)
+
+In Preview & Export, choose a size and Apply Size, optionally Fit Stage Camera, then
+choose a render range. Use Track Length fits the song with an optional two-second
+fade-out. A playback excerpt does not trim the animation render range. Choose an output
+format and path, then Prepare Output. The Active summary shows the actual Blender
+settings Render Animation will use. Save the `.blend` before using a `//` relative path,
+or choose an absolute path. PNG sequences contain images only; MP4 uses the timeline's
+audio and the codecs supported by your Blender build. Transparent Background is an
+explicit option for PNG output.
+
+## New in 0.19
+
+- **Apply & Build Show** creates the reaction, applies the selected look, calibrates,
+  prepares Fast Playback and builds environment effects in one operation. It also works
+  with saved custom looks. Existing manual actions remain available.
+- **My Looks** saves project styles inside the `.blend`. Name and rename snapshots,
+  apply them later, or export/import a portable JSON file for another project. Importing
+  only adds a library entry; it never changes the current show.
+- **Live Mix** adds Master Brightness and layer solo. Retune lights, beam shafts and
+  signal graphics without rebuilding. Zero brightness is reversible, even after a
+  save/reopen. Choose **All Layers** to leave solo mode before rendering.
+- **Render Finish** adds optional compositor fog glow, with Strength and Highlight
+  Threshold controls. Removing it reconnects the prior image chain and preserves other
+  nodes. Shared compositor trees are copied before editing, keeping other scenes intact.
+
+![Neon Club starter stage rendered with the new optional compositor glow](docs/images/creator-neon-stage.png)
+
+Custom snapshots store effect styling and a common object look taken from the first
+reacting object by name. They apply that common look to reacting objects in the target
+collection. They exclude audio, frequency bands, venue placement, anchors, routing,
+seed, camera, compositor, Master Brightness and solo state. Automated show building
+refreshes this scene's Afterglow calibration/playback, as the existing controls do.
+Snapshots with animated target controls are rejected before edits. The portable format
+is declarative JSON, never executable preset code.
+
+## New in 0.18
+
+- **Create Reaction** combines application, tempo analysis, brightness calibration and
+  Fast Playback. A preflight explains missing inputs and catches shared materials that
+  would otherwise darken objects outside the chosen collection.
+- **Four Creative Looks** coordinate object colors, response and effect layers. Browsing
+  a look changes nothing; **Apply Look** applies it and refreshes existing Fast Playback.
+- **Starter Stage** adds twelve emissive columns, a graphite platform, lights and a camera.
+  If you have no track selected, it supplies an original, packed four-second 120 BPM
+  preview beat. Your existing objects, camera and chosen audio are retained.
+- **A guided sidebar** puts Sources, Audio Reaction and Creative Look in order, with
+  detailed controls in collapsible sections. Effect layers show event counts and
+  suggestions when a frequency band has no hits.
+
+| Creative Look | Direction | Enabled layers |
+|---|---|---|
+| Neon Club | Electric cyan and pink, tight response | Data Strikes, Data Blooms, Gun Bursts |
+| Cinematic Pulse | Gold and blue, slower deliberate accents | Data Strikes, Data Blooms |
+| Aurora Flow | Mint and violet, soft flowing motion | Data Blooms, Travelling Light Trails, Cascade Trails |
+| Signal Grid | Icy cyan and amber, crisp connected graphics | Signal Network, Data Strikes |
+
+Looks preserve your audio, venue, seed, emitter cage, anchors and routing. They style
+existing reacting objects in the chosen collection, so create the reaction before
+applying a look. Look changes need **Build Effects** to generate or update the atmosphere.
+Animated controls are protected: a look refuses to replace affected keyframes, drivers
+or NLA animation. Use another scene to explore looks while keeping a custom animated show.
+All controls remain editable, and rapid flashes are opt-in.
 
 ## Install
 
@@ -21,23 +100,45 @@ Everything comes from the sound file itself: no live input, no network.
 
 ## Quick start
 
-1. Put your glowing objects in one collection. Afterglow reacts on any mesh, curve or
-   text object whose material has an **Emission** shader, or a **Principled BSDF** with
-   Emission Strength above 0.
-2. In the *Afterglow* panel pick the **Collection** and the **Sound** (the folder button
-   loads a file; sounds packed into the `.blend` work too). Set **Start Frame** to where
-   the music begins.
-3. Press **Apply**. Afterglow adds a geometry-nodes modifier to each object, routes its
-   emission through the audio level, and spreads frequency bands from bass to treble
-   across the objects (sorted by name). It also adds the song as a sound strip, turns on
-   *Sync to Audio*, extends the frame range to cover the song, and detects the tempo.
-4. Press **Calibrate**. It measures the song and sets each object's Threshold and Gain
-   so quiet parts go dark and peaks reach full brightness.
-5. Turn on **Fast Playback** for smooth viewport playback (see below).
-6. **Remove** takes the modifiers off and restores your original materials exactly.
+1. In **Sources**, pick a collection of emissive meshes, curves or text. **Use Selected**
+   links selected emissive objects into a new collection without moving them. For a
+   blank-canvas trial, choose **Add Starter Stage** instead.
+2. Load your **Track** with the folder button and choose its **Start Frame**. The starter
+   stage provides sample audio if no track is selected. Packed sounds work too.
+3. In **Creative Look**, choose a style and press **Apply & Build Show**. Afterglow
+   creates the reaction, detects tempo, calibrates brightness, prepares smooth keyed
+   playback and builds the matching environment effects. No separate bake is needed.
+4. For the starter scene, **Preview Stage** selects its camera and enables Material
+   Preview with scene lighting. Press **Space** to play. Use Material Preview or Rendered
+   shading to see emission and light spill.
+5. In **Live Mix**, adjust effect brightness or solo a layer. Expand individual layers
+   or **Selected Object** to refine the result. Changes that need a new build or playback
+   bake show a refresh prompt.
+6. Expand **My Looks**, name your style, and **Save Current Look**. Export a snapshot to
+   reuse it in another project. Use **Apply & Build** on a saved snapshot to build its show.
+7. Optionally expand **Render Finish** and **Add Render Glow** for the final image.
+   Adjust Glow Strength and Highlight Threshold to suit the shot. This uses Blender's
+   compositor; it does not change the render engine or add viewport bloom.
 
-Until setup is done, the panel shows the next step (pick a collection, pick a sound, Apply,
-Calibrate), and Re-spread, Remove and Calibrate stay grayed out until Apply has run.
+For manual workflows, **Create Reaction** builds only the object reaction, **Apply Only**
+sets the chosen style, and **Build Effects** updates the atmosphere. Rebuilding effects
+retains Master Brightness and solo state; solo is a preview choice that also affects
+rendering until you select **All Layers**.
+
+Your objects need an **Emission** shader or a **Principled BSDF** with Emission Strength
+above zero. Setup reports skipped objects and linked materials. For shared emissive
+materials used outside the reaction collection, make them single-user or include all
+users in the collection before Create Reaction.
+
+The starter stage is additive and sits at the 3D cursor; place it away from existing
+scenery when needed. It does not replace the World, render engine, compositor or your
+active camera. The sample audio is a synthesized preview fixture, not a licensed song.
+The columns and effect lights render in EEVEE and Cycles. Render Finish is an explicit,
+reversible addition to your compositor; existing scene content remains editable.
+
+**Fine Tune & Maintenance** retains Apply Only, Re-spread, Calibrate and Remove for
+manual workflows. **Remove** restores original materials; **Remove Effects** removes
+only generated effect data. The starter stage itself remains ordinary editable objects.
 
 ## Scene controls
 
@@ -327,8 +428,12 @@ pip install bpy==5.2.2
 for t in tests/test_*.py; do python "$t" || break; done
 ```
 
-On Linux without a GPU, `tests/test_render.py` needs Mesa's software OpenGL
-(`apt install libegl1 libgl1-mesa-dri`).
+On Linux without a GPU, render suites need Mesa's software OpenGL. Export tests also
+use `ffmpeg` and `ffprobe` to verify encoded video and audio:
+
+```bash
+sudo apt install libegl1 libgl1-mesa-dri libglx-mesa0 ffmpeg
+```
 
 ## Releasing
 

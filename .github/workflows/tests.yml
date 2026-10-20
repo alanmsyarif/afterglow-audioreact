@@ -16,10 +16,10 @@ jobs:
         with:
           python-version: "3.13"  # the bpy wheel's Python
 
-      - name: Install Blender as a Python module, plus software OpenGL for EEVEE
+      - name: Install Blender, software OpenGL and media validation tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libgl1-mesa-dri libglx-mesa0
+          sudo apt-get install -y libegl1 libgl1-mesa-dri libglx-mesa0 ffmpeg
           pip install bpy==5.2.2
 
       - name: Validate the extension manifest

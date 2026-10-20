@@ -12,6 +12,7 @@ Everything is world-space over the venue, never normalised per object, and silen
 produces no events.
 """
 import math
+import os
 import random
 from bisect import bisect_right
 
@@ -26,6 +27,7 @@ TAG = "afterglow_effects"
 SIG = TAG + "_sig"
 COUNTS = TAG + "_counts"  # events per layer of the last build, for the panel
 LIVE = TAG + "_live"      # Intensity each layer's keys are scaled to now, for live edits
+MIX = TAG + "_mix"        # master/solo multiplier, separate from authored layer intensity
 BASE = TAG + "_base"      # unscaled brightness keys, saved with each owned ID for zero recovery
 GAIN = TAG + "_gain"      # a beam material's emission gain at Glow 1
 COLLECTION = "Afterglow Effects"
@@ -1229,7 +1231,9 @@ def settings_sig(scene):
                  for p in ("weight", "timing")]
         fc = _fcurve(scene, f"afterglow.effects.{name}.intensity")
         vals += [fc and _animated(scene, f"afterglow.effects.{name}.intensity", layer.intensity)]
-    vals += [s.sound.filepath if s.sound else "", s.start_frame,
+    # Save As may remap the same audio file from an absolute path to Blender's //
+    # notation. Its resolved destination is stable, so that does not stale a build.
+    vals += [os.path.normpath(bpy.path.abspath(s.sound.filepath, library=s.sound.library)) if s.sound else "", s.start_frame,
              round(scene.render.fps / scene.render.fps_base, 4),
              s.collection.name if s.collection else ""]
     return repr(vals)
@@ -1303,32 +1307,44 @@ def _scale_keys(idblock, path, before, after):
 
 
 def live_update(scene):
-    """Push the live controls (each layer's Color and Intensity, Cascade Size, Glow) into
-    this scene's last build, without rebuilding: lights and beam materials are retuned in
-    place and Intensity rescales the keyed brightness. A keyframed Intensity is sampled per
-    event, so it still needs Build (the outdated hint tracks it)."""
+    """Retune this scene's last build, including master brightness and layer solo.
+
+    The mixer multiplies the last built show without changing layer settings or event
+    times. A keyframed layer Intensity is sampled per event and still needs Build when
+    edited; mixer changes preserve that sampled shape. Recoverable source keys keep an
+    exact zero reversible, including after saving and reopening the project.
+    """
     fx = scene.afterglow.effects
+    master = getattr(fx, "master_brightness", 1.0)
+    solo = getattr(fx, "solo_layer", "ALL")
     for coll in _collections(scene):
         applied = dict(coll.get(LIVE, {}))
+        mixed = dict(coll.get(MIX, {}))
         for name in applied:
             layer = getattr(fx, name)
             lights = [ob for ob in coll.all_objects
                       if ob.type == "LIGHT" and ob.name.startswith(f"{PREFIX}_{name}_")]
             shafts = [c for ob in lights for c in ob.children if c.get(TAG)]
-            before = applied[name]
-            retune = (_fcurve(scene, f"afterglow.effects.{name}.intensity") is None
-                      and before != layer.intensity)
-            if retune:
-                applied[name] = layer.intensity
+            before_intensity = applied[name]
+            # Animated intensity is already in the generated keys. Retain its last
+            # built multiplier even if animation was added after that build.
+            after_intensity = (layer.intensity
+                               if _fcurve(scene, f"afterglow.effects.{name}.intensity") is None
+                               else before_intensity)
+            before = before_intensity * mixed.get(name, 1.0)
+            after_mix = master if solo in ("ALL", name) else 0.0
+            after = after_intensity * after_mix
+            retune = before != after
+            applied[name], mixed[name] = after_intensity, after_mix
             for ob in lights:
                 ob.data.color = layer.color
                 if name == "downward":
                     ob.data.shadow_soft_size = fx.cascade_size
                 if retune:
-                    _scale_keys(ob.data, "energy", before, layer.intensity)
+                    _scale_keys(ob.data, "energy", before, after)
             for shaft in shafts:
                 if retune:
-                    _scale_keys(shaft, GLOW_PATH, before, layer.intensity)
+                    _scale_keys(shaft, GLOW_PATH, before, after)
             for mat in {slot.material for shaft in shafts for slot in shaft.material_slots if slot.material}:
                 for node in mat.node_tree.nodes:
                     if node.type == "EMISSION":
@@ -1337,6 +1353,7 @@ def live_update(scene):
                 if glow and GAIN in mat:
                     glow.inputs[1].default_value = mat[GAIN] * (fx.signal_glow if name == "signals" else fx.beam_glow)
         coll[LIVE] = applied
+        coll[MIX] = mixed
 
 
 def built_counts(scene):
