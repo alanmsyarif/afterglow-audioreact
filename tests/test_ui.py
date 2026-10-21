@@ -1,5 +1,6 @@
 import os
 import sys
+from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy  # noqa: E402
@@ -11,6 +12,7 @@ from afterglow import core, nodes, tempo  # noqa: E402
 
 def stage():
     bpy.context.scene.afterglow.show_advanced = True
+    bpy.context.scene.afterglow.environment_advanced = True
     coll = bpy.data.collections.new("Lights")
     bpy.context.scene.collection.children.link(coll)
     plane("a", coll, emission_material("ma"))
@@ -113,6 +115,7 @@ class FakeLayout:
 
     def operator(self, idname, **k):
         self.log.append(("op", idname))
+        return SimpleNamespace()
 
     def label(self, **k):
         pass
@@ -151,7 +154,7 @@ def test_fx_next_step_and_empty_build():
     else:
         raise AssertionError("an empty build must refuse, not wipe the last build")
     scene.afterglow.effects.strikes.enabled = True
-    assert ui.fx_next_step(scene) == "Press Build Effects"
+    assert "Build" in ui.fx_next_step(scene)
 
 
 def test_strikes_panel_draws_strike_points():
@@ -224,7 +227,7 @@ def test_effects_panel_keeps_beam_controls_inside_their_own_layers():
     for name in ("venue_shape", "emitter", "visible_beam", "beam_glow", "beam_walk", "beam_walk_time",
                  "beam_flow", "beam_direction", "beam_gaps", "beam_dash", "strike_style", "gun_style"):
         assert name in drawn, name
-    assert ("op", "afterglow.build_effects") in log
+    assert ("op", "afterglow.build_environment") in log
 
 
 def test_signal_panel_exposes_controls_with_graphics_off_by_default():
@@ -261,24 +264,30 @@ class StateLayout(FakeLayout):
 
     def operator(self, idname, **kwargs):
         self.log.append(("button", idname, self.enabled))
+        return SimpleNamespace()
 
     def label(self, **kwargs):
         self.log.append(("text", kwargs.get("text", "")))
 
 
-def test_user_objects_to_styled_show_operator_workflow():
+def test_object_and_environment_operators_build_independently():
     from afterglow import bake, effects, workflow
     scene, collection, objects = helpers.visual_scene()
     assert set(workflow.inspect(scene)["eligible"]) == set(objects)
-    assert bpy.ops.afterglow.create_reaction() == {"FINISHED"}
-    assert scene.afterglow.fast_playback and not bake.outdated(scene)
     scene.afterglow.creative_look = "NEON_CLUB"
+    assert bpy.ops.afterglow.create_visual() == {"FINISHED"}
+    assert scene.afterglow.fast_playback and not bake.outdated(scene)
+    assert not effects._collections(scene)
     assert bpy.ops.afterglow.apply_look() == {"FINISHED"}
-    assert not bake.outdated(scene)
-    assert bpy.ops.afterglow.build_effects() == {"FINISHED"}
+    assert not effects._collections(scene) and not bake.outdated(scene)
+    modifiers = {obj: core.find_modifier(obj) for obj in objects}
+    scene.afterglow.effects.bounds_collection = collection
+    scene.afterglow.environment_look = "NEON_CLUB"
+    assert bpy.ops.afterglow.build_environment() == {"FINISHED"}
     counts = effects.built_counts(scene)
     assert set(counts) == {"strikes", "blooms", "gun"} and sum(counts.values()) > 0, counts
-    assert not effects.outdated(scene)
+    assert all(core.find_modifier(obj) == modifiers[obj] for obj in objects)
+    assert not effects.outdated(scene) and not bake.outdated(scene)
 
 
 def test_browsing_look_does_not_modify_the_show():
@@ -339,7 +348,7 @@ def test_heavy_buttons_disabled_during_playback_without_preflight_scan():
         ui.AFTERGLOW_PT_effects.draw(panel, context)
     finally:
         workflow.inspect = original
-    for name in ("create_reaction", "apply_look", "build_effects"):
+    for name in ("create_visual", "create_reaction", "apply_look", "build_environment"):
         assert ("button", "afterglow." + name, False) in log, (name, log)
 
 

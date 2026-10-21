@@ -140,6 +140,8 @@ def _reshape_cage(self, context):
 
 
 class AfterglowEffects(bpy.types.PropertyGroup):
+    bounds_collection: PointerProperty(type=bpy.types.Collection, name="Bounds", options=set(),
+                                       description="Fit generated effects to these objects; empty uses the main Objects collection")
     master_brightness: FloatProperty(name="Master Brightness", default=1.0, min=0.0, max=4.0,
                                      options=set(), update=_live,
                                      description="Retune all built effect lights and graphics live without rebuilding")
@@ -331,16 +333,33 @@ class AfterglowSavedLook(bpy.types.PropertyGroup):
     payload: StringProperty(name="Style Data", options={"HIDDEN"})
 
 
+_ENVIRONMENT_LOOK_IDS = tuple(item[0] for item in presets.ITEMS)
+
+
+def _environment_look_get(self):
+    stored = self.get("environment_look", self.creative_look)
+    return _ENVIRONMENT_LOOK_IDS.index(stored) if stored in _ENVIRONMENT_LOOK_IDS else 0
+
+
+def _environment_look_set(self, value):
+    self["environment_look"] = _ENVIRONMENT_LOOK_IDS[value]
+
+
 class AfterglowScene(bpy.types.PropertyGroup):
     show_advanced: BoolProperty(name="Advanced Controls", default=False, options=set(),
-                                description="Show individual effects, object tuning and manual build tools")
+                                description="Show object tuning, ripple motion and manual reaction tools")
+    environment_advanced: BoolProperty(name="Advanced Environment Controls", default=False, options=set(),
+                                       description="Show individual environment layers, routing, venue and live mix controls")
+    environment_look: EnumProperty(name="Environment Look", items=presets.ITEMS, options=set(),
+                                   get=_environment_look_get, set=_environment_look_set,
+                                   description="Choose the generated lighting style independently of the object look")
     easy_glow: BoolProperty(name="Soft Glow", default=True, options=set(),
-                           description="Create Visual adds compositor glow; turn off to remove only Afterglow's glow")
+                           description="Build Reaction adds compositor glow; turn off to remove only Afterglow's glow")
     saved_looks: CollectionProperty(type=AfterglowSavedLook)
     saved_look_index: IntProperty(name="Saved Look", default=0, min=0)
     new_look_name: StringProperty(name="Name", default="My Look", maxlen=64)
-    creative_look: EnumProperty(name="Creative Look", items=presets.ITEMS, options=set(),
-                                description="Choose a style, then Create Visual; browsing keeps your scene intact")
+    creative_look: EnumProperty(name="Object Look", items=presets.ITEMS, options=set(),
+                                description="Choose object colors and response, then Build Reaction; environment settings stay unchanged")
     collection: PointerProperty(type=bpy.types.Collection, name="Collection",
                                 description="Every emissive object in here reacts", update=_sync)
     sound: PointerProperty(type=bpy.types.Sound, name="Sound", update=_retempo)

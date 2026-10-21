@@ -372,7 +372,8 @@ def sync(scene):
 def remove(scene):
     se = scene.sequence_editor
     strip = se and se.strips.get(STRIP_NAME)
-    if strip:
+    from . import effects
+    if strip and not effects._collections(scene):
         se.strips.remove(strip)
     from . import bake  # bake imports core
     for ob in _managed(scene):

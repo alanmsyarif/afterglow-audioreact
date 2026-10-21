@@ -3,12 +3,21 @@ import json
 from pathlib import Path
 
 import bpy
-from bpy.props import StringProperty
+from bpy.props import EnumProperty, StringProperty
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 
 from . import bake, finish, lookbook, workflow
 
 MAX_LOOKS = 64
+SCOPE_ITEMS = (
+    ("ALL", "Complete Look", "Apply object and environment styling"),
+    ("OBJECT", "Object Reaction", "Apply object styling only"),
+    ("EFFECTS", "Environment", "Apply generated environment styling only"),
+)
+
+
+def _scope_property():
+    return EnumProperty(name="Apply To", items=SCOPE_ITEMS, default="ALL", options={"HIDDEN"})
 
 
 def selected_look(scene):
@@ -47,7 +56,7 @@ class AFTERGLOW_OT_build_show(bpy.types.Operator):
     bl_idname = "afterglow.build_show"
     bl_label = "Apply & Build Show"
     bl_description = "Create the reaction, apply this built-in look, calibrate, prepare playback and build effects"
-    bl_options = {"REGISTER", "UNDO"}
+    bl_options = {"REGISTER", "UNDO", "INTERNAL"}
 
     def execute(self, context):
         try:
@@ -78,8 +87,9 @@ class AFTERGLOW_OT_save_look(bpy.types.Operator):
 class AFTERGLOW_OT_apply_saved_look(bpy.types.Operator):
     bl_idname = "afterglow.apply_saved_look"
     bl_label = "Apply Saved Look"
-    bl_description = "Apply this saved style to current reacting objects and effect controls; Build Effects to update"
-    bl_options = {"REGISTER", "UNDO"}
+    bl_description = "Apply the saved style to the chosen object or environment workflow"
+    bl_options = {"REGISTER", "UNDO", "INTERNAL"}
+    scope: _scope_property()
 
     @classmethod
     def poll(cls, context):
@@ -88,20 +98,24 @@ class AFTERGLOW_OT_apply_saved_look(bpy.types.Operator):
     def execute(self, context):
         entry = selected_look(context.scene)
         try:
-            lookbook.apply(context.scene, lookbook.loads(entry.payload))
+            lookbook.apply(context.scene, lookbook.loads(entry.payload), scope=self.scope)
         except ValueError as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
-        _refresh_playback(self, context.scene)
-        self.report({"INFO"}, f"Applied {entry.name}. Build Effects to update the atmosphere")
+        if self.scope in {"ALL", "OBJECT"}:
+            _refresh_playback(self, context.scene)
+        message = (f"Applied {entry.name} to object reactions" if self.scope == "OBJECT" else
+                   f"Applied {entry.name}. Rebuild Effects to generate this environment style")
+        self.report({"INFO"}, message)
         return {"FINISHED"}
 
 
 class AFTERGLOW_OT_build_saved_look(bpy.types.Operator):
     bl_idname = "afterglow.build_saved_look"
     bl_label = "Apply & Build Saved Look"
-    bl_description = "Build a complete calibrated show using this saved style"
-    bl_options = {"REGISTER", "UNDO"}
+    bl_description = "Apply and build the saved style in the chosen object or environment workflow"
+    bl_options = {"REGISTER", "UNDO", "INTERNAL"}
+    scope: _scope_property()
 
     @classmethod
     def poll(cls, context):
@@ -110,11 +124,19 @@ class AFTERGLOW_OT_build_saved_look(bpy.types.Operator):
     def execute(self, context):
         entry = selected_look(context.scene)
         try:
-            workflow.create_show(context.scene, look_data=lookbook.loads(entry.payload))
+            data = lookbook.loads(entry.payload)
+            if self.scope == "OBJECT":
+                workflow.create_reaction(context.scene, look_data=data, style_scope="OBJECT")
+            elif self.scope == "EFFECTS":
+                from . import environment
+                environment.build(context.scene, look_data=data)
+            else:
+                workflow.create_show(context.scene, look_data=data)
         except (ValueError, RuntimeError) as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
-        self.report({"INFO"}, f"Show ready with {entry.name}. Press Space to play")
+        target = {"OBJECT": "Object reactions", "EFFECTS": "Environment", "ALL": "Show"}[self.scope]
+        self.report({"INFO"}, f"{target} ready with {entry.name}. Press Space to play")
         return {"FINISHED"}
 
 
@@ -222,12 +244,16 @@ class AFTERGLOW_OT_remove_render_glow(bpy.types.Operator):
         return {"FINISHED"}
 
 
-def draw_library(layout, context):
+def draw_library(layout, context, scope="ALL"):
     from .ui import draw_note
     s = context.scene.afterglow
     playing = getattr(context.screen, "is_animation_playing", False)
-    head, body = layout.panel("AFTERGLOW_library", default_closed=True)
-    head.label(text=f"My Looks ({len(s.saved_looks)})", icon="PRESET")
+    if scope not in {item[0] for item in SCOPE_ITEMS}:
+        raise ValueError(f"Unknown look scope: {scope}")
+    suffix = "" if scope == "ALL" else "_" + scope
+    title = {"ALL": "My Looks", "OBJECT": "My Object Looks", "EFFECTS": "My Environment Looks"}[scope]
+    head, body = layout.panel("AFTERGLOW_library" + suffix, default_closed=True)
+    head.label(text=f"{title} ({len(s.saved_looks)})", icon="PRESET")
     if not body:
         return
     body.prop(s, "new_look_name", text="Name")
@@ -238,19 +264,22 @@ def draw_library(layout, context):
         body.template_list("AFTERGLOW_UL_saved_looks", "", s, "saved_looks", s, "saved_look_index", rows=3)
         row = body.row(align=True)
         row.enabled = not playing and selected_look(context.scene) is not None
-        row.operator("afterglow.apply_saved_look", text="Apply Only", icon="BRUSH_DATA")
+        row.operator("afterglow.apply_saved_look", text="Apply Only", icon="BRUSH_DATA").scope = scope
         row.operator("afterglow.remove_saved_look", text="", icon="TRASH")
         row = body.row()
         row.enabled = not playing and selected_look(context.scene) is not None
         row.scale_y = 1.25
-        row.operator("afterglow.build_saved_look", text="Apply & Build", icon="PLAY")
+        row.operator("afterglow.build_saved_look", text="Apply & Build", icon="PLAY").scope = scope
     row = body.row(align=True)
     row.enabled = not playing
     row.operator("afterglow.import_look", icon="IMPORT")
     sub = row.row()
     sub.enabled = selected_look(context.scene) is not None
     sub.operator("afterglow.export_look", icon="EXPORT")
-    draw_note(body, "Stored in this .blend. Export to reuse elsewhere. Object styling is captured from the first reacting object by name.", context)
+    note = {"OBJECT": "Applies object styling. Stored in this .blend; export to reuse elsewhere.",
+            "EFFECTS": "Applies environment styling. Stored in this .blend; export to reuse elsewhere.",
+            "ALL": "Stored in this .blend. Export to reuse elsewhere. Object styling is captured from the first reacting object by name."}[scope]
+    draw_note(body, note, context)
 
 
 def draw_finish(layout, context):

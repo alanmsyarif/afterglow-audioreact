@@ -1,37 +1,49 @@
 # Advanced controls
 
-Enable **Advanced Controls** at the bottom of the Afterglow panel to see manual
-scene timing, individual lighting layers, per-object response and custom looks.
-Choose an emissive collection, or select objects and press **Use Selected** to prepare
-their materials automatically. Load your
-music, choose a look and press **Create Visual**. Use **Material Preview** or
-**Rendered** viewport shading and press **Space** to preview the reaction.
+Afterglow has two independent workflows in the 3D Viewport sidebar (`N`):
+
+- **Afterglow:** prepare your objects, apply an object look, calibrate and build their
+  music reaction with **Build Reaction** or **Update Reaction**.
+- **Afterglow FX → Afterglow Environment:** choose bounds and an environment look,
+  then generate lights and graphics with **Build Environment** or **Update Environment**.
+
+The tabs share the scene's music and Start Frame. Their looks, bounds and build
+controls are separate. Building an object reaction leaves generated effects and
+layer settings alone. Generating environment effects does not prepare materials,
+add object reaction modifiers, calibrate objects or refresh their playback bake.
 
 ## Where the manual tools live
 
-- **Timing & Glow:** offset the song or change automatic glow. The main panel
-  chooses your collection or prepares selected meshes, curves and text for reaction.
-- **My Looks:** save a snapshot, import/export JSON, or build a custom saved look.
-  Snapshots capture layer styling and the first reacting object's shared look.
-- **Ripple Motion:** choose direction and surface travel.
-- **Manual Build & Cleanup:** build reactions separately, apply look settings,
-  calibrate, redistribute bands, refresh playback, or remove reactions.
-- **Advanced Lighting:** edit the eight layers, venue, beam appearance, solo and
-  brightness. Glow adjusts the visual's compositor glow.
+In **Afterglow**, turn on **Advanced Controls** for:
 
-Existing scenes and custom look files keep their music reactions and styling. Objects
-from earlier built-in stages remain ordinary editable scene objects: choose their
-collection to keep using them. Your active camera and world stay under your control.
+- **Timing & Glow:** offset the song or change automatic glow.
+- Saved object looks, including JSON import/export and object-only application.
+- **Ripple Motion:** choose direction and surface travel.
+- **Manual Build & Cleanup:** apply an object look, calibrate, redistribute bands,
+  refresh playback or remove object reactions.
+- Per-object response and appearance controls.
+
+In **Afterglow Environment**, enable its own advanced controls for the eight effect
+layers, venue and timing, beam appearance, live brightness/solo mix and saved
+environment looks. Applying or building a saved look affects only that tab's part.
+Portable look files can retain both object and environment styling.
+
+**Remove Object Reaction** restores prepared object materials and keeps generated
+effects. **Remove Effects** deletes generated lights and graphics while keeping
+object reactions and their materials.
+
+Existing scenes and custom look files remain usable. Objects from earlier built-in
+stages remain ordinary editable scene objects: choose their collection to keep using
+them. Your active camera and world stay under your control.
 Commands below run from the repository root.
 
 ## Rendering
 
 Use Blender's **Output Properties** for resolution, frame range, output format and
 destination, then choose **Render → Render Animation**. Playback loops use Blender's
-timeline preview range. Afterglow focuses on creating the reactive scene and lighting;
-rendering and video export use Blender's own controls. Create Visual preserves these
-settings and the timeline range. Automatic glow is skipped when native compositing
-is disabled; existing compositor nodes stay in place.
+timeline preview range. Both build workflows preserve native output settings and
+timeline ranges. Automatic object glow is skipped when native compositing is
+disabled; existing compositor nodes stay in place.
 
 ## Prepare your objects
 
@@ -50,7 +62,7 @@ Choosing a collection directly expects emissive materials already. Select its ob
 and use **Use Selected** if they need preparation. Library-linked objects must be made
 local before their materials can be prepared.
 
-## Scene controls
+## Object reaction controls
 
 | Control | What it does |
 |---|---|
@@ -77,9 +89,16 @@ Select an Afterglow object to tune it in the panel. Its box follows the order yo
 | Look | Use Colors / Color A / Color B | Tint from Color A (quiet) to Color B (loud). |
 | Look | Level Meter | Fill the object along an axis by loudness, like an equalizer bar (off while Through Objects is on). |
 
-The Ripple settings live in their own collapsible **Ripple** section under Fast Playback.
+In the main tab's advanced controls, open **Ripple Motion** to adjust these settings.
 
 ## Environment Effects
+
+Use **Afterglow FX → Afterglow Environment** independently of the main object tools.
+Choose **Bounds** and an environment **Look**, then press **Build Environment**.
+Bounds can contain ordinary mesh, curve or text objects; emissive materials are not
+required. An empty Bounds field falls back to the main Objects collection. An existing
+emitter cage can define the venue instead. The environment look is independent of
+the object look in the Afterglow tab.
 
 Audio-only environment effects for the whole venue: independent, stackable light layers
 triggered by onsets in the track. Most layers generate **real lights only**
@@ -109,9 +128,9 @@ layers in gradually as the track builds (e.g. keyframe Weight 0 → 1).
 
 ### Laser Fans
 
-Choose **Laser Show** and **Create Visual** for the complete look. In Advanced Lighting,
-**Laser Fans** can also be combined with any other layer. Each attack opens a pair of
-sweeping fans from the venue rim. Thin native emissive curves make the rays visible in
+Choose **Laser Show** in **Afterglow Environment** and press **Build Environment**.
+In its advanced controls, **Laser Fans** can also be combined with any other layer.
+Each attack opens a pair of sweeping fans from the venue rim. Thin native emissive curves make the rays visible in
 EEVEE and Cycles without fog or either effect's Visible Beam switch. Silence stays dark.
 
 **Rays per Fan**, **Spread** and **Sweep** change the fan shape and movement; rebuild
@@ -161,7 +180,7 @@ and direction, not spawned every frame. Silence produces no signals or graphics.
 ### Venue shapes
 
 `Venue Shape` routes emitters in world space over the shared venue bounds (fitted to the
-Afterglow collection, never per object):
+environment Bounds collection, never per object):
 
 - **Circular**: trails ride a circle; spawns fill the disc.
 - **Square**: trails ride a square rim; spawns fill the square.
@@ -172,8 +191,8 @@ Afterglow collection, never per object):
 
 ![The emitter cage, stretched and turned, outlined in amber for this picture only: strikes land inside it and the Gun Burst fires from its rim](images/emitter_cage.jpg)
 
-By default the venue is fitted to the collection (with **Height** and **Margin**). For
-direct control, press **Add Cage**: Afterglow adds an **Afterglow Emitter** object, a
+By default the venue is fitted to the environment Bounds collection (with **Height**
+and **Margin**). For direct control, press **Add Cage**: Afterglow adds an **Afterglow Emitter** object, a
 wireframe outline of the venue (its floor, its top, the ring trails ride and a few
 posts), fitted to exactly the venue you had. Then shape it in the viewport:
 
@@ -221,7 +240,8 @@ point. Moving a point marks the build outdated; Build and Remove Effects never t
 
 ![A Data Strike walking Down: the dashed filament grows from the top and lands on the floor on the beat, where its light flashes](images/strike_walk.gif)
 
-Open **Advanced Lighting → Data Strikes** or **Gun Bursts**. Each effect has its own
+Open **Afterglow Environment** and enable its advanced controls, then expand
+**Data Strikes** or **Gun Bursts**. Each effect has its own
 **Visible Beam** switch, **Glow** and appearance controls in that same section. There
 is no separate global beam panel. The switches start off for a custom setup; applying
 a curated look configures them for you. Rebuild after changing visibility or geometry;
@@ -276,17 +296,18 @@ the lights.
 
 ### Usage
 
-1. Pick your Collection and Sound in the *Afterglow* panel as usual.
-2. Open *Advanced Controls → Advanced Lighting*, choose the venue shape, enable layers,
-   and set colours and bands.
-3. **Build Effects** analyses the sound once, then keys pooled real point/spot lights into
-   a collection named `Afterglow Effects` in the current scene (plus their beam meshes
-   when that effect's Visible Beam is on, and thin curves for Laser Fans or Signal Graphics).
-4. Scrub or play. The effects are plain F-curve animation on a layered action, so they
-   render in any engine and never touch the Sample Sound node.
-5. **Remove Effects** deletes this scene's effects collection and every datablock it owns
-   (tagged `afterglow_effects`). Your objects, materials and animation, and other scenes'
-   effects, are never modified.
+1. Open **Afterglow FX → Afterglow Environment**, choose **Bounds** and load the music
+   if it is not already selected in the main tab.
+2. Choose an environment **Look** and press **Build Environment**. This does not
+   require an object reaction setup or emissive materials.
+3. For a custom mix, enable advanced controls, choose the venue, enable layers and
+   tune their colours and bands. Use **Build Effects** / **Rebuild Effects** to retain
+   those manual settings instead of reapplying the selected curated look.
+4. Scrub or play. Generated lights and graphics use plain F-curve animation and render
+   through Blender normally.
+5. **Remove Effects** deletes this scene's owned effects collection and datablocks
+   (tagged `afterglow_effects`). Object reactions, source materials, anchor markers and
+   other scenes' effects remain unchanged.
 
 After a build, each enabled layer shows how many events it fired; a red *0 events* means
 its Trigger Band never hit, so try another band. Build Effects is grayed out while no
@@ -349,7 +370,7 @@ sudo apt install libegl1 libgl1-mesa-dri libglx-mesa0
 2. Tag the commit with that version and push the tag:
 
    ```bash
-   git tag v0.25.0 && git push origin v0.25.0
+   git tag v0.26.0 && git push origin v0.26.0
    ```
 
 [`release.yml`](../.github/workflows/release.yml) runs the full test suite, checks the tag

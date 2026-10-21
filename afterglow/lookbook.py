@@ -193,15 +193,17 @@ def capture(scene):
                      "object": object_style})
 
 
-def _plan(scene, data):
-    """Validate snapshot and animation conflicts without applying any values."""
+def _plan(scene, data, scope="ALL"):
+    """Validate the full snapshot, guarding animation only within its target scope."""
+    presets._scope(scope)
     data = validate(data)
-    scene_paths = {f"afterglow.effects.{name}.{prop}"
-                   for name in effects.LAYERS for prop in layer_fields(name)}
-    scene_paths.update(f"afterglow.effects.{name}" for name in EFFECT_FIELDS)
-    presets._guard(scene, scene_paths)
+    if scope in ("ALL", "EFFECTS"):
+        scene_paths = {f"afterglow.effects.{name}.{prop}"
+                       for name in effects.LAYERS for prop in layer_fields(name)}
+        scene_paths.update(f"afterglow.effects.{name}" for name in EFFECT_FIELDS)
+        presets._guard(scene, scene_paths)
     objects = []
-    if data["object"] is not None:
+    if scope in ("ALL", "OBJECT") and data["object"] is not None:
         collection = scene.afterglow.collection
         for ob in core.targets(collection) if collection else ():
             mod = core.find_modifier(ob)
@@ -214,26 +216,27 @@ def _plan(scene, data):
     return data, objects
 
 
-def preflight(scene, data):
-    """Return normalized data after validation and animation guards, without mutation."""
-    data, _ = _plan(scene, data)
+def preflight(scene, data, *, scope="ALL"):
+    """Return normalized data after full validation and scope-specific guards."""
+    data, _ = _plan(scene, data, scope)
     return data
 
 
-def apply(scene, data):
-    """Apply a portable style to existing reacting objects, preserving project wiring."""
-    data, objects = _plan(scene, data)
-    fx = scene.afterglow.effects
-    for name, values in data["layers"].items():
-        layer = getattr(fx, name)
-        for prop, value in values.items():
-            setattr(layer, prop, value)
-    for prop, value in data["effects"].items():
-        setattr(fx, prop, value)
+def apply(scene, data, *, scope="ALL"):
+    """Apply only the selected side; return object count for OBJECT, else layer count."""
+    data, objects = _plan(scene, data, scope)
+    if scope in ("ALL", "EFFECTS"):
+        fx = scene.afterglow.effects
+        for name, values in data["layers"].items():
+            layer = getattr(fx, name)
+            for prop, value in values.items():
+                setattr(layer, prop, value)
+        for prop, value in data["effects"].items():
+            setattr(fx, prop, value)
     for ob, mod in objects:
         for prop, value in data["object"].items():
             nodes.set_input(mod, prop, value)
-    return sum(values["enabled"] for values in data["layers"].values())
+    return len(objects) if scope == "OBJECT" else sum(values["enabled"] for values in data["layers"].values())
 
 
 def dumps(scene):
