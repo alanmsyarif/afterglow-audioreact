@@ -260,11 +260,10 @@ class StateLayout(FakeLayout):
         self.log.append(("text", kwargs.get("text", "")))
 
 
-def test_starter_to_styled_show_operator_workflow():
+def test_user_objects_to_styled_show_operator_workflow():
     from afterglow import bake, effects, workflow
-    assert bpy.ops.afterglow.create_starter() == {"FINISHED"}
-    scene = bpy.context.scene
-    assert len(workflow.inspect(scene)["eligible"]) == 12
+    scene, collection, objects = helpers.visual_scene()
+    assert set(workflow.inspect(scene)["eligible"]) == set(objects)
     assert bpy.ops.afterglow.create_reaction() == {"FINISHED"}
     assert scene.afterglow.fast_playback and not bake.outdated(scene)
     scene.afterglow.creative_look = "NEON_CLUB"
@@ -286,17 +285,32 @@ def test_browsing_look_does_not_modify_the_show():
     assert not fx.strikes.enabled and tuple(fx.blooms.color) == before
 
 
-def test_preview_camera_is_an_explicit_choice():
-    from afterglow import starter
-    scene = bpy.context.scene
+def test_create_visual_keeps_user_camera_world_and_viewport():
+    from types import SimpleNamespace
+    from afterglow import ui
+    scene, collection, objects = helpers.visual_scene()
     existing = bpy.data.objects.new("User camera", bpy.data.cameras.new("User camera"))
     scene.collection.objects.link(existing)
+    existing.location = (9, -7, 6)
     scene.camera = existing
-    bpy.ops.afterglow.create_starter()
-    assert scene.camera == existing
-    assert bpy.ops.afterglow.preview_stage() == {"FINISHED"}
-    assert scene.camera == starter.camera_for(scene.afterglow.collection)
-    assert scene.camera != existing
+    world = bpy.data.worlds.new("User world")
+    world.color = (0.1, 0.2, 0.3)
+    scene.world = world
+    bpy.context.view_layer.update()
+    matrix = existing.matrix_world.copy()
+    world_color = tuple(world.color)
+    space = SimpleNamespace(region_3d=SimpleNamespace(view_perspective="PERSP"),
+                            shading=SimpleNamespace(type="SOLID", use_scene_lights=False,
+                                                    use_scene_world=False))
+    context = SimpleNamespace(scene=scene, area=SimpleNamespace(type="VIEW_3D"),
+                              space_data=space)
+    operator = SimpleNamespace(report=lambda level, message: None)
+    assert ui.AFTERGLOW_OT_create_visual.execute(operator, context) == {"FINISHED"}
+    assert scene.camera == existing and existing.matrix_world == matrix
+    assert scene.world == world and tuple(world.color) == world_color
+    assert space.region_3d.view_perspective == "PERSP"
+    assert (space.shading.type, space.shading.use_scene_lights, space.shading.use_scene_world) == ("SOLID", False, False)
+    assert set(collection.objects) == set(objects)
 
 
 def test_heavy_buttons_disabled_during_playback_without_preflight_scan():

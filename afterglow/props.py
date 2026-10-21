@@ -4,7 +4,7 @@ import bpy
 from bpy.props import (BoolProperty, EnumProperty, FloatProperty, FloatVectorProperty,
                        IntProperty, PointerProperty, StringProperty, CollectionProperty)
 
-from . import bake, core, effects, materials, nodes, presets, starter, tempo
+from . import bake, core, effects, materials, nodes, presets, tempo
 
 REBAKE_DELAY = 0.3  # s of quiet after the last setting change before the automatic re-bake
 _pending = {}       # scene name -> time of its last change still waiting for a re-bake
@@ -299,20 +299,13 @@ class AfterglowSavedLook(bpy.types.PropertyGroup):
 class AfterglowScene(bpy.types.PropertyGroup):
     show_advanced: BoolProperty(name="Advanced Controls", default=False, options=set(),
                                 description="Show individual effects, object tuning and manual build tools")
-    easy_source: EnumProperty(name="Scene Source", default="AUTO", options=set(), items=(
-        ("AUTO", "Automatic", "Use the chosen collection, or create a starter stage when none is chosen"),
-        ("STAGE", "Starter Stage", "Use the selected starter design"),
-        ("CUSTOM", "My Objects", "Use an existing emissive collection and your own track"),
-    ))
     easy_glow: BoolProperty(name="Soft Glow", default=True, options=set(),
                            description="Create Visual adds compositor glow; turn off to remove only Afterglow's glow")
-    stage_layout: EnumProperty(name="Stage Design", items=starter.LAYOUT_ITEMS, default="RING", options=set(),
-                               description="Choose a design, then Add Starter Stage; browsing keeps your scene intact")
     saved_looks: CollectionProperty(type=AfterglowSavedLook)
     saved_look_index: IntProperty(name="Saved Look", default=0, min=0)
     new_look_name: StringProperty(name="Name", default="My Look", maxlen=64)
     creative_look: EnumProperty(name="Creative Look", items=presets.ITEMS, options=set(),
-                                description="Browse a curated style, then press Apply Look; browsing does not change your scene")
+                                description="Choose a style, then Create Visual; browsing keeps your scene intact")
     collection: PointerProperty(type=bpy.types.Collection, name="Collection",
                                 description="Every emissive object in here reacts", update=_sync)
     sound: PointerProperty(type=bpy.types.Sound, name="Sound", update=_retempo)

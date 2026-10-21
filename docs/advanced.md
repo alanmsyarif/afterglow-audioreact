@@ -1,13 +1,15 @@
 # Advanced controls
 
 Enable **Advanced Controls** at the bottom of the Afterglow panel to see manual
-scene setup, individual lighting layers, per-object response and custom looks.
-Ordinary use only needs **Create Visual**.
+scene timing, individual lighting layers, per-object response and custom looks.
+Choose your emissive collection or use **Use Selected** in the main panel, load your
+music, choose a look and press **Create Visual**. Use **Material Preview** or
+**Rendered** viewport shading and press **Space** to preview the reaction.
 
 ## Where the manual tools live
 
-- **Custom Scene & Timing:** choose an existing collection, use selected objects,
-  add a different starter stage, offset the song or change automatic glow.
+- **Timing & Glow:** offset the song or change automatic glow. The main panel
+  chooses the collection of your existing emissive objects.
 - **My Looks:** save a snapshot, import/export JSON, or build a custom saved look.
   Snapshots capture layer styling and the first reacting object's shared look.
 - **Ripple Motion:** choose direction and surface travel.
@@ -16,7 +18,9 @@ Ordinary use only needs **Create Visual**.
 - **Advanced Lighting:** edit the eight layers, venue, beam appearance, solo and
   brightness. Glow adjusts the visual's compositor glow.
 
-Existing scenes and custom look files keep their music reactions and styling.
+Existing scenes and custom look files keep their music reactions and styling. Objects
+from earlier built-in stages remain ordinary editable scene objects: choose their
+collection to keep using them. Your active camera and world stay under your control.
 Commands below run from the repository root.
 
 ## Rendering
@@ -295,24 +299,6 @@ saved/reopened while muted. This applies to real lights, Visible Beams and Signa
 Graphics and Laser Fans; animated Intensity is still sampled per event and needs Build. Rebuild older
 shows to get these fixes and the corrected trailing Gun Burst geometry.
 
-## Demo
-
-Repeatable generator (synthetic pulse fixture track, circular pillar venue, all six
-layers with Visible Beams, saved `.blend`, short sequential EEVEE motion proof). The
-output folder after `--` is optional; it defaults to your temp folder's
-`afterglow-effects-demo`:
-
-```bash
-blender -b --factory-startup --python-exit-code 1 --python tools/build_effects_demo.py -- <OUT>
-# clip + contact sheet from the rendered frames:
-ffmpeg -framerate 24 -i <OUT>/frames/%04d.png -c:v libx264 -pix_fmt yuv420p <OUT>/motion.mp4
-ffmpeg -i <OUT>/frames/%04d.png -vf "select='not(mod(n,8))',scale=320:-1,tile=4x3" \
-    -frames:v 1 <OUT>/contact_sheet.png
-```
-
-(`blender` is your Blender 5.2 executable, e.g.
-`"C:/Program Files/Blender Foundation/Blender 5.2/blender.exe"` on Windows.)
-
 ## Tests
 
 Each `tests/test_*.py` file is a standalone headless suite. Run one with Blender:
@@ -342,7 +328,7 @@ sudo apt install libegl1 libgl1-mesa-dri libglx-mesa0
 2. Tag the commit with that version and push the tag:
 
    ```bash
-   git tag v0.23.0 && git push origin v0.23.0
+   git tag v0.24.0 && git push origin v0.24.0
    ```
 
 [`release.yml`](../.github/workflows/release.yml) runs the full test suite, checks the tag

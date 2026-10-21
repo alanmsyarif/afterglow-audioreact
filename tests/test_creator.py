@@ -6,24 +6,24 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy
 import helpers
-from afterglow import bake, creator, effects, finish, lookbook, starter, ui
+from afterglow import bake, creator, effects, finish, lookbook, ui
 
 
-def stage():
-    starter.create(bpy.context)
+def user_show():
+    helpers.visual_scene()
     assert bpy.ops.afterglow.build_show() == {"FINISHED"}
     return bpy.context.scene
 
 
 def test_complete_show_operator_builds_current_builtin():
-    scene = stage()
+    scene = user_show()
     assert set(effects.built_counts(scene)) == {"strikes", "blooms", "gun"}
     assert not effects.outdated(scene) and not bake.outdated(scene)
-    assert len([ob for ob in scene.afterglow.collection.all_objects if ob.modifiers]) == 12
+    assert len([ob for ob in scene.afterglow.collection.all_objects if ob.modifiers]) == 3
 
 
 def test_library_save_unique_names_remove_and_project_persistence():
-    scene = stage()
+    scene = user_show()
     scene.afterglow.new_look_name = "Midnight"
     bpy.ops.afterglow.save_look()
     bpy.ops.afterglow.save_look()
@@ -42,7 +42,7 @@ def test_library_save_unique_names_remove_and_project_persistence():
 
 
 def test_export_and_import_preserve_saved_snapshot_without_applying():
-    scene = stage()
+    scene = user_show()
     bpy.ops.afterglow.save_look()
     saved = lookbook.loads(creator.selected_look(scene).payload)
     scene.afterglow.effects.strikes.color = (0.7, 0.1, 0.05)

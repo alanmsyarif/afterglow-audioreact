@@ -80,6 +80,23 @@ def emission_material(name, strength=5.0, color=(1.0, 0.5, 0.2, 1.0)):
     return mat
 
 
+def visual_scene(name="User reaction"):
+    """An explicit user-authored scene fixture; never add-on-generated stage content."""
+    scene = bpy.context.scene
+    collection = bpy.data.collections.new(name)
+    scene.collection.children.link(collection)
+    objects = []
+    for index, x in enumerate((-3.0, 0.0, 3.0)):
+        obj = plane(f"User object {index + 1}", collection,
+                    emission_material(f"User emission {index + 1}"))
+        obj.location = (x, 0.0, 0.0)
+        objects.append(obj)
+    scene.afterglow.collection = collection
+    scene.afterglow.sound = sound()
+    bpy.context.view_layer.update()
+    return scene, collection, tuple(objects)
+
+
 def at(frame):
     # Blender 5.2: the first evaluation after a depsgraph rebuild (new objects/modifiers)
     # occasionally returns amplitude 0 for every Sample Sound node; the next frame change
