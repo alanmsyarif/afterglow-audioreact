@@ -121,7 +121,7 @@ def test_per_hit_breakup_and_tail_fade_reach_the_materials():
                 assert abs(mat.node_tree.nodes["Tail Fade"].inputs[1].default_value - 3.0) < 1e-6
 
 
-def test_visible_beams_exposes_separate_strike_and_gun_look_controls():
+def test_strike_and_gun_panels_keep_their_own_visible_beam_controls():
     from afterglow import ui
     fx = bpy.context.scene.afterglow.effects
     drawn = set()
@@ -144,9 +144,22 @@ def test_visible_beams_exposes_separate_strike_and_gun_look_controls():
         def separator(self):
             pass
 
-    ui.draw_beams(Layout(), fx)
-    assert {"strike_style", "strike_width", "strike_companions", "strike_spread", "strike_variation",
-            "gun_style", "gun_length", "gun_width", "gun_taper", "gun_fade", "gun_variation"} <= drawn, drawn
+    fx.strikes.visible_beam = fx.gun.visible_beam = True
+    ui.draw_strike_beam(Layout(), fx)
+    assert {"visible_beam", "beam_glow", "strike_style", "strike_width", "strike_companions",
+            "strike_spread", "strike_variation", "beam_walk", "beam_walk_time"} <= drawn, drawn
+    assert not any(name.startswith("gun_") for name in drawn), drawn
+    drawn.clear()
+    ui.draw_gun_beam(Layout(), fx)
+    assert {"visible_beam", "beam_glow", "gun_style", "gun_length", "gun_width",
+            "gun_taper", "gun_fade", "gun_variation"} <= drawn, drawn
+    assert not any(name.startswith("strike_") for name in drawn), drawn
+    assert not {"beam_walk", "beam_flow", "beams"} & drawn
+    for layer, draw in ((fx.strikes, ui.draw_strike_beam), (fx.gun, ui.draw_gun_beam)):
+        layer.visible_beam = False
+        drawn.clear()
+        draw(Layout(), fx)
+        assert drawn == {"visible_beam"}, drawn
 
 
 def test_all_look_edits_mark_the_build_outdated():

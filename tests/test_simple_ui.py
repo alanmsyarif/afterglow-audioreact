@@ -6,7 +6,7 @@ from types import SimpleNamespace
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy
 import helpers
-from afterglow import bake, core, effects, ui
+from afterglow import bake, core, effects, materials, ui
 
 
 class Layout:
@@ -114,6 +114,26 @@ def test_only_scene_and_lighting_panels_are_registered_without_export_settings()
 def test_stage_creation_and_preview_operators_are_not_registered():
     for name in ('AFTERGLOW_OT_create_starter', 'AFTERGLOW_OT_preview_stage'):
         assert bpy.types.Operator.bl_rna_get_subclass_py(name) is None
+
+
+def test_plain_selected_mesh_is_prepared_created_and_restored_through_sidebar_actions():
+    scene = bpy.context.scene
+    bpy.ops.mesh.primitive_cube_add()
+    obj = bpy.context.object
+    assert not any(slot.material for slot in obj.material_slots)
+    original_links = set(obj.users_collection)
+    original_range = scene.frame_start, scene.frame_end
+    assert bpy.ops.afterglow.use_selected() == {"FINISHED"}
+    assert all(collection in obj.users_collection for collection in original_links)
+    assert any(materials.has_emission(slot.material) for slot in obj.material_slots)
+    scene.afterglow.sound = helpers.sound()
+    assert bpy.ops.afterglow.create_visual() == {"FINISHED"}
+    assert core.find_modifier(obj) and not bake.outdated(scene) and not effects.outdated(scene)
+    assert (scene.frame_start, scene.frame_end) == original_range
+    assert bpy.ops.afterglow.remove() == {"FINISHED"}
+    assert not core.find_modifier(obj)
+    assert not any(slot.material for slot in obj.material_slots)
+    assert all(collection in obj.users_collection for collection in original_links)
 
 
 helpers.run(globals())

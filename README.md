@@ -1,14 +1,14 @@
-# Afterglow 0.24
+# Afterglow 0.25
 
 **Turn music into lighting.**
 
-Audio-reactive lighting for Blender 5.2+. Use your own emissive objects and music,
+Audio-reactive lighting for Blender 5.2+. Use your own objects and music,
 choose a look, and let Afterglow handle calibration, smooth playback, lighting and glow.
 
 ## Start in three steps
 
-1. **Choose your objects:** select their collection, or select emissive objects and
-   press **Use Selected**.
+1. **Select your objects and press Use Selected.** Afterglow adds emission where
+   needed, so you can start with ordinary meshes, curves or text.
 2. **Load your music and choose a look.**
 3. Press **Create Visual**. Use **Material Preview** or **Rendered** viewport shading,
    then press **Space** to preview.
@@ -16,8 +16,14 @@ choose a look, and let Afterglow handle calibration, smooth playback, lighting a
 Change the music or look and press **Update Visual**. It refreshes the whole show.
 There are no separate calibration, baking, lighting-build or glow setup steps.
 
+Already have emissive objects? Choose their collection directly. **Use Selected**
+prepares materials on local copies, keeping the original shaders and textures intact.
+
 Try **Laser Show** for sweeping green laser fans and violet washes. Rays appear
 on the beat without fog or extra setup; choose another look to replace the effect.
+
+**Data Strikes** and **Gun Bursts** each keep their beam visibility, glow and style
+inside their own effect settings under **Advanced Lighting**.
 
 The lighting fits your chosen collection. Arrange your scene and camera in Blender,
 then press **Update Visual** after changing the collection or look.
@@ -30,7 +36,7 @@ the music reactions; Blender handles rendering and video export.
 
 ## Install
 
-1. Download [afterglow-0.24.0.zip](dist/afterglow-0.24.0.zip).
+1. Download [afterglow-0.25.0.zip](dist/afterglow-0.25.0.zip).
 2. In Blender 5.2+, open **Edit → Preferences → Get Extensions → Install from Disk**
    and choose the ZIP.
 3. Open the 3D Viewport sidebar (`N`) and select **Afterglow**.

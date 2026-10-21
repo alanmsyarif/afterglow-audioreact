@@ -34,6 +34,9 @@ def legacy_look(scene):
     """The complete schema exported before laser support, without v2 fields."""
     snapshot = lookbook.capture(scene)
     snapshot["version"] = 1
+    for name in ("strikes", "gun"):
+        for field in ("visible_beam", "beam_glow"):
+            del snapshot["layers"][name][field]
     del snapshot["layers"]["lasers"]
     for name in ("laser_count", "laser_spread", "laser_sweep", "laser_glow"):
         del snapshot["effects"][name]
@@ -103,6 +106,10 @@ def test_bad_fields_and_values_rejected_before_any_setting_changes():
     data = copy.deepcopy(initial); data["version"] = True; invalid.append(data)
     data = copy.deepcopy(initial); data["version"] = lookbook.VERSION + 1; invalid.append(data)
     data = copy.deepcopy(initial); data["layers"]["strikes"]["extra"] = 1; invalid.append(data)
+    data = copy.deepcopy(initial); data["layers"]["gun"]["visible_beam"] = 1; invalid.append(data)
+    data = copy.deepcopy(initial); data["layers"]["gun"]["beam_glow"] = -0.1; invalid.append(data)
+    data = copy.deepcopy(initial); data["layers"]["blooms"]["visible_beam"] = True; invalid.append(data)
+    data = copy.deepcopy(initial); del data["layers"]["strikes"]["beam_glow"]; invalid.append(data)
     data = copy.deepcopy(initial); del data["effects"]["beams"]; invalid.append(data)
     data = copy.deepcopy(initial); data["effects"]["beams"] = 1; invalid.append(data)
     data = copy.deepcopy(initial); data["effects"]["strike_companions"] = 2.0; invalid.append(data)
@@ -182,9 +189,12 @@ def test_version_one_looks_keep_their_style_and_disable_lasers():
     before = copy.deepcopy(legacy)
     migrated = lookbook.loads(json.dumps(legacy))
     assert legacy == before
-    assert migrated["version"] == 2
-    assert {name: values for name, values in migrated["layers"].items()
-            if name != "lasers"} == legacy["layers"]
+    assert migrated["version"] == lookbook.VERSION
+    assert {name: {field: value for field, value in values.items() if field not in lookbook.BEAM_FIELDS}
+            for name, values in migrated["layers"].items() if name != "lasers"} == legacy["layers"]
+    for name in ("strikes", "gun"):
+        assert migrated["layers"][name]["visible_beam"] == legacy["effects"]["beams"]
+        assert migrated["layers"][name]["beam_glow"] == legacy["effects"]["beam_glow"]
     assert all(migrated["effects"][name] == value for name, value in legacy["effects"].items())
     assert migrated["object"] == legacy["object"]
     assert migrated["layers"]["lasers"] == {
@@ -199,13 +209,13 @@ def test_version_one_looks_keep_their_style_and_disable_lasers():
     assert not fx.lasers.enabled and fx.laser_count == 7
     assert abs(fx.laser_sweep - 0.7) < 1e-6
     exported = json.loads(lookbook.dumps(scene))
-    assert exported["version"] == 2 and "lasers" in exported["layers"]
+    assert exported["version"] == lookbook.VERSION and "lasers" in exported["layers"]
     assert all(exported["effects"][name] == value for name, value in legacy["effects"].items())
     migrated["layers"]["strikes"]["color"][0] = 0.0
     assert legacy == before
 
 
-def test_version_two_preserves_laser_style_and_legal_rna_boundaries():
+def test_current_schema_preserves_laser_style_and_legal_rna_boundaries():
     scene, objects = stage()
     fx = scene.afterglow.effects
     fx.lasers.enabled, fx.lasers.weight, fx.lasers.trigger_band = True, 0.35, "HIGH"
@@ -226,6 +236,7 @@ def test_versions_require_their_own_complete_schema():
     invalid = []
     data = copy.deepcopy(legacy); data["version"] = 2; invalid.append(data)
     data = copy.deepcopy(current); data["version"] = 1; invalid.append(data)
+    data = copy.deepcopy(current); data["version"] = 2; invalid.append(data)
     data = copy.deepcopy(legacy); data["effects"]["laser_glow"] = 1.0; invalid.append(data)
     data = copy.deepcopy(legacy); data["layers"]["lasers"] = current["layers"]["lasers"]; invalid.append(data)
     data = copy.deepcopy(legacy); del data["layers"]["signals"]; invalid.append(data)
@@ -251,6 +262,70 @@ def test_laser_animation_guards_also_protect_legacy_migration():
     before = lookbook.capture(scene)
     rejects(lambda: lookbook.apply(scene, legacy))
     assert lookbook.capture(scene) == before
+
+
+def test_version_two_shared_beams_migrate_into_each_effect_and_remain_independent():
+    scene, objects = stage()
+    fx = scene.afterglow.effects
+    current = lookbook.capture(scene)
+    legacy = copy.deepcopy(current)
+    legacy['version'] = 2
+    for name in ('strikes', 'gun'):
+        for field in lookbook.BEAM_FIELDS:
+            del legacy['layers'][name][field]
+    legacy['effects']['beams'] = True
+    legacy['effects']['beam_glow'] = 2.5
+    legacy['layers']['lasers']['enabled'] = True
+    legacy['effects']['laser_count'] = 11
+    normalized = lookbook.loads(json.dumps(legacy))
+    assert normalized['version'] == lookbook.VERSION
+    assert normalized['layers']['lasers']['enabled']
+    assert normalized['effects']['laser_count'] == 11
+    for name in ('strikes', 'gun'):
+        assert normalized['layers'][name]['visible_beam'] is True
+        assert normalized['layers'][name]['beam_glow'] == 2.5
+    lookbook.apply(scene, normalized)
+    assert fx.strikes.visible_beam and fx.gun.visible_beam
+    assert fx.strikes.beam_glow == fx.gun.beam_glow == 2.5
+    fx.strikes.visible_beam = False
+    fx.strikes.beam_glow = 0.4
+    assert fx.gun.visible_beam and fx.gun.beam_glow == 2.5
+    expected = lookbook.loads(lookbook.dumps(scene))
+    lookbook.apply(scene, normalized)
+    lookbook.apply(scene, expected)
+    assert lookbook.capture(scene) == expected
+
+
+def test_current_look_restores_opposing_beam_visibility_and_independent_glow():
+    scene, objects = stage()
+    fx = scene.afterglow.effects
+    fx.strikes.visible_beam, fx.gun.visible_beam = True, False
+    fx.strikes.beam_glow, fx.gun.beam_glow = 0.35, 2.75
+    expected = lookbook.loads(lookbook.dumps(scene))
+    assert set(expected['layers']['strikes']) == set(lookbook.LAYER_FIELDS + lookbook.BEAM_FIELDS)
+    assert set(expected['layers']['blooms']) == set(lookbook.LAYER_FIELDS)
+    fx.strikes.visible_beam, fx.gun.visible_beam = False, True
+    fx.strikes.beam_glow, fx.gun.beam_glow = 2.0, 0.0
+    lookbook.apply(scene, expected)
+    assert lookbook.capture(scene) == expected
+    assert fx.strikes.visible_beam and not fx.gun.visible_beam
+    assert abs(fx.strikes.beam_glow - 0.35) < 1e-6 and fx.gun.beam_glow == 2.75
+
+
+def test_per_effect_beam_animation_is_protected_when_applying_old_or_new_looks():
+    scene, objects = stage()
+    fx = scene.afterglow.effects
+    legacy = legacy_look(scene)
+    current = lookbook.capture(scene)
+    for name, field, value in (('strikes', 'visible_beam', True), ('gun', 'beam_glow', 0.7)):
+        layer = getattr(fx, name)
+        setattr(layer, field, value)
+        layer.keyframe_insert(field, frame=1)
+        before = lookbook.capture(scene)
+        for snapshot in (legacy, current):
+            rejects(lambda: lookbook.apply(scene, snapshot))
+            assert lookbook.capture(scene) == before
+        scene.animation_data_clear()
 
 
 helpers.run(globals())
