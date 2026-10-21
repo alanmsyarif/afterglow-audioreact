@@ -2,14 +2,15 @@
 
 Enable **Advanced Controls** at the bottom of the Afterglow panel to see manual
 scene timing, individual lighting layers, per-object response and custom looks.
-Choose your emissive collection or use **Use Selected** in the main panel, load your
+Choose an emissive collection, or select objects and press **Use Selected** to prepare
+their materials automatically. Load your
 music, choose a look and press **Create Visual**. Use **Material Preview** or
 **Rendered** viewport shading and press **Space** to preview the reaction.
 
 ## Where the manual tools live
 
 - **Timing & Glow:** offset the song or change automatic glow. The main panel
-  chooses the collection of your existing emissive objects.
+  chooses your collection or prepares selected meshes, curves and text for reaction.
 - **My Looks:** save a snapshot, import/export JSON, or build a custom saved look.
   Snapshots capture layer styling and the first reacting object's shared look.
 - **Ripple Motion:** choose direction and surface travel.
@@ -31,6 +32,23 @@ timeline preview range. Afterglow focuses on creating the reactive scene and lig
 rendering and video export use Blender's own controls. Create Visual preserves these
 settings and the timeline range. Automatic glow is skipped when native compositing
 is disabled; existing compositor nodes stay in place.
+
+## Prepare your objects
+
+**Use Selected** prepares ordinary meshes, curves and text automatically. Missing
+materials receive an emission-ready material. Existing non-emissive materials use
+local copies with emission added, retaining their shader connections and textures.
+Shared materials and geometry are isolated when needed so unselected objects keep
+their appearance. Existing editable emission is reused where safe; repeating the
+operation does not keep adding materials or reaction collections.
+
+**Remove Object Reaction** restores the original material assignments for slots still
+using automatically prepared materials, including after saving and reopening the
+project. Materials you reassigned manually and geometry edits stay in place.
+
+Choosing a collection directly expects emissive materials already. Select its objects
+and use **Use Selected** if they need preparation. Library-linked objects must be made
+local before their materials can be prepared.
 
 ## Scene controls
 
@@ -65,9 +83,9 @@ The Ripple settings live in their own collapsible **Ripple** section under Fast 
 
 Audio-only environment effects for the whole venue: independent, stackable light layers
 triggered by onsets in the track. Most layers generate **real lights only**
-(point and spot lamps with keyed energy, location and rotation). Opt into
-**Visible Beams** for shafts or **Signal Graphics** for travelling lines and arrival
-frames. **Laser Fans** includes thin emissive rays so it works without fog. Generated
+(point and spot lamps with keyed energy, location and rotation). Enable **Visible Beam**
+inside Data Strikes or Gun Bursts for shafts, or **Signal Graphics** for travelling lines
+and arrival frames. **Laser Fans** includes thin emissive rays so it works without fog. Generated
 objects live in a separate removable collection; the source venue stays unchanged.
 
 ### Layers
@@ -94,7 +112,7 @@ layers in gradually as the track builds (e.g. keyframe Weight 0 → 1).
 Choose **Laser Show** and **Create Visual** for the complete look. In Advanced Lighting,
 **Laser Fans** can also be combined with any other layer. Each attack opens a pair of
 sweeping fans from the venue rim. Thin native emissive curves make the rays visible in
-EEVEE and Cycles without fog or the Visible Beams switch. Silence stays dark.
+EEVEE and Cycles without fog or either effect's Visible Beam switch. Silence stays dark.
 
 **Rays per Fan**, **Spread** and **Sweep** change the fan shape and movement; rebuild
 after editing them. **Glow**, layer **Color** and **Brightness**, and the shared live mix
@@ -119,7 +137,7 @@ destination, not an unrelated random event. This layer uses three pooled real li
    **Alternate** control travel direction; Reverse retraces the same route. **Speed**
    sets scene units per second; layer **Timing** multiplies the travel duration.
 4. Optionally enable **Signal Graphics**, then **Build Effects**. This is **off by
-   default**, independent of Visible Beams. It adds thin native emissive curves: a
+   default**, independent of the strike and gun beam switches. It adds thin native emissive curves: a
    moving pulse with a **Tail Length**, plus broken rectangular frames that reveal,
    expand and fade on arrival. **Line Width**, **Frame Size** and **Signal Glow** shape
    the look. Signal Glow, Color and Intensity are live; routing/geometry edits need Build.
@@ -199,12 +217,17 @@ after another in name order (rename them to choreograph), **Random** draws one p
 collection; you can pick any other collection instead, and every object in it becomes a
 point. Moving a point marks the build outdated; Build and Remove Effects never touch them.
 
-### Visible Beams
+### Beams inside Data Strikes and Gun Bursts
 
 ![A Data Strike walking Down: the dashed filament grows from the top and lands on the floor on the beat, where its light flashes](images/strike_walk.gif)
 
-Off by default. **Visible Beams** makes the strikes visible in the air, not just as spill
-on surfaces:
+Open **Advanced Lighting → Data Strikes** or **Gun Bursts**. Each effect has its own
+**Visible Beam** switch, **Glow** and appearance controls in that same section. There
+is no separate global beam panel. The switches start off for a custom setup; applying
+a curated look configures them for you. Rebuild after changing visibility or geometry;
+each effect's Glow updates live and does not change the other effect.
+
+Visible beams show the effect in the air as well as through light spill on surfaces:
 
 - Each **Data Strike** becomes a thin, white-hot filament from the venue top to the floor,
   broken into short dashes (a different pattern per light) inside a faint glow. Its light
@@ -216,14 +239,12 @@ on surfaces:
   **behind** the moving light (never projecting ahead of it),
   and its spot tightens to the tracer's cone.
 
-Beam controls:
-
-**Strike Look** now has real silhouettes: **Filament** (one round core), **Twin** (two
+Inside **Data Strikes**, **Style** offers **Filament** (one round core), **Twin** (two
 parallel cores), and **Ribbon** (a flat strip). **Width** changes their thickness;
 **Companions** adds zero to four beaded filaments, with **Spread** setting their distance
 from the main strike. Strike height still reaches from the venue floor to its top.
 
-**Gun Look** offers **Tracer**, **Dart** (wide shoulder near the head and a fine tail),
+Inside **Gun Bursts**, **Style** offers **Tracer**, **Dart** (wide shoulder near the head and a fine tail),
 and **Streak** (thin, nearly constant width). **Length** and **Width** are independent
 multipliers; **Taper** adjusts tail width and **Tail Fade** controls how quickly its
 emission falls away. All three trail behind the actual moving light.
@@ -241,11 +262,11 @@ never the shape or materials of your existing environment. The original per-obje
 
 | Control | What it does |
 |---|---|
-| Glow | Brightness of all beams. |
-| Flow, Direction | How fast the dashes and beads stream (0 holds them still), and whether **Down** or **Up**. |
-| Gaps | How broken up the filaments are: 0 almost solid, 1 mostly gaps (the beaded companion is always a bit more broken up). |
-| Dash Size | Length of the dash pattern's features, in metres. |
-| Walk, Walk Time | How a Strike beam arrives: **Down** (default) grows it from the top so it lands on the floor exactly on the beat, then its tail follows it out; **Up** leaves the floor on the beat and grows to the top; **Off** shows it all at once. Walk Time is how many seconds the head takes to cross the height (the tail takes as long to leave), whatever the strike's length. |
+| Glow | Brightness of this effect's beams, independent of the other effect. |
+| Strike Flow, Direction | How fast the dashes and beads stream (0 holds them still), and whether **Down** or **Up**. |
+| Strike Gaps | How broken up the filaments are: 0 almost solid, 1 mostly gaps (the beaded companion is always a bit more broken up). |
+| Strike Dash Size | Length of the dash pattern's features, in metres. |
+| Strike Walk, Walk Time | How a Strike beam arrives: **Down** (default) grows it from the top so it lands on the floor exactly on the beat, then its tail follows it out; **Up** leaves the floor on the beat and grows to the top; **Off** shows it all at once. Walk Time is how many seconds the head takes to cross the height (the tail takes as long to leave), whatever the strike's length. |
 
 The beams are emissive meshes parented to their lights, with brightness keyed on the same envelope as the light, so they look the same in
 EEVEE and Cycles and cost almost nothing to render. They cast no shadows and light nothing
@@ -260,7 +281,7 @@ the lights.
    and set colours and bands.
 3. **Build Effects** analyses the sound once, then keys pooled real point/spot lights into
    a collection named `Afterglow Effects` in the current scene (plus their beam meshes
-   when Visible Beams is on, and thin curves for Laser Fans or Signal Graphics).
+   when that effect's Visible Beam is on, and thin curves for Laser Fans or Signal Graphics).
 4. Scrub or play. The effects are plain F-curve animation on a layered action, so they
    render in any engine and never touch the Sample Sound node.
 5. **Remove Effects** deletes this scene's effects collection and every datablock it owns
@@ -288,14 +309,14 @@ Start Frame: include that pre-roll in your playback/render range if you want to 
 Shows built with the previous peak detector are marked outdated and need rebuilding.
 
 **Live controls** need no rebuild: each layer's **Color** and **Intensity**, Cascade Trails
-**Size**, the beams' **Glow**, **Signal Glow** and **Laser Glow** retune the last build the moment you change them (a
+**Size**, each effect's beam **Glow**, **Signal Glow** and **Laser Glow** retune the last build the moment you change them (a
 keyframed Intensity is the exception: Build samples it per event). Other settings do not
 silently re-run: the panel shows *Build outdated* until you press Build again. The same sound, settings and Seed always produce the same show.
 
 **v0.16.1 fixes:** short Timing values keep each light's attack before its hold and
 fade-out, rather than leaving out-of-order brightness keys. Intensity 0 is fully dark
 and can be raised again without rebuilding, even when the show was built at zero or
-saved/reopened while muted. This applies to real lights, Visible Beams and Signal
+saved/reopened while muted. This applies to real lights, strike/gun beams and Signal
 Graphics and Laser Fans; animated Intensity is still sampled per event and needs Build. Rebuild older
 shows to get these fixes and the corrected trailing Gun Burst geometry.
 
@@ -328,7 +349,7 @@ sudo apt install libegl1 libgl1-mesa-dri libglx-mesa0
 2. Tag the commit with that version and push the tag:
 
    ```bash
-   git tag v0.24.0 && git push origin v0.24.0
+   git tag v0.25.0 && git push origin v0.25.0
    ```
 
 [`release.yml`](../.github/workflows/release.yml) runs the full test suite, checks the tag
@@ -338,11 +359,11 @@ it as a GitHub Release.
 ## Limitations (honest)
 
 - Generated effects add owned lights and optional graphics. Laser Fans includes ray
-  curves; Signal Graphics and Visible Beams add their own curves or meshes. Build
+  curves; Signal Graphics and the strike/gun beam switches add their own curves or meshes. Build
   never edits your source objects, materials or World.
-- Without Visible Beams, these layers have no visible "beam" or streak shape of their own:
+- With Visible Beam off, these layers have no visible "beam" or streak shape of their own:
   Strikes and Gun Bursts read as aimed spots, Cascade Trails as a cascade of travelling
-  points of light. Visible Beams covers Strikes and Gun Bursts only.
+  points of light. Each beam switch covers its own effect only.
 - Beam meshes are glows, not volumes: they don't light fog, and objects in front of a
   beam don't shadow it. Seen from straight above or below, a strike filament is a dot.
 - The effect timing and placement are an **interpretation** of the reference video's

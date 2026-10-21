@@ -50,7 +50,7 @@ class AFTERGLOW_OT_create_reaction(bpy.types.Operator):
 class AFTERGLOW_OT_use_selected(bpy.types.Operator):
     bl_idname = "afterglow.use_selected"
     bl_label = "Use Selected"
-    bl_description = "Link selected emissive objects into a new reaction collection; keep their existing collections"
+    bl_description = "Use selected meshes, curves or text, adding emission where needed and keeping their original materials"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -338,11 +338,13 @@ def draw_lasers(col, fx):
     col.prop(fx, "laser_glow", text="Glow")
 
 
-def draw_beams(col, fx):
-    """Separate beam silhouettes and seeded appearance variation from timing controls."""
-    col.active = fx.beams
-    col.prop(fx, "beam_glow")
-    col.label(text="Strike Look")
+def draw_strike_beam(col, fx):
+    """Keep the Data Strike's light and optional visible shaft in one place."""
+    col.separator()
+    col.prop(fx.strikes, "visible_beam", text="Visible Beam")
+    if not fx.strikes.visible_beam:
+        return
+    col.prop(fx.strikes, "beam_glow", text="Glow")
     col.row(align=True).prop(fx, "strike_style", expand=True)
     row = col.row(align=True)
     row.prop(fx, "strike_width")
@@ -352,20 +354,26 @@ def draw_beams(col, fx):
     sub = row.row(align=True)
     sub.active = fx.strike_companions > 0
     sub.prop(fx, "strike_spread")
+    col.row(align=True).prop(fx, "beam_walk", expand=True)
     row = col.row(align=True)
-    row.prop(fx, "beam_walk", expand=True)
-    sub = col.row(align=True)
-    sub.active = fx.beam_walk != "OFF"
-    sub.prop(fx, "beam_walk_time")
-    col.separator()
+    row.active = fx.beam_walk != "OFF"
+    row.prop(fx, "beam_walk_time")
     row = col.row(align=True)
     row.prop(fx, "beam_flow")
     row.prop(fx, "beam_direction", expand=True)
     row = col.row(align=True)
     row.prop(fx, "beam_gaps")
     row.prop(fx, "beam_dash")
+    col.label(text="Seed in Venue; rebuild after shape changes")
+
+
+def draw_gun_beam(col, fx):
+    """Keep the Gun Burst's light and optional visible streak in one place."""
     col.separator()
-    col.label(text="Gun Look")
+    col.prop(fx.gun, "visible_beam", text="Visible Beam")
+    if not fx.gun.visible_beam:
+        return
+    col.prop(fx.gun, "beam_glow", text="Glow")
     col.row(align=True).prop(fx, "gun_style", expand=True)
     row = col.row(align=True)
     row.prop(fx, "gun_length")
@@ -374,7 +382,7 @@ def draw_beams(col, fx):
     row.prop(fx, "gun_taper")
     row.prop(fx, "gun_fade")
     col.prop(fx, "gun_variation")
-    col.label(text="Seed in Venue; Build to apply")
+    col.label(text="Seed in Venue; rebuild after shape changes")
 
 
 class AFTERGLOW_OT_add_strike_point(bpy.types.Operator):
@@ -519,6 +527,9 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
                     draw_note(body, "No hits in this band. Try another Listen to band, then rebuild.", context, "INFO")
                 if name == "strikes":
                     draw_strike_points(body, fx)
+                    draw_strike_beam(body, fx)
+                elif name == "gun":
+                    draw_gun_beam(body, fx)
                 elif name == "downward":
                     draw_cascade(body, fx)
                 elif name == "signals":
@@ -532,10 +543,6 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         if body:
             draw_venue(body.column(), fx)
             body.prop(fx, "timing_offset")
-        head, body = layout.panel("AFTERGLOW_fx_beams", default_closed=True)
-        head.prop(fx, "beams", text="Visible Beams")
-        if body:
-            draw_beams(body.column(), fx)
         creator.draw_finish(layout, context)
 
 
@@ -582,7 +589,7 @@ class AFTERGLOW_PT_panel(bpy.types.Panel):
         row.prop(s, "sound", text="Music")
         row.operator("afterglow.load_sound", text="", icon="FILEBROWSER")
         if s.collection is None:
-            draw_note(source, "Choose your emissive collection, or select glowing objects and use Use Selected.", context)
+            draw_note(source, "Choose a collection, or select objects and press Use Selected to prepare their materials.", context)
         elif s.sound is None:
             draw_note(source, "Load music to drive your objects.", context)
 

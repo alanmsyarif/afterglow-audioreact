@@ -129,6 +129,8 @@ def _plan(scene, identifier):
                               "timing": timing, "intensity": intensity,
                               "color": look.get("layer_colors", {}).get(
                                   name, color_a if index % 2 == 0 else color_b)}
+    for name in ("strikes", "gun"):
+        layer_values[name].update({"visible_beam": look["fx"]["beams"], "beam_glow": 1.0})
     fx_values = {"beam_glow": 1.0, "signal_graphics": identifier == "SIGNAL_GRID",
                  "signal_glow": 1.0, "laser_count": 7, "laser_spread": 1.0,
                  "laser_sweep": 0.7, "laser_glow": 1.0, **look["fx"]}

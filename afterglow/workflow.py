@@ -3,7 +3,7 @@
 import bpy
 import numpy as np
 
-from . import bake, core, effects, materials, presets, tempo
+from . import bake, core, effects, materials, prepare, presets, tempo
 
 
 def inspect(scene):
@@ -44,7 +44,7 @@ def inspect(scene):
         warnings.append(f"{len(shared)} other objects share these emissive materials")
     reason = None
     if not s.collection:
-        reason = "Choose a collection or use selected glowing objects"
+        reason = "Choose a collection or use selected objects"
     elif not s.sound:
         reason = "Load a sound file to create the reaction"
     elif not core.sound_ok(s.sound):
@@ -54,7 +54,7 @@ def inspect(scene):
     elif readonly:
         reason = "Make linked objects local before creating a reaction"
     elif not eligible:
-        reason = "Add a local Emission material to a mesh, curve or text object"
+        reason = "Select your objects and press Use Selected to add emission automatically"
     elif shared:
         reason = ("Make shared emissive materials single-user, or include all their objects "
                   "in the chosen collection")
@@ -162,13 +162,18 @@ def create_show(scene, look_identifier=None, look_data=None):
 
 
 def use_selected(context):
-    """Link eligible selected objects into a local collection, retaining every old link."""
+    """Prepare selected objects and link them, keeping their original collections."""
+    if not context.scene.is_editable:
+        raise ValueError("Make the scene local before using selected objects")
     objects = sorted((ob for ob in context.selected_objects
-                      if ob.type in core.SUPPORTED and ob.is_editable
-                      and any(m.is_editable and materials.has_emission(m)
-                              for m in core._materials(ob))), key=lambda ob: ob.name)
+                      if ob.type in core.SUPPORTED and ob.is_editable), key=lambda ob: ob.name)
     if not objects:
-        raise ValueError("Select meshes, curves or text with local emissive materials first")
+        raise ValueError("Select editable meshes, curves or text first")
+    prepare.selected(objects)
+    current = context.scene.afterglow.collection
+    if (current and current.is_editable and current.name in context.scene.collection.children
+            and set(current.all_objects) == set(objects)):
+        return current
     collection = bpy.data.collections.new("Afterglow Selection")
     context.scene.collection.children.link(collection)
     for ob in objects:

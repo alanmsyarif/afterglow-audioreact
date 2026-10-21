@@ -5,8 +5,8 @@ Trails, Cascade Trails, Gun Bursts, Signal Network, Laser Fans) analyse the scen
 deterministically inside the shared venue bounds, and key pooled real lights in a
 tagged, removable collection. The original layers are lights only by default: the venue
 itself is left exactly as the user built it and the visible result is real light spill
-on existing objects. The opt-in Visible Beams gives each Data Strike and Gun Burst light
-a glowing shaft mesh, so they read as beams in the air, identically in EEVEE and Cycles.
+on existing objects. Data Strikes and Gun Bursts each have an optional visible beam, with their own
+glow strength. They render identically in EEVEE and Cycles.
 Signal Network can separately opt into thin emissive pulse curves and arrival frames.
 Laser Fans include thin emissive rays so their sweeps render without adding fog.
 Everything is world-space over the venue, never normalised per object, and silent audio
@@ -33,7 +33,7 @@ BASE = TAG + "_base"      # unscaled brightness keys, saved with each owned ID f
 GAIN = TAG + "_gain"      # a beam material's emission gain at Glow 1
 COLLECTION = "Afterglow Effects"
 PREFIX = "AFX"
-VERSION = 7  # pooled laser fans with recoverable light and ray brightness channels
+VERSION = 8  # independently configured strike and gun beam geometry
 MIN_GAP = 0.18       # s between two events of one layer
 ATTACK_S = 0.01     # positive band-envelope change over this many seconds
 ATTACK_WINDOW = 0.25  # local rise baseline, so a held bass note does not mask new attacks
@@ -1113,7 +1113,7 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
     fx = scene.afterglow.effects
     layer = getattr(fx, name)
     keys = _Keys()
-    beams = fx.beams and name in BEAM_LAYERS
+    beams = name in BEAM_LAYERS and layer.visible_beam
     cascade = name == "downward"
     units = [_make_unit(coll, name, slot, tuple(layer.color), beams,
                         fx.cascade_count if cascade else 1, fx.cascade_size if cascade else None)
@@ -1135,7 +1135,7 @@ def _build_layer(coll, scene, venue, name, events, fps, start, end):
             base = _strike_base(venue)
             walk = (fx.beam_walk, -base, venue.span_z - base)
             keys.walk = (fx.beam_walk, max(fx.beam_walk_time, 0.02))
-        mats = [_beam_material(name, k, tuple(layer.color), fx.beam_glow, flow, fx.beam_gaps, fx.beam_dash, walk,
+        mats = [_beam_material(name, k, tuple(layer.color), layer.beam_glow, flow, fx.beam_gaps, fx.beam_dash, walk,
                                vary=True, tracer_fade=fx.gun_fade)
                 for k in _beam_kinds(name)]
         sides = random.Random(f"{fx.seed}:{name}:beams")
@@ -1209,7 +1209,7 @@ def settings_sig(scene):
     fx = s.effects
     vals = [VERSION, fx.venue_shape, fx.seed, round(fx.height, 4), round(fx.margin, 4),
             round(fx.timing_offset, 4),
-            fx.beams, round(fx.beam_flow, 4), fx.beam_direction,
+            fx.strikes.visible_beam, fx.gun.visible_beam, round(fx.beam_flow, 4), fx.beam_direction,
             round(fx.beam_gaps, 4), round(fx.beam_dash, 4), fx.beam_walk, round(fx.beam_walk_time, 4),
             fx.strike_placement, fx.strike_order, fx.cascade_direction, fx.cascade_placement,
             fx.cascade_count, round(fx.cascade_spacing, 4)]
@@ -1358,7 +1358,7 @@ def live_update(scene):
                 glow = mat.node_tree.nodes.get("Glow")
                 if glow and GAIN in mat:
                     amount = (fx.signal_glow if name == "signals" else
-                              fx.laser_glow if name == "lasers" else fx.beam_glow)
+                              fx.laser_glow if name == "lasers" else layer.beam_glow)
                     glow.inputs[1].default_value = mat[GAIN] * amount
         coll[LIVE] = applied
         coll[MIX] = mixed

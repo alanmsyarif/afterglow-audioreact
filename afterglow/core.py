@@ -88,9 +88,12 @@ def _materials(ob):
 
 
 def _managed(scene):
-    """Objects in the current collection plus any object anywhere in the scene that still
-    carries an Afterglow modifier (collection switched, object moved out)."""
-    objs = {o for o in scene.objects if find_modifier(o)}
+    """Current targets plus scene objects with reactions or prepared materials.
+
+    Switched collections and objects moved out still participate in cleanup.
+    """
+    from . import prepare
+    objs = {o for o in scene.objects if find_modifier(o) or prepare.TAG in o}
     if scene.afterglow.collection:
         objs |= set(targets(scene.afterglow.collection))
     return objs
@@ -379,3 +382,5 @@ def remove(scene):
             ob.modifiers.remove(mod)
         for m in _materials(ob):
             materials.unpatch_material(m)
+        from . import prepare
+        prepare.restore(ob)

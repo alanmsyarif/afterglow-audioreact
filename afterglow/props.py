@@ -94,11 +94,45 @@ class AfterglowFXLayer:
 LAYER_COLORS = {"strikes": (0.55, 0.85, 1.0), "blooms": (1.0, 0.45, 0.85), "flashes": (1.0, 1.0, 1.0),
                 "trails": (1.0, 0.7, 0.3), "downward": (0.6, 0.5, 1.0), "gun": (1.0, 0.3, 0.2),
                 "signals": (0.5, 0.9, 1.0), "lasers": (0.3, 1.0, 0.55)}
-LAYER_TYPES = {  # one class per layer: a PropertyGroup can't vary a default per instance
-    name: type(f"AfterglowFXLayer_{name}", (AfterglowFXLayer, bpy.types.PropertyGroup), {"__annotations__": {
-        "color": FloatVectorProperty(name="Color", subtype="COLOR", size=3, min=0.0, max=1.0,
-                                     default=c, update=_live, description="Light colour, applied live")}})
-    for name, c in LAYER_COLORS.items()}
+def _visible_beam_get(self):
+    # Old .blend files have only the shared controls. Read those until this layer
+    # is edited, so upgrading does not change either its appearance or the UI.
+    return bool(self.get("visible_beam", self.id_data.afterglow.effects.beams))
+
+
+def _visible_beam_set(self, value):
+    self["visible_beam"] = bool(value)
+
+
+def _beam_glow_get(self):
+    return float(self.get("beam_glow", self.id_data.afterglow.effects.beam_glow))
+
+
+def _beam_glow_set(self, value):
+    self["beam_glow"] = float(value)
+
+
+def _layer_fields(name, color):
+    fields = {"color": FloatVectorProperty(
+        name="Color", subtype="COLOR", size=3, min=0.0, max=1.0,
+        default=color, update=_live, description="Light colour, applied live")}
+    if name in ("strikes", "gun"):
+        fields.update({
+            "visible_beam": BoolProperty(
+                name="Visible Beam", get=_visible_beam_get, set=_visible_beam_set,
+                description="Include this effect's glowing beam geometry; rebuild to apply"),
+            "beam_glow": FloatProperty(
+                name="Beam Glow", min=0.0, soft_max=4.0,
+                get=_beam_glow_get, set=_beam_glow_set, update=_live,
+                description="Brightness of this effect's visible beams, applied live"),
+        })
+    return fields
+
+
+LAYER_TYPES = {  # per-layer classes give colors and beam controls their own home
+    name: type(f"AfterglowFXLayer_{name}", (AfterglowFXLayer, bpy.types.PropertyGroup),
+               {"__annotations__": _layer_fields(name, color)})
+    for name, color in LAYER_COLORS.items()}
 
 
 def _reshape_cage(self, context):
@@ -131,11 +165,12 @@ class AfterglowEffects(bpy.types.PropertyGroup):
                           description="How far above the venue the effects rise")
     margin: FloatProperty(name="Margin", default=1.15, min=0.2, max=4.0,
                           description="Grow or shrink the venue footprint around the collection")
-    beams: BoolProperty(name="Visible Beams", default=False,
+    beams: BoolProperty(name="Legacy Visible Beams", default=False, options={"HIDDEN", "ANIMATABLE"},
                         description="Give each Data Strike and Gun Burst light a glowing shaft mesh, so they "
                         "show as beams in the air (the same in EEVEE and Cycles). Adds tagged shaft meshes "
                         "and materials to the effects collection")
-    beam_glow: FloatProperty(name="Glow", default=1.0, min=0.0, soft_max=4.0, update=_live,
+    beam_glow: FloatProperty(name="Legacy Beam Glow", default=1.0, min=0.0, soft_max=4.0,
+                             options={"HIDDEN", "ANIMATABLE"}, update=_live,
                              description="Brightness of the beam shafts, applied live")
     strike_style: EnumProperty(name="Style", default="FILAMENT", options=set(), items=(
         ("FILAMENT", "Filament", "One thin round filament and its glow sleeve"),

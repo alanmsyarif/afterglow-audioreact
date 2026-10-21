@@ -1,7 +1,7 @@
 """Portable, declarative style snapshots; never project wiring or executable code.
 
-Schema version 2 captures all eight layer styles and a fixed set of effect appearance
-controls. Version 1 looks retain their styling with the new laser layer disabled.
+Schema version 3 captures independent strike and gun beam visibility and glow.
+Versions 1 and 2 retain their shared beam appearance; version 1 disables lasers.
 A common object style comes from the first reacting object by name in the
 chosen collection. FX-only scenes use object=None. Applying a snapshot styles existing
 reacting objects, but does not create modifiers, build effects, or refresh a bake.
@@ -12,11 +12,13 @@ import math
 from . import core, effects, nodes, presets
 
 FORMAT = "afterglow.look"
-VERSION = 2
+VERSION = 3
 MAX_BYTES = 65536
 
 # Public, stable field names: omit project-specific placement/routing/mixer controls.
 LAYER_FIELDS = ("enabled", "weight", "trigger_band", "timing", "intensity", "color")
+BEAM_FIELDS = ("visible_beam", "beam_glow")
+BEAM_LAYERS = ("strikes", "gun")
 OBJECT_FIELDS = ("Use Colors", "Color A", "Color B", "Glow", "Intensity", "Decay")
 
 # (type, lower/enum choices, upper). Numeric upper bounds also limit pathological
@@ -74,6 +76,7 @@ _LAYER_SPECS = {
     "intensity": ("float", 0.0, 4.0),
     "color": ("color", 3),
 }
+_BEAM_SPECS = {"visible_beam": ("bool",), "beam_glow": ("float", 0.0, _LIMIT)}
 _OBJECT_SPECS = {
     "Use Colors": ("bool",),
     "Color A": ("color", 4),
@@ -82,6 +85,15 @@ _OBJECT_SPECS = {
     "Intensity": ("float", 0.0, _LIMIT),
     "Decay": ("float", 0.0, _LIMIT),
 }
+
+
+def layer_fields(name):
+    """Exact current fields for a layer; only strikes and gun bursts have beams."""
+    return LAYER_FIELDS + (BEAM_FIELDS if name in BEAM_LAYERS else ())
+
+
+def _layer_specs(name, version):
+    return {**_LAYER_SPECS, **_BEAM_SPECS} if version >= 3 and name in BEAM_LAYERS else _LAYER_SPECS
 
 
 def _keys(value, keys, location):
@@ -137,18 +149,22 @@ def _record(value, specs, location):
 def validate(data):
     """Return a normalized independent snapshot, or reject it before any mutations."""
     _keys(data, ("format", "version", "layers", "effects", "object"), "look")
-    if data["format"] != FORMAT or type(data["version"]) is not int or data["version"] not in (1, VERSION):
-        raise ValueError("Unsupported look format or version; export a version 1 or 2 Afterglow look")
-    legacy = data["version"] == 1
+    if data["format"] != FORMAT or type(data["version"]) is not int or data["version"] not in (1, 2, VERSION):
+        raise ValueError("Unsupported look format or version; use an Afterglow look version 1, 2 or 3")
+    version = data["version"]
+    legacy = version == 1
     layer_names = _V1_LAYERS if legacy else effects.LAYERS
     _keys(data["layers"], layer_names, "layers")
-    layers = {name: _record(data["layers"][name], _LAYER_SPECS, f"layers.{name}")
+    layers = {name: _record(data["layers"][name], _layer_specs(name, version), f"layers.{name}")
               for name in layer_names}
     appearance = _record(data["effects"], _V1_EFFECT_SPECS if legacy else EFFECT_SPECS, "effects")
     if legacy:
         layers["lasers"] = {"enabled": False, "weight": 0.8, "trigger_band": "LOW",
                             "timing": 1.0, "intensity": 1.0, "color": [0.3, 1.0, 0.55]}
         appearance.update(_LASER_DEFAULTS)
+    if version < 3:
+        for name in BEAM_LAYERS:
+            layers[name].update(visible_beam=appearance["beams"], beam_glow=appearance["beam_glow"])
     obj = None if data["object"] is None else _record(data["object"], _OBJECT_SPECS, "object")
     return {"format": FORMAT, "version": VERSION, "layers": layers,
             "effects": appearance, "object": obj}
@@ -163,7 +179,7 @@ def _plain(value):
 def capture(scene):
     """Capture styling only; the first reacting target by name supplies object style."""
     fx = scene.afterglow.effects
-    layers = {name: {prop: _plain(getattr(getattr(fx, name), prop)) for prop in LAYER_FIELDS}
+    layers = {name: {prop: _plain(getattr(getattr(fx, name), prop)) for prop in layer_fields(name)}
               for name in effects.LAYERS}
     object_style = None
     collection = scene.afterglow.collection
@@ -181,7 +197,7 @@ def _plan(scene, data):
     """Validate snapshot and animation conflicts without applying any values."""
     data = validate(data)
     scene_paths = {f"afterglow.effects.{name}.{prop}"
-                   for name in effects.LAYERS for prop in LAYER_FIELDS}
+                   for name in effects.LAYERS for prop in layer_fields(name)}
     scene_paths.update(f"afterglow.effects.{name}" for name in EFFECT_FIELDS)
     presets._guard(scene, scene_paths)
     objects = []

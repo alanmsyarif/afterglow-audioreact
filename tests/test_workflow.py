@@ -129,12 +129,12 @@ def test_empty_or_unlit_collection_has_an_actionable_reason():
     other = bpy.data.collections.new("Empty")
     scene.collection.children.link(other)
     scene.afterglow.collection = other
-    assert "Emission" in workflow.inspect(scene)["reason"]
+    assert "Use Selected" in workflow.inspect(scene)["reason"]
     plane("Unlit", other)
     assert not workflow.inspect(scene)["ready"]
 
 
-def test_use_selected_keeps_existing_collection_links_and_skips_unlit_objects():
+def test_use_selected_keeps_existing_links_and_prepares_unlit_objects():
     scene, coll = stage()
     plain = plane("Unlit", coll)
     for ob in coll.objects:
@@ -142,9 +142,10 @@ def test_use_selected_keeps_existing_collection_links_and_skips_unlit_objects():
     before = {ob.name: set(ob.users_collection) for ob in coll.objects}
     selected = workflow.use_selected(bpy.context)
     assert selected == scene.afterglow.collection
-    assert len(selected.objects) == 2 and plain.name not in selected.objects
+    assert len(selected.objects) == 3 and plain.name in selected.objects
+    assert materials.has_emission(plain.material_slots[0].material)
     for ob in selected.objects:
-        assert before[ob.name] < set(ob.users_collection)
+        assert before[ob.name] <= set(ob.users_collection)
 
 
 def test_empty_selection_does_not_create_a_collection():

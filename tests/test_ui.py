@@ -207,16 +207,22 @@ def test_effects_panel_exposes_the_global_timing_offset():
     assert not prop.is_animatable  # one static post-snap shift, not an unsampled F-curve
 
 
-def test_effects_panel_draws_its_sections():
+def test_effects_panel_keeps_beam_controls_inside_their_own_layers():
     stage()
     from afterglow import ui
+    fx = bpy.context.scene.afterglow.effects
+    fx.strikes.enabled = fx.gun.enabled = True
+    fx.strikes.visible_beam = fx.gun.visible_beam = True
     log = []
     panel = type("P", (), {"layout": FakeLayout(log)})()
     ui.AFTERGLOW_PT_effects.draw(panel, bpy.context)
-    assert ("panel", "AFTERGLOW_fx_venue") in log and ("panel", "AFTERGLOW_fx_beams") in log
+    assert ("panel", "AFTERGLOW_fx_venue") in log
+    assert ("panel", "AFTERGLOW_layer_strikes") in log and ("panel", "AFTERGLOW_layer_gun") in log
+    assert ("panel", "AFTERGLOW_fx_beams") not in log
     drawn = {n for kind, n in log if kind == "prop"}
-    for name in ("venue_shape", "emitter", "beams", "beam_glow", "beam_walk", "beam_walk_time",
-                 "beam_flow", "beam_direction", "beam_gaps", "beam_dash"):
+    assert "beams" not in drawn
+    for name in ("venue_shape", "emitter", "visible_beam", "beam_glow", "beam_walk", "beam_walk_time",
+                 "beam_flow", "beam_direction", "beam_gaps", "beam_dash", "strike_style", "gun_style"):
         assert name in drawn, name
     assert ("op", "afterglow.build_effects") in log
 
