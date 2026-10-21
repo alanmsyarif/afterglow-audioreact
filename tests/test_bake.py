@@ -320,4 +320,24 @@ def test_through_toggle_keeps_bake_current():
     assert bake.outdated(scene) == []
 
 
+def test_save_as_relative_sound_path_keeps_current_playback_bake():
+    import tempfile
+    from pathlib import Path
+    scene = bpy.context.scene
+    coll = bpy.data.collections.new("Portable Bake")
+    scene.collection.children.link(coll)
+    plane("portable", coll, emission_material("portable material"))
+    scene.afterglow.collection = coll
+    scene.afterglow.sound = sound()
+    core.apply(scene)
+    scene.afterglow.fast_playback = True
+    assert not bake.outdated(scene)
+    with tempfile.TemporaryDirectory() as folder:
+        path = str(Path(folder) / "portable-bake.blend")
+        bpy.ops.wm.save_as_mainfile(filepath=path)
+        assert not bake.outdated(scene), "Save As must not invalidate unchanged audio"
+        bpy.ops.wm.open_mainfile(filepath=path)
+        assert not bake.outdated(bpy.context.scene)
+
+
 helpers.run(globals())

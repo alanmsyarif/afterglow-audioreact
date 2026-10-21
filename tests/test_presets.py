@@ -29,7 +29,7 @@ def test_all_looks_have_distinct_layer_and_color_choices():
         enabled = tuple(name for name in effects.LAYERS if getattr(fx, name).enabled)
         assert count == len(enabled) > 0
         snapshots.add((enabled, tuple(fx.blooms.color)))
-    assert len(snapshots) == 4
+    assert len(snapshots) == 5
 
 
 def test_look_styles_reactive_objects_without_building_or_rebaking():
@@ -148,6 +148,15 @@ def test_invalid_look_leaves_settings_unchanged():
     else:
         raise AssertionError("Unknown look must report an error")
     assert not any(getattr(scene.afterglow.effects, name).enabled for name in effects.LAYERS)
+
+
+def test_laser_show_pairs_green_rays_with_violet_washes():
+    scene = bpy.context.scene
+    presets.apply(scene, "LASER_SHOW")
+    fx = scene.afterglow.effects
+    assert fx.lasers.enabled and fx.blooms.enabled and not fx.beams
+    assert fx.lasers.color.g > fx.lasers.color.r and fx.lasers.color.g > fx.lasers.color.b
+    assert fx.blooms.color.b > fx.blooms.color.g and fx.blooms.color.r > fx.blooms.color.g
 
 
 helpers.run(globals())

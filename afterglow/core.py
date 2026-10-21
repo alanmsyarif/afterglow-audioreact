@@ -305,8 +305,10 @@ def replace(scene):
 
 
 def setup_playback(scene):
-    """One sound strip at Start Frame playing the scene's Sound, Sync to Audio on, and the
-    frame range extended to cover the song. Removes the strip when there is no sound."""
+    """Play the scene's Sound at Start Frame with audio sync, preserving render ranges.
+
+    Removes the strip when there is no sound. Blender owns the output frame range.
+    """
     s = scene.afterglow
     se = scene.sequence_editor_create()
     strip = se.strips.get(STRIP_NAME)
@@ -340,7 +342,6 @@ def setup_playback(scene):
                 os.remove(temporary)
     strip.frame_start = s.start_frame
     scene.sync_mode = "AUDIO_SYNC"
-    scene.frame_end = max(scene.frame_end, strip.frame_final_end - 1)
 
 
 def sync(scene):

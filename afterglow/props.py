@@ -4,7 +4,7 @@ import bpy
 from bpy.props import (BoolProperty, EnumProperty, FloatProperty, FloatVectorProperty,
                        IntProperty, PointerProperty, StringProperty, CollectionProperty)
 
-from . import bake, core, delivery, effects, materials, nodes, presets, starter, tempo
+from . import bake, core, effects, materials, nodes, presets, starter, tempo
 
 REBAKE_DELAY = 0.3  # s of quiet after the last setting change before the automatic re-bake
 _pending = {}       # scene name -> time of its last change still waiting for a re-bake
@@ -93,7 +93,7 @@ class AfterglowFXLayer:
 
 LAYER_COLORS = {"strikes": (0.55, 0.85, 1.0), "blooms": (1.0, 0.45, 0.85), "flashes": (1.0, 1.0, 1.0),
                 "trails": (1.0, 0.7, 0.3), "downward": (0.6, 0.5, 1.0), "gun": (1.0, 0.3, 0.2),
-                "signals": (0.5, 0.9, 1.0)}
+                "signals": (0.5, 0.9, 1.0), "lasers": (0.3, 1.0, 0.55)}
 LAYER_TYPES = {  # one class per layer: a PropertyGroup can't vary a default per instance
     name: type(f"AfterglowFXLayer_{name}", (AfterglowFXLayer, bpy.types.PropertyGroup), {"__annotations__": {
         "color": FloatVectorProperty(name="Color", subtype="COLOR", size=3, min=0.0, max=1.0,
@@ -240,6 +240,16 @@ class AfterglowEffects(bpy.types.PropertyGroup):
                          description="Short fast directed spots fired from the rim toward the centre")
     signals: PointerProperty(type=LAYER_TYPES["signals"], name="Signal Network",
                              description="Audio attacks send a light pulse along connected anchors")
+    lasers: PointerProperty(type=LAYER_TYPES["lasers"], name="Laser Fans",
+                            description="Beat-triggered fans of thin rays sweeping across the stage")
+    laser_count: IntProperty(name="Rays per Fan", default=7, min=3, max=12,
+                             description="Number of visible rays in each laser fan; rebuild to apply")
+    laser_spread: FloatProperty(name="Fan Spread", default=1.0, min=0.1, max=2.6, subtype="ANGLE",
+                                description="Angle between the outside rays of each fan; rebuild to apply")
+    laser_sweep: FloatProperty(name="Sweep", default=0.7, min=0.0, max=1.6, subtype="ANGLE",
+                               description="How far each fan sweeps during a beat; rebuild to apply")
+    laser_glow: FloatProperty(name="Laser Glow", default=1.0, min=0.0, soft_max=4.0,
+                              update=_live, description="Brightness of visible laser rays, applied live")
     signal_anchors: PointerProperty(type=bpy.types.Collection, name="Signal Anchors",
                                     description="Anchor objects in name order, using their full world-space "
                                     "positions. Empty: four anchors fitted to the venue")
@@ -287,17 +297,17 @@ class AfterglowSavedLook(bpy.types.PropertyGroup):
 
 
 class AfterglowScene(bpy.types.PropertyGroup):
+    show_advanced: BoolProperty(name="Advanced Controls", default=False, options=set(),
+                                description="Show individual effects, object tuning and manual build tools")
+    easy_source: EnumProperty(name="Scene Source", default="AUTO", options=set(), items=(
+        ("AUTO", "Automatic", "Use the chosen collection, or create a starter stage when none is chosen"),
+        ("STAGE", "Starter Stage", "Use the selected starter design"),
+        ("CUSTOM", "My Objects", "Use an existing emissive collection and your own track"),
+    ))
+    easy_glow: BoolProperty(name="Soft Glow", default=True, options=set(),
+                           description="Create Visual adds compositor glow; turn off to remove only Afterglow's glow")
     stage_layout: EnumProperty(name="Stage Design", items=starter.LAYOUT_ITEMS, default="RING", options=set(),
                                description="Choose a design, then Add Starter Stage; browsing keeps your scene intact")
-    preview_offset: FloatProperty(name="From", default=0.0, min=0.0, soft_max=600.0,
-                                  unit="TIME_ABSOLUTE", options=set(), description="Seconds into the audio track to audition")
-    preview_duration: FloatProperty(name="Length", default=8.0, min=0.1, soft_max=60.0,
-                                    unit="TIME_ABSOLUTE", options=set(), description="Playback-only loop duration in seconds")
-    delivery_format: EnumProperty(name="Output Size", items=delivery.FORMAT_ITEMS, default="LANDSCAPE", options=set())
-    output_format: EnumProperty(name="File Format", items=delivery.OUTPUT_ITEMS, default="PNG_SEQUENCE", options=set())
-    output_path: StringProperty(name="Output Path", default="//afterglow-output/", subtype="FILE_PATH")
-    output_include_tail: BoolProperty(name="Include Fade-out", default=True,
-                                      description="Keep two seconds after the track for reaction and effect fade-out")
     saved_looks: CollectionProperty(type=AfterglowSavedLook)
     saved_look_index: IntProperty(name="Saved Look", default=0, min=0)
     new_look_name: StringProperty(name="Name", default="My Look", maxlen=64)

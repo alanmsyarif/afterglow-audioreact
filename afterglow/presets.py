@@ -12,12 +12,14 @@ DESCRIPTIONS = {
     "CINEMATIC_PULSE": "Warm gold and cool blue, restrained blooms and deliberate impacts",
     "AURORA_FLOW": "Mint and violet, soft blooms and flowing trails",
     "SIGNAL_GRID": "Icy cyan and amber, connected signals and crisp digital strikes",
+    "LASER_SHOW": "Neon green laser fans sweep on the beat over violet washes",
 }
 ITEMS = tuple((identifier, name, DESCRIPTIONS[identifier]) for identifier, name in (
     ("NEON_CLUB", "Neon Club"),
     ("CINEMATIC_PULSE", "Cinematic Pulse"),
     ("AURORA_FLOW", "Aurora Flow"),
     ("SIGNAL_GRID", "Signal Grid"),
+    ("LASER_SHOW", "Laser Show"),
 ))
 
 # Colors are linear RGB, as expected by Blender's Color properties.
@@ -55,6 +57,15 @@ _LOOKS = {
         "fx": {"beams": True, "strike_style": "FILAMENT", "gun_style": "STREAK",
                "strike_companions": 0, "gun_length": 0.8},
         "object": (0.015, 1.1, 0.09),
+    },
+    "LASER_SHOW": {
+        "colors": ((0.42, 0.025, 1.0), (0.08, 1.0, 0.2)),
+        "layer_colors": {"blooms": (0.42, 0.025, 1.0)},
+        "layers": {"lasers": (1.0, "LOW", 1.5, 1.0),
+                   "blooms": (0.4, "MID", 1.8, 0.45)},
+        "fx": {"beams": False, "strike_style": "FILAMENT", "gun_style": "TRACER",
+               "strike_companions": 0, "gun_length": 1.0},
+        "object": (0.02, 0.85, 0.18),
     },
 }
 
@@ -116,9 +127,11 @@ def _plan(scene, identifier):
         weight, band, timing, intensity = look["layers"].get(name, (0.5, "LOW", 1.0, 1.0))
         layer_values[name] = {"enabled": enabled, "weight": weight, "trigger_band": band,
                               "timing": timing, "intensity": intensity,
-                              "color": color_a if index % 2 == 0 else color_b}
+                              "color": look.get("layer_colors", {}).get(
+                                  name, color_a if index % 2 == 0 else color_b)}
     fx_values = {"beam_glow": 1.0, "signal_graphics": identifier == "SIGNAL_GRID",
-                 "signal_glow": 1.0, **look["fx"]}
+                 "signal_glow": 1.0, "laser_count": 7, "laser_spread": 1.0,
+                 "laser_sweep": 0.7, "laser_glow": 1.0, **look["fx"]}
     scene_paths = {f"afterglow.effects.{name}.{prop}"
                    for name, values in layer_values.items() for prop in values}
     scene_paths.update(f"afterglow.effects.{name}" for name in fx_values)

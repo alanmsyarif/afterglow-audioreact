@@ -466,9 +466,10 @@ def test_build_creates_only_tagged_lights():
     assert set(colls[0].all_objects) == set(objs)
 
 
-def test_build_generates_no_meshes_or_materials():
+def test_light_only_layers_generate_no_meshes_or_materials():
     scene = stage()
-    enable(scene, *effects.LAYERS)
+    names = tuple(name for name in effects.LAYERS if name != "lasers")
+    enable(scene, *names)
     user_meshes = set(bpy.data.meshes)
     user_mats = set(bpy.data.materials)
     effects.build(scene)
@@ -478,7 +479,7 @@ def test_build_generates_no_meshes_or_materials():
     assert set(bpy.data.meshes) == user_meshes         # the venue is left exactly as built
     assert set(bpy.data.materials) == user_mats
     want = sum(effects.POOL[n] * (scene.afterglow.effects.cascade_count if n == "downward" else 1)
-               for n in effects.LAYERS)
+               for n in names)
     assert len(fx_objs()) == want                      # the expected tagged LIGHT count
 
 

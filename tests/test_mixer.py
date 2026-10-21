@@ -58,7 +58,7 @@ def test_master_scales_lights_beams_and_signals_without_rebuilding():
     assert all(counts[name] > 0 for name in effects.LAYERS), counts
     baseline = keys(scene)
     assert {key[0] for key in baseline} == set(effects.LAYERS)
-    assert {key[0] for key in baseline if key[2] == effects.GLOW_PATH} == {"strikes", "gun", "signals"}
+    assert {key[0] for key in baseline if key[2] == effects.GLOW_PATH} == {"strikes", "gun", "signals", "lasers"}
     identity = (set(bpy.data.objects), set(bpy.data.actions))
     fx = scene.afterglow.effects
     for multiplier in (0.25, 0.0, 2.0, 0.0, 1.0):
@@ -94,7 +94,7 @@ def test_solo_preserves_layer_settings_and_restores_the_full_mix():
     fx = scene.afterglow.effects
     state = [(getattr(fx, name).enabled, getattr(fx, name).intensity, getattr(fx, name).weight)
              for name in effects.LAYERS]
-    for solo in ("signals", "strikes", "blooms", "ALL"):
+    for solo in ("signals", "lasers", "strikes", "blooms", "ALL"):
         fx.solo_layer = solo
         assert_scale(baseline, keys(scene), lambda name: 1.0 if solo in ("ALL", name) else 0.0)
     assert state == [(getattr(fx, name).enabled, getattr(fx, name).intensity, getattr(fx, name).weight)
@@ -119,7 +119,7 @@ def test_intensity_edits_while_muted_recover_from_original_source_keys():
 
 
 def test_show_built_at_zero_can_be_unmuted_after_saving_and_reopening():
-    scene = stage("strikes", "signals")
+    scene = stage("strikes", "signals", "lasers")
     effects.build(scene)
     baseline = keys(scene)
     scene.afterglow.effects.master_brightness = 0.0
