@@ -2,7 +2,7 @@ import bpy
 from bpy.props import StringProperty
 from bpy_extras.io_utils import ImportHelper
 
-from . import bake, core, creator, easy, effects, nodes, presets, starter, tempo, workflow
+from . import bake, core, creator, easy, effects, nodes, presets, tempo, workflow
 
 
 def draw_note(layout, text, context=None, icon="NONE"):
@@ -18,7 +18,7 @@ def draw_note(layout, text, context=None, icon="NONE"):
 class AFTERGLOW_OT_create_visual(bpy.types.Operator):
     bl_idname = "afterglow.create_visual"
     bl_label = "Create Visual"
-    bl_description = "Create or update the complete visual: scene, look, calibrated reaction, lighting and optional glow"
+    bl_description = "Apply the look, calibrated music reaction, lighting and optional glow to your objects"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -27,14 +27,7 @@ class AFTERGLOW_OT_create_visual(bpy.types.Operator):
         except (ValueError, RuntimeError) as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
-        camera = starter.camera_for(context.scene.afterglow.collection)
-        if camera and context.scene.camera == camera and context.area and context.area.type == "VIEW_3D":
-            space = context.space_data
-            space.region_3d.view_perspective = "CAMERA"
-            space.shading.type = "MATERIAL"
-            space.shading.use_scene_lights = True
-            space.shading.use_scene_world = True
-        self.report({"INFO"}, "Visual ready. Press Space to preview")
+        self.report({"INFO"}, "Visual ready. Use Material Preview or Rendered view, then press Space")
         return {"FINISHED"}
 
 
@@ -60,47 +53,18 @@ class AFTERGLOW_OT_use_selected(bpy.types.Operator):
     bl_description = "Link selected emissive objects into a new reaction collection; keep their existing collections"
     bl_options = {"REGISTER", "UNDO"}
 
+    @classmethod
+    def poll(cls, context):
+        return (not getattr(context.screen, "is_animation_playing", False)
+                and bool(context.selected_objects))
+
     def execute(self, context):
         try:
             collection = workflow.use_selected(context)
         except ValueError as e:
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
-        self.report({"INFO"}, f"Using {collection.name}. Pick a sound, then Create Reaction")
-        return {"FINISHED"}
-
-
-class AFTERGLOW_OT_create_starter(bpy.types.Operator):
-    bl_idname = "afterglow.create_starter"
-    bl_label = "Add Starter Stage"
-    bl_description = "Add a ready-to-light stage and camera, plus packed sample audio if no sound is selected"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        starter.create(context, layout=context.scene.afterglow.stage_layout)
-        self.report({"INFO"}, "Starter stage added. Press Create Reaction to animate it")
-        return {"FINISHED"}
-
-
-class AFTERGLOW_OT_preview_stage(bpy.types.Operator):
-    bl_idname = "afterglow.preview_stage"
-    bl_label = "Preview Stage"
-    bl_description = "Switch to the starter camera and Material Preview with scene lighting, then press Space to play"
-    bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context):
-        return starter.camera_for(context.scene.afterglow.collection) is not None
-
-    def execute(self, context):
-        context.scene.camera = starter.camera_for(context.scene.afterglow.collection)
-        if context.area and context.area.type == "VIEW_3D":
-            space = context.space_data
-            space.region_3d.view_perspective = "CAMERA"
-            space.shading.type = "MATERIAL"
-            space.shading.use_scene_lights = True
-            space.shading.use_scene_world = True
-        self.report({"INFO"}, "Starter camera selected. Press Space to play the timeline")
+        self.report({"INFO"}, f"Using {collection.name}. Load music, choose a look, then Create Visual")
         return {"FINISHED"}
 
 
@@ -607,31 +571,31 @@ class AFTERGLOW_PT_panel(bpy.types.Panel):
         playing = getattr(context.screen, "is_animation_playing", False)
         source = layout.box()
         source.label(text="Scene & Music", icon="SOUND")
-        if s.collection is None:
-            source.prop(s, "stage_layout", text="Scene")
-        elif s.collection.get(starter.TAG):
-            label = dict((item[0], item[1]) for item in starter.LAYOUT_ITEMS).get(
-                s.collection.get(starter.LAYOUT_KEY, "RING"), s.collection.name)
-            source.label(text="Scene: " + label, icon="MESH_CUBE")
-        else:
-            source.prop(s, "collection", text="Objects")
+        row = source.row(align=True)
+        row.enabled = not playing
+        row.prop(s, "collection", text="Objects")
+        selected = source.row()
+        selected.enabled = not playing and bool(getattr(context, "selected_objects", ()))
+        selected.operator("afterglow.use_selected", text="Use Selected", icon="RESTRICT_SELECT_OFF")
         row = source.row(align=True)
         row.enabled = not playing
         row.prop(s, "sound", text="Music")
         row.operator("afterglow.load_sound", text="", icon="FILEBROWSER")
-        if s.sound is None and s.collection is None:
-            draw_note(source, "No music yet? Create Visual includes a demo beat.", context)
+        if s.collection is None:
+            draw_note(source, "Choose your emissive collection, or select glowing objects and use Use Selected.", context)
+        elif s.sound is None:
+            draw_note(source, "Load music to drive your objects.", context)
 
         layout.prop(s, "creative_look", text="Look")
         action = layout.column()
-        action.enabled = not playing
+        action.enabled = not playing and s.collection is not None and s.sound is not None
         action.scale_y = 1.6
         built = bool(effects._collections(scene))
         action.operator("afterglow.create_visual", text="Update Visual" if built else "Create Visual", icon="PLAY")
         if built:
             draw_note(layout, "Press Space to preview. Use Update Visual after changing the music or look.", context, "INFO")
         else:
-            draw_note(layout, "Sets up the scene, lighting and smooth playback for you.", context)
+            draw_note(layout, "Adds music reactions and lighting to your objects. Preview in Material or Rendered view.", context)
         layout.separator()
         layout.prop(s, "show_advanced", text="Advanced Controls")
         if s.show_advanced:
@@ -643,18 +607,11 @@ def draw_advanced(layout, context):
     s = context.scene.afterglow
     playing = getattr(context.screen, "is_animation_playing", False)
     head, body = layout.panel("AFTERGLOW_sources", default_closed=True)
-    head.label(text="Custom Scene & Timing", icon="COLLECTION_NEW")
+    head.label(text="Timing & Glow", icon="TIME")
     if body:
         body.enabled = not playing
-        body.prop(s, "easy_source", text="Source")
-        body.prop(s, "collection")
-        body.operator("afterglow.use_selected", text="Use Selected Objects", icon="RESTRICT_SELECT_OFF")
-        body.prop(s, "stage_layout", text="New Stage")
-        body.operator("afterglow.create_starter", icon="ADD")
         body.prop(s, "start_frame")
         body.prop(s, "easy_glow", text="Add Soft Glow")
-        if starter.camera_for(s.collection):
-            body.operator("afterglow.preview_stage", icon="VIEW_CAMERA")
     creator.draw_library(layout, context)
 
     head, body = layout.panel("AFTERGLOW_ripple", default_closed=True)
@@ -734,7 +691,7 @@ def draw_object(box, s, ob, mod):
 
 
 CLASSES = (AFTERGLOW_OT_create_visual, AFTERGLOW_OT_create_reaction, AFTERGLOW_OT_use_selected,
-           AFTERGLOW_OT_create_starter, AFTERGLOW_OT_preview_stage, AFTERGLOW_OT_apply_look, AFTERGLOW_OT_load_sound, AFTERGLOW_OT_apply, AFTERGLOW_OT_respread,
+           AFTERGLOW_OT_apply_look, AFTERGLOW_OT_load_sound, AFTERGLOW_OT_apply, AFTERGLOW_OT_respread,
            AFTERGLOW_OT_calibrate, AFTERGLOW_OT_bake, AFTERGLOW_OT_remove, AFTERGLOW_PT_panel,
            AFTERGLOW_OT_build_effects, AFTERGLOW_OT_remove_effects, AFTERGLOW_OT_fit_emitter,
            AFTERGLOW_OT_add_strike_point, AFTERGLOW_OT_add_signal_anchor,
