@@ -34,7 +34,7 @@ class AFTERGLOW_OT_create_visual(bpy.types.Operator):
             space.shading.type = "MATERIAL"
             space.shading.use_scene_lights = True
             space.shading.use_scene_world = True
-        self.report({"INFO"}, "Visual ready. Press Space to preview, or Export Video below")
+        self.report({"INFO"}, "Visual ready. Press Space to preview")
         return {"FINISHED"}
 
 

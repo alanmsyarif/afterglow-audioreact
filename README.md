@@ -1,6 +1,6 @@
-# Afterglow 0.22
+# Afterglow 0.23
 
-**Music in. Finished visual out.**
+**Turn music into lighting.**
 
 Audio-reactive lighting for Blender 5.2+. Pick a scene and a look, then let Afterglow
 handle calibration, smooth playback, lighting, glow and camera setup.
@@ -24,22 +24,15 @@ Afterglow reuses the selected collection. Advanced Controls lets you use your ow
 emissive objects or explicitly add another stage. New stages select their generated
 camera; existing custom-scene cameras remain under your control.
 
-## Export in one action
+## Render with Blender
 
-Choose **Video Shape**, set **Save To**, then press **Export Video**.
-
-Afterglow prepares MP4 with audio, fits the generated camera to the chosen shape,
-and renders the whole track with a short fade-out. Landscape, portrait and square
-presets keep the existing frame rate. A custom user camera is never reframed.
-
-Save your `.blend` first to use the default `//afterglow-output/` folder, or choose
-an absolute folder path. Folder exports use a new filename when one already exists;
-explicit existing MP4 filenames are protected. Rendering runs in Blender's native
-progress/cancellation interface.
+Set your resolution, frame range, file format and destination in Blender's
+**Output Properties**, then use **Render → Render Animation**. Afterglow creates
+the reactive scene; Blender handles rendering and video export.
 
 ## Install
 
-1. Download [afterglow-0.22.0.zip](dist/afterglow-0.22.0.zip).
+1. Download [afterglow-0.23.0.zip](dist/afterglow-0.23.0.zip).
 2. In Blender 5.2+, open **Edit → Preferences → Get Extensions → Install from Disk**
    and choose the ZIP.
 3. Open the 3D Viewport sidebar (`N`) and select **Afterglow**.
@@ -50,6 +43,6 @@ is original synthesized audio packed into the project.
 ## Need more control?
 
 Turn on **Advanced Controls**. Individual effects, custom look libraries, object
-settings, manual build tools and PNG export are kept there.
+settings and manual build tools are kept there.
 
 [Advanced guide and development commands](docs/advanced.md) · [License](LICENSE)

@@ -1,8 +1,8 @@
 # Advanced controls
 
 Enable **Advanced Controls** at the bottom of the Afterglow panel to see manual
-scene setup, individual lighting layers, per-object response, custom looks and
-render settings. Ordinary use only needs Create Visual and Export Video.
+scene setup, individual lighting layers, per-object response and custom looks.
+Ordinary use only needs **Create Visual**.
 
 ## Where the manual tools live
 
@@ -14,12 +14,19 @@ render settings. Ordinary use only needs Create Visual and Export Video.
 - **Manual Build & Cleanup:** build reactions separately, apply look settings,
   calibrate, redistribute bands, refresh playback, or remove reactions.
 - **Advanced Lighting:** edit the eight layers, venue, beam appearance, solo and
-  brightness. Render Finish exposes the compositor glow controls.
-- **Export:** advanced mode exposes PNG sequences, excerpt loops, manual render
-  ranges, camera fitting and explicit output preparation.
+  brightness. Glow adjusts the visual's compositor glow.
 
-Existing saved projects, custom look files and scripting operator IDs are retained.
+Existing scenes and custom look files keep their music reactions and styling.
 Commands below run from the repository root.
+
+## Rendering
+
+Use Blender's **Output Properties** for resolution, frame range, output format and
+destination, then choose **Render → Render Animation**. Playback loops use Blender's
+timeline preview range. Afterglow focuses on creating the reactive scene and lighting;
+rendering and video export use Blender's own controls. Create Visual preserves these
+settings and the timeline range. Automatic glow is skipped when native compositing
+is disabled; existing compositor nodes stay in place.
 
 ## Scene controls
 
@@ -245,7 +252,7 @@ the lights.
 ### Usage
 
 1. Pick your Collection and Sound in the *Afterglow* panel as usual.
-2. Open the *Afterglow Environment Effects* panel, choose the venue shape, enable layers,
+2. Open *Advanced Controls → Advanced Lighting*, choose the venue shape, enable layers,
    and set colours and bands.
 3. **Build Effects** analyses the sound once, then keys pooled real point/spot lights into
    a collection named `Afterglow Effects` in the current scene (plus their beam meshes
@@ -323,11 +330,10 @@ pip install bpy==5.2.2
 for t in tests/test_*.py; do python "$t" || break; done
 ```
 
-On Linux without a GPU, render suites need Mesa's software OpenGL. Export tests also
-use `ffmpeg` and `ffprobe` to verify encoded video and audio:
+On Linux without a GPU, render suites need Mesa's software OpenGL:
 
 ```bash
-sudo apt install libegl1 libgl1-mesa-dri libglx-mesa0 ffmpeg
+sudo apt install libegl1 libgl1-mesa-dri libglx-mesa0
 ```
 
 ## Releasing
@@ -336,7 +342,7 @@ sudo apt install libegl1 libgl1-mesa-dri libglx-mesa0 ffmpeg
 2. Tag the commit with that version and push the tag:
 
    ```bash
-   git tag v0.15.0 && git push origin v0.15.0
+   git tag v0.23.0 && git push origin v0.23.0
    ```
 
 [`release.yml`](../.github/workflows/release.yml) runs the full test suite, checks the tag

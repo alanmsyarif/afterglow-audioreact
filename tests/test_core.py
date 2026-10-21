@@ -222,7 +222,7 @@ def our_strips(scene):
     return [st for st in scene.sequence_editor.strips_all if st.name.startswith(core.STRIP_NAME)]
 
 
-def test_apply_sets_up_playback():
+def test_apply_sets_up_playback_without_changing_render_range():
     scene, _ = stage()
     scene.frame_end = 10
     core.apply(scene)
@@ -230,16 +230,24 @@ def test_apply_sets_up_playback():
     assert strip.sound == scene.afterglow.sound
     assert strip.frame_start == 1
     assert scene.sync_mode == "AUDIO_SYNC"
-    assert scene.frame_end == 72, scene.frame_end  # 3 s at 24 fps from frame 1
+    assert (scene.frame_start, scene.frame_end) == (1, 10)
 
 
-def test_start_frame_moves_strip_without_duplicates():
+def test_start_frame_moves_strip_without_duplicates_or_render_range_changes():
     scene, _ = stage()
+    scene.frame_start, scene.frame_end = 7, 19
     core.apply(scene)
     scene.afterglow.start_frame = 25
+    assert (scene.frame_start, scene.frame_end) == (7, 19)  # property callback syncs audio
     core.apply(scene)
     (strip,) = our_strips(scene)
     assert strip.frame_start == 25
+    assert (scene.frame_start, scene.frame_end) == (7, 19)
+    scene.afterglow.start_frame = 49
+    core.sync(scene)
+    assert our_strips(scene) == [strip] and strip.frame_start == 49
+    assert scene.sync_mode == "AUDIO_SYNC"
+    assert (scene.frame_start, scene.frame_end) == (7, 19)
 
 
 def test_remove_deletes_only_our_strip():

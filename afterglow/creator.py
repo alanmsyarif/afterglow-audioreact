@@ -1,4 +1,4 @@
-"""Creator actions: reusable project looks, complete shows, and render finishing."""
+"""Creator actions: reusable project looks, complete shows, and creative glow."""
 import json
 from pathlib import Path
 
@@ -193,7 +193,7 @@ class AFTERGLOW_UL_saved_looks(bpy.types.UIList):
 
 class AFTERGLOW_OT_add_render_glow(bpy.types.Operator):
     bl_idname = "afterglow.add_render_glow"
-    bl_label = "Add Render Glow"
+    bl_label = "Add Glow"
     bl_description = "Add reversible compositor fog glow to this scene's render output"
     bl_options = {"REGISTER", "UNDO"}
 
@@ -203,13 +203,13 @@ class AFTERGLOW_OT_add_render_glow(bpy.types.Operator):
         except ValueError as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
-        self.report({"INFO"}, "Render glow added. The compositor applies it to the final image")
+        self.report({"INFO"}, "Glow added. The compositor applies it to the final image")
         return {"FINISHED"}
 
 
 class AFTERGLOW_OT_remove_render_glow(bpy.types.Operator):
     bl_idname = "afterglow.remove_render_glow"
-    bl_label = "Remove Render Glow"
+    bl_label = "Remove Glow"
     bl_description = "Remove Afterglow's glow node while preserving the compositor's other nodes"
     bl_options = {"REGISTER", "UNDO"}
 
@@ -256,10 +256,9 @@ def draw_library(layout, context):
 def draw_finish(layout, context):
     from .ui import draw_note
     head, body = layout.panel("AFTERGLOW_finish", default_closed=True)
-    head.label(text="Render Finish", icon="RENDER_STILL")
+    head.label(text="Glow", icon="LIGHT")
     if body:
         body.enabled = not getattr(context.screen, "is_animation_playing", False)
-        body.prop(context.scene.render, "use_compositing", text="Use Compositor")
         tree = context.scene.compositing_node_group
         owned = [node for node in tree.nodes if node.get(finish.TAG)] if tree else []
         if owned:
@@ -271,7 +270,7 @@ def draw_finish(layout, context):
                 if context.scene.render.use_compositing:
                     draw_note(body, "Glow is active in the final render. Other compositor nodes remain editable.", context, "CHECKMARK")
                 else:
-                    draw_note(body, "Glow is connected. Enable Use Compositor to include it in renders.", context, "INFO")
+                    draw_note(body, "Glow is connected. Enable Compositing in Blender's Render Properties to see it.", context, "INFO")
             else:
                 draw_note(body, "The glow node is bypassed. Remove it here to clear the old node before adding another.", context, "INFO")
         else:

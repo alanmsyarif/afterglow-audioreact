@@ -16,10 +16,10 @@ jobs:
         with:
           python-version: "3.13"  # the bpy wheel's Python
 
-      - name: Install Blender, software OpenGL and media validation tools
+      - name: Install Blender and software OpenGL
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libgl1-mesa-dri libglx-mesa0 ffmpeg
+          sudo apt-get install -y libegl1 libgl1-mesa-dri libglx-mesa0
           pip install bpy==5.2.2
 
       - name: Validate the extension manifest

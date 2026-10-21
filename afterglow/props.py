@@ -4,7 +4,7 @@ import bpy
 from bpy.props import (BoolProperty, EnumProperty, FloatProperty, FloatVectorProperty,
                        IntProperty, PointerProperty, StringProperty, CollectionProperty)
 
-from . import bake, core, delivery, effects, materials, nodes, presets, starter, tempo
+from . import bake, core, effects, materials, nodes, presets, starter, tempo
 
 REBAKE_DELAY = 0.3  # s of quiet after the last setting change before the automatic re-bake
 _pending = {}       # scene name -> time of its last change still waiting for a re-bake
@@ -298,7 +298,7 @@ class AfterglowSavedLook(bpy.types.PropertyGroup):
 
 class AfterglowScene(bpy.types.PropertyGroup):
     show_advanced: BoolProperty(name="Advanced Controls", default=False, options=set(),
-                                description="Show individual effects, object tuning and manual build/export tools")
+                                description="Show individual effects, object tuning and manual build tools")
     easy_source: EnumProperty(name="Scene Source", default="AUTO", options=set(), items=(
         ("AUTO", "Automatic", "Use the chosen collection, or create a starter stage when none is chosen"),
         ("STAGE", "Starter Stage", "Use the selected starter design"),
@@ -308,16 +308,6 @@ class AfterglowScene(bpy.types.PropertyGroup):
                            description="Create Visual adds compositor glow; turn off to remove only Afterglow's glow")
     stage_layout: EnumProperty(name="Stage Design", items=starter.LAYOUT_ITEMS, default="RING", options=set(),
                                description="Choose a design, then Add Starter Stage; browsing keeps your scene intact")
-    preview_offset: FloatProperty(name="From", default=0.0, min=0.0, soft_max=600.0,
-                                  unit="TIME_ABSOLUTE", options=set(), description="Seconds into the audio track to audition")
-    preview_duration: FloatProperty(name="Length", default=8.0, min=0.1, soft_max=60.0,
-                                    unit="TIME_ABSOLUTE", options=set(), description="Playback-only loop duration in seconds")
-    delivery_format: EnumProperty(name="Output Size", items=delivery.FORMAT_ITEMS, default="LANDSCAPE", options=set())
-    output_format: EnumProperty(name="File Format", items=delivery.OUTPUT_ITEMS, default="PNG_SEQUENCE", options=set())
-    output_path: StringProperty(name="Output Path", default="//afterglow-output/", subtype="FILE_PATH",
-                                options={"PATH_SUPPORTS_BLEND_RELATIVE"})
-    output_include_tail: BoolProperty(name="Include Fade-out", default=True,
-                                      description="Keep two seconds after the track for reaction and effect fade-out")
     saved_looks: CollectionProperty(type=AfterglowSavedLook)
     saved_look_index: IntProperty(name="Saved Look", default=0, min=0)
     new_look_name: StringProperty(name="Name", default="My Look", maxlen=64)

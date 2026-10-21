@@ -83,4 +83,13 @@ def test_creation_disabled_during_playback_without_preflight_or_parameter_scans(
     assert ("op", "afterglow.load_sound", False) in log
 
 
+def test_only_scene_and_lighting_panels_are_registered_without_export_settings():
+    panels = {panel.__name__ for panel in bpy.types.Panel.__subclasses__()
+              if panel.__name__.startswith('AFTERGLOW_PT_')}
+    assert panels == {'AFTERGLOW_PT_panel', 'AFTERGLOW_PT_effects'}
+    props = set(bpy.context.scene.afterglow.bl_rna.properties.keys())
+    assert not props.intersection({'delivery_format', 'output_format', 'output_path',
+                                   'output_include_tail', 'preview_offset', 'preview_duration'})
+
+
 helpers.run(globals())
