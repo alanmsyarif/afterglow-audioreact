@@ -2,51 +2,84 @@
 
 **Choose music. Make it glow.**
 
-Audio-reactive object materials for Blender 5.2+. Choose music and a look, then
-build. This public repository contains Noctune Free.
+Make your own meshes, curves and text react to music in Blender. Select your
+objects, load a track and choose a look. Noctune prepares the materials,
+calibrates the reaction and prepares playback for you.
 
-| | Noctune Free | Noctune Pro |
+[**Download Noctune Free 0.28.0**](dist/noctune-free-0.28.0.zip?raw=true)
+
+**Blender 5.2+ · EEVEE and Cycles · Runs locally**
+
+## Install
+
+1. Download the ZIP above and keep it zipped.
+2. In Blender, open **Edit → Preferences → Get Extensions → Install from Disk**
+   and choose the ZIP.
+3. In the 3D Viewport, press `N` and open the **Noctune** tab.
+
+## Make your first reaction
+
+Start with your own scene and objects.
+
+1. **Select your objects → Use Selected.** Noctune adds emission where needed and
+   preserves the original materials for restoration.
+2. **Load your music → choose an Object Look.** Use the folder icon beside
+   **Music** to load a track.
+3. **Build Reaction → press Space.** Switch to **Material Preview** or **Rendered**
+   shading to see the materials react.
+
+After changing your music or look, press **Update Reaction**.
+
+## Included in Free
+
+- **Automatic material preparation:** use ordinary meshes, curves and text, or
+  choose a collection of objects that already have emissive materials.
+- **Five object looks:** Neon Club, Cinematic Pulse, Aurora Flow, Signal Grid and
+  Electric Violet.
+- **Custom looks:** save your style in the project and import or export look files
+  to reuse it elsewhere.
+- **Ripple motion and level meters:** send light across objects and surfaces, or
+  fill objects like equalizer bars.
+- **Soft glow:** add optional compositor glow to the final image.
+- **Playback preparation:** Noctune calibrates and bakes the reaction when you
+  build it.
+
+The main panel keeps the everyday workflow short. Open **Advanced Controls** for
+timing, colors, individual object responses, ripple settings and saved looks.
+See the [advanced guide](docs/advanced.md) for those controls.
+
+## Preview, render and cleanup
+
+Use **Material Preview** or **Rendered** shading while playing the timeline.
+Soft glow appears in the composited final image and needs Blender's
+**Compositing** option enabled.
+
+Set your camera, resolution, frame range, format and destination in Blender,
+then use **Render → Render Animation**. Noctune preserves your output settings
+and timeline range.
+
+To remove the reaction, open **Advanced Controls → Manual Build & Cleanup →
+Remove Object Reaction**. This also restores automatically prepared material
+assignments; materials you reassigned manually stay in place.
+
+## Noctune Free and Pro
+
+| Feature | Free | Pro |
 |---|:---:|:---:|
-| Automatic emissive materials and music reactions | ✓ | ✓ |
-| Object looks, custom looks, ripple motion and glow | ✓ | ✓ |
-| Environment lights, beams, lasers and signal effects | | ✓ |
+| Object materials and music reactions | ✓ | ✓ |
+| Object looks, custom looks, ripple motion, level meters and glow | ✓ | ✓ |
+| Generated environment lights, beams, lasers and signal effects | | ✓ |
 | Environment looks and layer controls | | ✓ |
 
-Pro includes everything in Free and is maintained in a separate private
-repository for paid delivery. Both editions run locally without an account or
-license-key service. [Edition details](docs/editions.md).
+Pro includes everything in Free and is distributed separately. Install one
+edition at a time. To upgrade, save your project, disable and remove Free, then
+install your Pro ZIP. Your object materials and reaction settings remain in the
+project. [More about editions and compatibility](docs/editions.md).
 
-## Animate your objects
+## Documentation and license
 
-Open the **Noctune** tab in the 3D Viewport sidebar (`N`).
+[Advanced controls and development](docs/advanced.md) ·
+[Build and edition details](docs/editions.md) · [GPL-3.0-or-later license](LICENSE)
 
-1. Select meshes, curves or text and press **Use Selected**. Missing emission is
-   added automatically while original materials are preserved.
-2. Load your music and choose an object **Look**.
-3. Press **Build Reaction**. Use **Material Preview** or **Rendered** shading and
-   press **Space** to preview.
-
-Use **Update Reaction** after changing the music or object look. Noctune handles
-calibration and smooth playback. Existing emissive objects can use their
-collection directly. Existing generated environment data stays in the scene.
-
-## Render with Blender
-
-Arrange your scene and camera in Blender. Set the resolution, frame range, format
-and destination in **Output Properties**, then use **Render → Render Animation**.
-Noctune keeps Blender's render settings and timeline range under your control.
-
-## Install Free
-
-1. Download [Noctune Free 0.28.0](dist/noctune-free-0.28.0.zip).
-2. In Blender 5.2+, open **Edit → Preferences → Get Extensions → Install from Disk**
-   and choose the ZIP.
-3. Open the 3D Viewport sidebar (`N`) and select **Noctune**.
-
-Install one edition at a time. To upgrade to Pro, save your project, disable and
-remove Free, then install your Pro ZIP. Your object materials and reaction
-settings remain in the project.
-
-[Advanced guide and development commands](docs/advanced.md) · [License](LICENSE)
-
-Renamed from Afterglow. Existing projects and look files remain compatible.
+Noctune was previously named Afterglow. Existing projects and look files remain
+compatible.
