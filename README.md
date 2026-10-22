@@ -1,9 +1,18 @@
-# Afterglow 0.26
+# Afterglow 0.27
 
 **Turn music into lighting.**
 
-Audio-reactive lighting for Blender 5.2+, with separate tools for your object
-reactions and generated environment effects.
+Audio-reactive lighting for Blender 5.2+. Choose music and a look, then build.
+
+| | Afterglow Free | Afterglow Pro |
+|---|:---:|:---:|
+| Automatic emissive materials and music reactions | ✓ | ✓ |
+| Object looks, custom looks, ripple motion and glow | ✓ | ✓ |
+| Environment lights, beams, lasers and signal effects | | ✓ |
+| Environment looks and layer controls | | ✓ |
+
+Pro includes everything in Free. Both editions run locally without an account or
+license-key service.
 
 ## Animate your objects
 
@@ -19,9 +28,9 @@ Use **Update Reaction** after changing the music or object look. Afterglow handl
 calibration and smooth playback. Existing emissive objects can use their collection
 directly. This build leaves generated environment effects alone.
 
-## Generate environment effects
+## Generate environment effects — Pro
 
-Open the **Afterglow FX** tab and its **Afterglow Environment** panel.
+In Pro, open the **Afterglow FX** tab and its **Afterglow Pro · Environment** panel.
 
 1. Choose the collection that defines the environment bounds. Ordinary non-emissive
    geometry works; leaving Bounds empty uses the main Objects collection.
@@ -44,11 +53,14 @@ Afterglow keeps Blender's render settings and timeline range under your control.
 
 ## Install
 
-1. Download [afterglow-0.26.0.zip](dist/afterglow-0.26.0.zip).
+1. Download [Afterglow Free 0.27.0](dist/afterglow-free-0.27.0.zip), or use your Pro ZIP.
 2. In Blender 5.2+, open **Edit → Preferences → Get Extensions → Install from Disk**
    and choose the ZIP.
-3. Open the 3D Viewport sidebar (`N`) and select **Afterglow** or **Afterglow FX**.
+3. Open the 3D Viewport sidebar (`N`) and select **Afterglow**. Pro also includes
+   the **Afterglow FX** tab.
 
-The add-on runs locally. No account or network service is required.
+Install one edition at a time. To upgrade, save your project, disable and remove
+Free, then install Pro. Your object materials and reaction settings remain in the
+project. [Edition packages and paid distribution](docs/editions.md).
 
 [Advanced guide and development commands](docs/advanced.md) · [License](LICENSE)

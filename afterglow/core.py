@@ -7,7 +7,7 @@ import numpy as np
 import bpy
 from mathutils import Vector
 
-from . import materials, nodes
+from . import effect_schema, materials, nodes
 
 SUPPORTED = {"MESH", "CURVE", "FONT"}
 MOD_NAME = "Afterglow"
@@ -372,8 +372,9 @@ def sync(scene):
 def remove(scene):
     se = scene.sequence_editor
     strip = se and se.strips.get(STRIP_NAME)
-    from . import effects
-    if strip and not effects._collections(scene):
+    # Existing environment builds retain their shared music strip in either edition.
+    has_environment = any(collection.get(effect_schema.TAG) for collection in scene.collection.children)
+    if strip and not has_environment:
         se.strips.remove(strip)
     from . import bake  # bake imports core
     for ob in _managed(scene):

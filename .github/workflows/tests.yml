@@ -27,6 +27,9 @@ jobs:
           EXT="$(python -c "import os, bpy; print(os.path.join(bpy.utils.system_resource('SCRIPTS'), 'addons_core', 'bl_pkg', 'cli', 'blender_ext.py'))" | tail -n 1)"
           python -I "$EXT" validate afterglow
 
+      - name: Test edition packaging
+        run: python tools/test_build_editions.py
+
       - name: Run the tests
         run: |
           fail=0

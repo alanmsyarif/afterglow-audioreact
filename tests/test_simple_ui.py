@@ -110,7 +110,7 @@ def test_only_scene_and_lighting_panels_are_registered_without_export_settings()
     assert ui.AFTERGLOW_PT_panel.bl_category == 'Afterglow'
     assert ui.AFTERGLOW_PT_effects.bl_category == 'Afterglow FX'
     assert not getattr(ui.AFTERGLOW_PT_effects, 'bl_parent_id', '')
-    assert ui.AFTERGLOW_PT_effects.bl_label == 'Afterglow Environment'
+    assert ui.AFTERGLOW_PT_effects.bl_label == 'Afterglow Pro · Environment'
     props = set(bpy.context.scene.afterglow.bl_rna.properties.keys())
     assert not props.intersection({'delivery_format', 'output_format', 'output_path',
                                    'output_include_tail', 'preview_offset', 'preview_duration',

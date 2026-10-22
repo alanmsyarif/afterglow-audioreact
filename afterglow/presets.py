@@ -4,7 +4,7 @@ Applying a look edits controls only. Build Effects and, when Decay changes,
 Re-bake are still explicit operations. No geometry or materials are created here.
 """
 
-from . import core, effects, nodes
+from . import core, edition, effect_schema, nodes
 
 
 DESCRIPTIONS = {
@@ -21,6 +21,16 @@ ITEMS = tuple((identifier, name, DESCRIPTIONS[identifier]) for identifier, name 
     ("SIGNAL_GRID", "Signal Grid"),
     ("LASER_SHOW", "Laser Show"),
 ))
+
+# Object looks share stable IDs with their environment companions, while their
+# labels describe the object result even when no environment engine is installed.
+OBJECT_ITEMS = (
+    ("NEON_CLUB", "Neon Club", "Electric cyan and pink with a punchy response"),
+    ("CINEMATIC_PULSE", "Cinematic Pulse", "Cool blue and warm gold with a slower fade"),
+    ("AURORA_FLOW", "Aurora Flow", "Mint and violet with a soft, flowing response"),
+    ("SIGNAL_GRID", "Signal Grid", "Icy cyan and amber with a crisp response"),
+    ("LASER_SHOW", "Electric Violet", "Violet and neon green with a quick pulse"),
+)
 
 # Colors are linear RGB, as expected by Blender's Color properties.
 _LOOKS = {
@@ -115,12 +125,12 @@ SCOPES = ("ALL", "OBJECT", "EFFECTS")
 def _scope(scope):
     if not isinstance(scope, str) or scope not in SCOPES:
         raise ValueError("Choose ALL, OBJECT or EFFECTS style scope")
-    return scope
+    return edition.style_scope(scope)
 
 
 def _plan(scene, identifier, scope="ALL"):
     """Guard only the controls this style scope will change, before any edits."""
-    _scope(scope)
+    scope = _scope(scope)
     if not isinstance(identifier, str) or identifier not in _LOOKS:
         raise ValueError(f"Unknown Afterglow look: {identifier}")
     look = _LOOKS[identifier]
@@ -128,7 +138,7 @@ def _plan(scene, identifier, scope="ALL"):
     fx, layer_values, fx_values = None, {}, {}
     if scope in ("ALL", "EFFECTS"):
         fx = scene.afterglow.effects
-        for index, name in enumerate(effects.LAYERS):
+        for index, name in enumerate(effect_schema.LAYERS):
             enabled = name in look["layers"]
             weight, band, timing, intensity = look["layers"].get(name, (0.5, "LOW", 1.0, 1.0))
             layer_values[name] = {"enabled": enabled, "weight": weight, "trigger_band": band,
@@ -178,6 +188,7 @@ def enabled_layers(identifier):
 
 def apply(scene, identifier, *, scope="ALL"):
     """Apply styling only in scope; return object count for OBJECT, else layer count."""
+    scope = _scope(scope)
     fx, layer_values, fx_values, object_values, objects = _plan(scene, identifier, scope)
     for name, values in layer_values.items():
         layer = getattr(fx, name)

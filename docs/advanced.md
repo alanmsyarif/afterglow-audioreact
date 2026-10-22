@@ -1,10 +1,11 @@
 # Advanced controls
 
-Afterglow has two independent workflows in the 3D Viewport sidebar (`N`):
+Afterglow Free provides the object workflow. Pro includes both independent workflows
+in the 3D Viewport sidebar (`N`):
 
 - **Afterglow:** prepare your objects, apply an object look, calibrate and build their
   music reaction with **Build Reaction** or **Update Reaction**.
-- **Afterglow FX → Afterglow Environment:** choose bounds and an environment look,
+- **Afterglow FX → Afterglow Pro · Environment:** choose bounds and an environment look,
   then generate lights and graphics with **Build Environment** or **Update Environment**.
 
 The tabs share the scene's music and Start Frame. Their looks, bounds and build
@@ -23,10 +24,12 @@ In **Afterglow**, turn on **Advanced Controls** for:
   refresh playback or remove object reactions.
 - Per-object response and appearance controls.
 
-In **Afterglow Environment**, enable its own advanced controls for the eight effect
-layers, venue and timing, beam appearance, live brightness/solo mix and saved
+In Pro's **Afterglow Pro · Environment** panel, enable its advanced controls for the
+eight effect layers, venue and timing, beam appearance, live brightness/solo mix and saved
 environment looks. Applying or building a saved look affects only that tab's part.
-Portable look files can retain both object and environment styling.
+Free saves portable object looks that also work in Pro without changing environment
+settings. Pro look files can retain both object and environment styling; Free
+imports their object styling.
 
 **Remove Object Reaction** restores prepared object materials and keeps generated
 effects. **Remove Effects** deletes generated lights and graphics while keeping
@@ -91,9 +94,9 @@ Select an Afterglow object to tune it in the panel. Its box follows the order yo
 
 In the main tab's advanced controls, open **Ripple Motion** to adjust these settings.
 
-## Environment Effects
+## Environment Effects (Pro)
 
-Use **Afterglow FX → Afterglow Environment** independently of the main object tools.
+Use **Afterglow FX → Afterglow Pro · Environment** independently of the main object tools.
 Choose **Bounds** and an environment **Look**, then press **Build Environment**.
 Bounds can contain ordinary mesh, curve or text objects; emissive materials are not
 required. An empty Bounds field falls back to the main Objects collection. An existing
@@ -128,7 +131,7 @@ layers in gradually as the track builds (e.g. keyframe Weight 0 → 1).
 
 ### Laser Fans
 
-Choose **Laser Show** in **Afterglow Environment** and press **Build Environment**.
+Choose **Laser Show** in **Afterglow Pro · Environment** and press **Build Environment**.
 In its advanced controls, **Laser Fans** can also be combined with any other layer.
 Each attack opens a pair of sweeping fans from the venue rim. Thin native emissive curves make the rays visible in
 EEVEE and Cycles without fog or either effect's Visible Beam switch. Silence stays dark.
@@ -240,7 +243,7 @@ point. Moving a point marks the build outdated; Build and Remove Effects never t
 
 ![A Data Strike walking Down: the dashed filament grows from the top and lands on the floor on the beat, where its light flashes](images/strike_walk.gif)
 
-Open **Afterglow Environment** and enable its advanced controls, then expand
+Open **Afterglow Pro · Environment** and enable its advanced controls, then expand
 **Data Strikes** or **Gun Bursts**. Each effect has its own
 **Visible Beam** switch, **Glow** and appearance controls in that same section. There
 is no separate global beam panel. The switches start off for a custom setup; applying
@@ -296,7 +299,7 @@ the lights.
 
 ### Usage
 
-1. Open **Afterglow FX → Afterglow Environment**, choose **Bounds** and load the music
+1. Open **Afterglow FX → Afterglow Pro · Environment**, choose **Bounds** and load the music
    if it is not already selected in the main tab.
 2. Choose an environment **Look** and press **Build Environment**. This does not
    require an object reaction setup or emissive materials.
@@ -370,12 +373,13 @@ sudo apt install libegl1 libgl1-mesa-dri libglx-mesa0
 2. Tag the commit with that version and push the tag:
 
    ```bash
-   git tag v0.26.0 && git push origin v0.26.0
+   git tag v0.27.0 && git push origin v0.27.0
    ```
 
 [`release.yml`](../.github/workflows/release.yml) runs the full test suite, checks the tag
-matches the manifest, builds the zip with Blender's own extension builder, and publishes
-it as a GitHub Release.
+matches the manifest, builds and validates the Free ZIP, and publishes it as a
+GitHub Release. Pro packages are built separately for paid delivery. See
+[edition packaging](editions.md) for build commands and license details.
 
 ## Limitations (honest)
 

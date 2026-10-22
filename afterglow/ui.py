@@ -2,7 +2,10 @@ import bpy
 from bpy.props import StringProperty
 from bpy_extras.io_utils import ImportHelper
 
-from . import bake, core, creator, easy, effects, nodes, presets, tempo, workflow
+from . import bake, core, creator, easy, edition, nodes, presets, tempo, workflow
+
+if edition.IS_PRO:
+    from . import effects
 
 
 def draw_note(layout, text, context=None, icon="NONE"):
@@ -18,7 +21,7 @@ def draw_note(layout, text, context=None, icon="NONE"):
 class AFTERGLOW_OT_create_visual(bpy.types.Operator):
     bl_idname = "afterglow.create_visual"
     bl_label = "Build Reaction"
-    bl_description = "Apply the object look, calibrated music reaction and optional glow without generating environment effects"
+    bl_description = "Apply the object look, calibrated music reaction and optional glow"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -501,7 +504,7 @@ LAYER_NOTES = {
 
 
 class AFTERGLOW_PT_effects(bpy.types.Panel):
-    bl_label = "Afterglow Environment"
+    bl_label = "Afterglow Pro · Environment"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "Afterglow FX"
@@ -644,7 +647,7 @@ def next_step(scene):
 
 
 class AFTERGLOW_PT_panel(bpy.types.Panel):
-    bl_label = "Afterglow"
+    bl_label = edition.NAME
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "Afterglow"
@@ -680,7 +683,9 @@ class AFTERGLOW_PT_panel(bpy.types.Panel):
         if built:
             draw_note(layout, "Press Space to preview. Use Update Reaction after changing the music or object look.", context, "INFO")
         else:
-            draw_note(layout, "Animates your objects. Generate lights and beams separately in the Afterglow FX tab.", context)
+            note = ("Animates your objects. Generate lights and beams separately in the Afterglow FX tab."
+                    if edition.IS_PRO else "Animates your objects to the music. Materials are prepared automatically with Use Selected.")
+            draw_note(layout, note, context)
         layout.separator()
         layout.prop(s, "show_advanced", text="Advanced Controls")
         if s.show_advanced:
@@ -776,12 +781,14 @@ def draw_object(box, s, ob, mod):
         hint.label(text="Level Meter is off while Through Objects is on", icon="INFO")
 
 
-CLASSES = (AFTERGLOW_OT_build_environment, AFTERGLOW_OT_use_environment_selected, AFTERGLOW_OT_create_visual, AFTERGLOW_OT_create_reaction, AFTERGLOW_OT_use_selected,
+PRO_CLASSES = (AFTERGLOW_OT_build_environment, AFTERGLOW_OT_use_environment_selected,
+               AFTERGLOW_OT_build_effects, AFTERGLOW_OT_remove_effects, AFTERGLOW_OT_fit_emitter,
+               AFTERGLOW_OT_add_strike_point, AFTERGLOW_OT_add_signal_anchor,
+               AFTERGLOW_PT_effects) if edition.IS_PRO else ()
+CLASSES = (AFTERGLOW_OT_create_visual, AFTERGLOW_OT_create_reaction, AFTERGLOW_OT_use_selected,
            AFTERGLOW_OT_apply_look, AFTERGLOW_OT_load_sound, AFTERGLOW_OT_apply, AFTERGLOW_OT_respread,
            AFTERGLOW_OT_calibrate, AFTERGLOW_OT_bake, AFTERGLOW_OT_remove, AFTERGLOW_PT_panel,
-           AFTERGLOW_OT_build_effects, AFTERGLOW_OT_remove_effects, AFTERGLOW_OT_fit_emitter,
-           AFTERGLOW_OT_add_strike_point, AFTERGLOW_OT_add_signal_anchor,
-           AFTERGLOW_PT_effects)
+           *PRO_CLASSES)
 
 
 def register():

@@ -23,8 +23,8 @@ from mathutils import Quaternion, Vector
 from bpy_extras import anim_utils
 
 from . import bake, core, tempo
+from .effect_schema import BAND_ITEMS, EMITTER_TAG, LAYERS, TAG
 
-TAG = "afterglow_effects"
 SIG = TAG + "_sig"
 COUNTS = TAG + "_counts"  # events per layer of the last build, for the panel
 LIVE = TAG + "_live"      # Intensity each layer's keys are scaled to now, for live edits
@@ -44,16 +44,9 @@ SNAP_HARM = 0.20     # log2 slack reconciling the grid with the tempo curve (hal
 SNAP_LO_BPM, SNAP_HI_BPM = 40.0, 240.0  # pulse period search bounds
 
 SHAPES = ("CIRCLE", "SQUARE", "RECT", "TRIANGLE")
-LAYERS = ("strikes", "blooms", "flashes", "trails", "downward", "gun", "signals", "lasers")
 POOL = {"strikes": 6, "blooms": 5, "flashes": 2, "trails": 3, "downward": 6, "gun": 3, "signals": 3, "lasers": 3}
 BANDS = {"LOW": (20.0, 150.0), "MID": (150.0, 2000.0),
          "HIGH": (2000.0, 16000.0), "FULL": (20.0, 16000.0)}
-BAND_ITEMS = (
-    ("LOW", "Low (20-150 Hz)", "Kicks and bass"),
-    ("MID", "Mid (150-2k Hz)", "Melody and voices"),
-    ("HIGH", "High (2k-16k Hz)", "Hats and air"),
-    ("FULL", "Full range", "Everything at once"),
-)
 
 
 def _fcurve(scene, path):
@@ -376,7 +369,6 @@ def make_venue(scene):
 
 # --------------------------------------------------------------------------- emitter cage
 
-EMITTER_TAG = "afterglow_emitter"
 EMITTER_NAME = "Afterglow Emitter"
 SHAPE_TAG = "afterglow_emitter_shape"  # the Venue Shape the cage was last drawn as
 CAGE_POSTS = 8  # vertical edges drawn on a circle cage

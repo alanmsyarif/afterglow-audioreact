@@ -6,7 +6,7 @@ import bpy
 from bpy.props import EnumProperty, StringProperty
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 
-from . import bake, finish, lookbook, workflow
+from . import bake, edition, finish, lookbook, workflow
 
 MAX_LOOKS = 64
 SCOPE_ITEMS = (
@@ -17,7 +17,8 @@ SCOPE_ITEMS = (
 
 
 def _scope_property():
-    return EnumProperty(name="Apply To", items=SCOPE_ITEMS, default="ALL", options={"HIDDEN"})
+    return EnumProperty(name="Apply To", items=SCOPE_ITEMS,
+                        default="ALL" if edition.IS_PRO else "OBJECT", options={"HIDDEN"})
 
 
 def selected_look(scene):
@@ -60,6 +61,7 @@ class AFTERGLOW_OT_build_show(bpy.types.Operator):
 
     def execute(self, context):
         try:
+            edition.require_pro()
             result = workflow.create_show(context.scene, look_identifier=context.scene.afterglow.creative_look)
         except (ValueError, RuntimeError) as error:
             self.report({"ERROR"}, str(error))
@@ -71,7 +73,8 @@ class AFTERGLOW_OT_build_show(bpy.types.Operator):
 class AFTERGLOW_OT_save_look(bpy.types.Operator):
     bl_idname = "afterglow.save_look"
     bl_label = "Save Current Look"
-    bl_description = "Save current layers and the first reacting object's shared style inside this .blend"
+    bl_description = ("Save current layers and the first reacting object's shared style inside this .blend"
+                      if edition.IS_PRO else "Save the first reacting object's shared style inside this .blend")
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -87,7 +90,8 @@ class AFTERGLOW_OT_save_look(bpy.types.Operator):
 class AFTERGLOW_OT_apply_saved_look(bpy.types.Operator):
     bl_idname = "afterglow.apply_saved_look"
     bl_label = "Apply Saved Look"
-    bl_description = "Apply the saved style to the chosen object or environment workflow"
+    bl_description = ("Apply the saved style to the chosen object or environment workflow"
+                      if edition.IS_PRO else "Apply the saved object colors and response")
     bl_options = {"REGISTER", "UNDO", "INTERNAL"}
     scope: _scope_property()
 
@@ -98,13 +102,14 @@ class AFTERGLOW_OT_apply_saved_look(bpy.types.Operator):
     def execute(self, context):
         entry = selected_look(context.scene)
         try:
-            lookbook.apply(context.scene, lookbook.loads(entry.payload), scope=self.scope)
+            scope = edition.style_scope(self.scope)
+            lookbook.apply(context.scene, lookbook.loads(entry.payload), scope=scope)
         except ValueError as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
-        if self.scope in {"ALL", "OBJECT"}:
+        if scope in {"ALL", "OBJECT"}:
             _refresh_playback(self, context.scene)
-        message = (f"Applied {entry.name} to object reactions" if self.scope == "OBJECT" else
+        message = (f"Applied {entry.name} to object reactions" if scope == "OBJECT" else
                    f"Applied {entry.name}. Rebuild Effects to generate this environment style")
         self.report({"INFO"}, message)
         return {"FINISHED"}
@@ -113,7 +118,8 @@ class AFTERGLOW_OT_apply_saved_look(bpy.types.Operator):
 class AFTERGLOW_OT_build_saved_look(bpy.types.Operator):
     bl_idname = "afterglow.build_saved_look"
     bl_label = "Apply & Build Saved Look"
-    bl_description = "Apply and build the saved style in the chosen object or environment workflow"
+    bl_description = ("Apply and build the saved style in the chosen object or environment workflow"
+                      if edition.IS_PRO else "Apply the saved style and build its music reaction")
     bl_options = {"REGISTER", "UNDO", "INTERNAL"}
     scope: _scope_property()
 
@@ -124,10 +130,11 @@ class AFTERGLOW_OT_build_saved_look(bpy.types.Operator):
     def execute(self, context):
         entry = selected_look(context.scene)
         try:
+            scope = edition.style_scope(self.scope)
             data = lookbook.loads(entry.payload)
-            if self.scope == "OBJECT":
+            if scope == "OBJECT":
                 workflow.create_reaction(context.scene, look_data=data, style_scope="OBJECT")
-            elif self.scope == "EFFECTS":
+            elif scope == "EFFECTS":
                 from . import environment
                 environment.build(context.scene, look_data=data)
             else:
@@ -135,7 +142,7 @@ class AFTERGLOW_OT_build_saved_look(bpy.types.Operator):
         except (ValueError, RuntimeError) as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
-        target = {"OBJECT": "Object reactions", "EFFECTS": "Environment", "ALL": "Show"}[self.scope]
+        target = {"OBJECT": "Object reactions", "EFFECTS": "Environment", "ALL": "Show"}[scope]
         self.report({"INFO"}, f"{target} ready with {entry.name}. Press Space to play")
         return {"FINISHED"}
 
@@ -248,8 +255,7 @@ def draw_library(layout, context, scope="ALL"):
     from .ui import draw_note
     s = context.scene.afterglow
     playing = getattr(context.screen, "is_animation_playing", False)
-    if scope not in {item[0] for item in SCOPE_ITEMS}:
-        raise ValueError(f"Unknown look scope: {scope}")
+    scope = edition.style_scope(scope)
     suffix = "" if scope == "ALL" else "_" + scope
     title = {"ALL": "My Looks", "OBJECT": "My Object Looks", "EFFECTS": "My Environment Looks"}[scope]
     head, body = layout.panel("AFTERGLOW_library" + suffix, default_closed=True)
@@ -307,7 +313,8 @@ def draw_finish(layout, context):
             draw_note(body, "Optional glow for the final image. Keeps the existing output chain and render engine.", context)
 
 
-CLASSES = (AFTERGLOW_OT_build_show, AFTERGLOW_OT_save_look, AFTERGLOW_OT_apply_saved_look,
+PRO_CLASSES = (AFTERGLOW_OT_build_show,) if edition.IS_PRO else ()
+CLASSES = (*PRO_CLASSES, AFTERGLOW_OT_save_look, AFTERGLOW_OT_apply_saved_look,
            AFTERGLOW_OT_build_saved_look, AFTERGLOW_OT_remove_saved_look,
            AFTERGLOW_OT_import_look, AFTERGLOW_OT_export_look, AFTERGLOW_UL_saved_looks,
            AFTERGLOW_OT_add_render_glow, AFTERGLOW_OT_remove_render_glow)

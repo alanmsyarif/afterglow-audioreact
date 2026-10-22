@@ -1,8 +1,8 @@
 schema_version = "1.0.0"
 
 id = "afterglow"
-version = "0.26.0"
-name = "Afterglow"
+version = "0.27.0"
+name = "Afterglow Pro"
 tagline = "Choose music and a look, then create audio-reactive lighting"
 maintainer = "alanmaulanasyarif@gmail.com"
 website = "https://github.com/alanmsyarif/afterglow-audioreact"

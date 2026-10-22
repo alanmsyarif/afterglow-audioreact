@@ -3,7 +3,10 @@
 import bpy
 import numpy as np
 
-from . import bake, core, effects, materials, prepare, presets, tempo
+from . import bake, core, edition, materials, prepare, presets, tempo
+
+if edition.IS_PRO:
+    from . import effects
 
 
 def inspect(scene):
@@ -68,7 +71,7 @@ def inspect(scene):
 
 def _style_preflight(scene, look_identifier, look_data, scope="ALL"):
     """Check one optional style source without applying any of its controls."""
-    presets._scope(scope)
+    scope = presets._scope(scope)
     if look_identifier is not None and look_data is not None:
         raise ValueError("Choose either a built-in look or a saved custom look")
     if look_identifier is not None:
@@ -88,6 +91,7 @@ def create_reaction(scene, look_identifier=None, look_data=None, *, style_scope=
     the controls the look may change; OBJECT keeps environment styling intact.
     This operation never builds effects.
     """
+    style_scope = presets._scope(style_scope)
     state = inspect(scene)
     if not state["ready"]:
         raise ValueError(state["reason"])
@@ -124,6 +128,7 @@ def create_reaction(scene, look_identifier=None, look_data=None, *, style_scope=
 
 def _effects_preflight(scene, enabled):
     """Validate routing for the layers a complete-show build is about to enable."""
+    edition.require_pro()
     if not enabled:
         raise ValueError("Enable an effect layer or choose a Creative Look first")
     fx = scene.afterglow.effects
@@ -147,13 +152,14 @@ def create_show(scene, look_identifier=None, look_data=None):
     are changed. Like Create Reaction, this refreshes scene Afterglow playback.
     Live mixer controls, audio placement, venue and routing remain unchanged.
     """
+    edition.require_pro()
     state = inspect(scene)
     if not state["ready"]:
         raise ValueError(state["reason"])
     normalized = _style_preflight(scene, look_identifier, look_data)
     if look_identifier is not None:
         enabled = presets.enabled_layers(look_identifier)
-    elif normalized is not None:
+    elif normalized is not None and "layers" in normalized:
         enabled = tuple(name for name in effects.LAYERS if normalized["layers"][name]["enabled"])
     else:
         enabled = tuple(name for name in effects.LAYERS

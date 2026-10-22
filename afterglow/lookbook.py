@@ -9,10 +9,12 @@ reacting objects, but does not create modifiers, build effects, or refresh a bak
 import json
 import math
 
-from . import core, effects, nodes, presets
+from . import core, edition, effect_schema, nodes, presets
 
 FORMAT = "afterglow.look"
 VERSION = 3
+OBJECT_FORMAT = "afterglow.object-look"
+OBJECT_VERSION = 1
 MAX_BYTES = 65536
 
 # Public, stable field names: omit project-specific placement/routing/mixer controls.
@@ -71,7 +73,7 @@ EFFECT_FIELDS = tuple(EFFECT_SPECS)
 _LAYER_SPECS = {
     "enabled": ("bool",),
     "weight": ("float", 0.0, 1.0),
-    "trigger_band": ("enum", tuple(item[0] for item in effects.BAND_ITEMS)),
+    "trigger_band": ("enum", tuple(item[0] for item in effect_schema.BAND_ITEMS)),
     "timing": ("float", 0.25, 4.0),
     "intensity": ("float", 0.0, 4.0),
     "color": ("color", 3),
@@ -148,12 +150,18 @@ def _record(value, specs, location):
 
 def validate(data):
     """Return a normalized independent snapshot, or reject it before any mutations."""
+    if isinstance(data, dict) and data.get("format") == OBJECT_FORMAT:
+        _keys(data, ("format", "version", "object"), "object look")
+        if type(data["version"]) is not int or data["version"] != OBJECT_VERSION:
+            raise ValueError("Unsupported object look version; use version 1")
+        obj = None if data["object"] is None else _record(data["object"], _OBJECT_SPECS, "object")
+        return {"format": OBJECT_FORMAT, "version": OBJECT_VERSION, "object": obj}
     _keys(data, ("format", "version", "layers", "effects", "object"), "look")
     if data["format"] != FORMAT or type(data["version"]) is not int or data["version"] not in (1, 2, VERSION):
         raise ValueError("Unsupported look format or version; use an Afterglow look version 1, 2 or 3")
     version = data["version"]
     legacy = version == 1
-    layer_names = _V1_LAYERS if legacy else effects.LAYERS
+    layer_names = _V1_LAYERS if legacy else effect_schema.LAYERS
     _keys(data["layers"], layer_names, "layers")
     layers = {name: _record(data["layers"][name], _layer_specs(name, version), f"layers.{name}")
               for name in layer_names}
@@ -178,9 +186,6 @@ def _plain(value):
 
 def capture(scene):
     """Capture styling only; the first reacting target by name supplies object style."""
-    fx = scene.afterglow.effects
-    layers = {name: {prop: _plain(getattr(getattr(fx, name), prop)) for prop in layer_fields(name)}
-              for name in effects.LAYERS}
     object_style = None
     collection = scene.afterglow.collection
     for ob in core.targets(collection) if collection else ():
@@ -188,6 +193,11 @@ def capture(scene):
         if mod:
             object_style = {name: _plain(nodes.get_input(mod, name)) for name in OBJECT_FIELDS}
             break
+    if not edition.IS_PRO:
+        return validate({"format": OBJECT_FORMAT, "version": OBJECT_VERSION, "object": object_style})
+    fx = scene.afterglow.effects
+    layers = {name: {prop: _plain(getattr(getattr(fx, name), prop)) for prop in layer_fields(name)}
+              for name in effect_schema.LAYERS}
     return validate({"format": FORMAT, "version": VERSION, "layers": layers,
                      "effects": {name: _plain(getattr(fx, name)) for name in EFFECT_FIELDS},
                      "object": object_style})
@@ -195,11 +205,14 @@ def capture(scene):
 
 def _plan(scene, data, scope="ALL"):
     """Validate the full snapshot, guarding animation only within its target scope."""
-    presets._scope(scope)
+    scope = presets._scope(scope)
     data = validate(data)
-    if scope in ("ALL", "EFFECTS"):
+    has_effects = data["format"] == FORMAT
+    if scope == "EFFECTS" and not has_effects:
+        raise ValueError("This is an object look; apply it in the Afterglow object panel")
+    if has_effects and scope in ("ALL", "EFFECTS"):
         scene_paths = {f"afterglow.effects.{name}.{prop}"
-                       for name in effects.LAYERS for prop in layer_fields(name)}
+                       for name in effect_schema.LAYERS for prop in layer_fields(name)}
         scene_paths.update(f"afterglow.effects.{name}" for name in EFFECT_FIELDS)
         presets._guard(scene, scene_paths)
     objects = []
@@ -224,8 +237,10 @@ def preflight(scene, data, *, scope="ALL"):
 
 def apply(scene, data, *, scope="ALL"):
     """Apply only the selected side; return object count for OBJECT, else layer count."""
+    scope = presets._scope(scope)
     data, objects = _plan(scene, data, scope)
-    if scope in ("ALL", "EFFECTS"):
+    has_effects = data["format"] == FORMAT
+    if has_effects and scope in ("ALL", "EFFECTS"):
         fx = scene.afterglow.effects
         for name, values in data["layers"].items():
             layer = getattr(fx, name)
@@ -236,7 +251,8 @@ def apply(scene, data, *, scope="ALL"):
     for ob, mod in objects:
         for prop, value in data["object"].items():
             nodes.set_input(mod, prop, value)
-    return len(objects) if scope == "OBJECT" else sum(values["enabled"] for values in data["layers"].values())
+    return (len(objects) if scope == "OBJECT" or not has_effects else
+            sum(values["enabled"] for values in data["layers"].values()))
 
 
 def dumps(scene):
