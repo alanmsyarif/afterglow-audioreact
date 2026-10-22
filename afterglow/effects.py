@@ -23,8 +23,8 @@ from mathutils import Quaternion, Vector
 from bpy_extras import anim_utils
 
 from . import bake, core, tempo
+from .effect_schema import BAND_ITEMS, EMITTER_TAG, LAYERS, TAG
 
-TAG = "afterglow_effects"
 SIG = TAG + "_sig"
 COUNTS = TAG + "_counts"  # events per layer of the last build, for the panel
 LIVE = TAG + "_live"      # Intensity each layer's keys are scaled to now, for live edits
@@ -33,7 +33,7 @@ BASE = TAG + "_base"      # unscaled brightness keys, saved with each owned ID f
 GAIN = TAG + "_gain"      # a beam material's emission gain at Glow 1
 COLLECTION = "Afterglow Effects"
 PREFIX = "AFX"
-VERSION = 8  # independently configured strike and gun beam geometry
+VERSION = 9  # independent environment bounds and source-only venue fitting
 MIN_GAP = 0.18       # s between two events of one layer
 ATTACK_S = 0.01     # positive band-envelope change over this many seconds
 ATTACK_WINDOW = 0.25  # local rise baseline, so a held bass note does not mask new attacks
@@ -44,16 +44,9 @@ SNAP_HARM = 0.20     # log2 slack reconciling the grid with the tempo curve (hal
 SNAP_LO_BPM, SNAP_HI_BPM = 40.0, 240.0  # pulse period search bounds
 
 SHAPES = ("CIRCLE", "SQUARE", "RECT", "TRIANGLE")
-LAYERS = ("strikes", "blooms", "flashes", "trails", "downward", "gun", "signals", "lasers")
 POOL = {"strikes": 6, "blooms": 5, "flashes": 2, "trails": 3, "downward": 6, "gun": 3, "signals": 3, "lasers": 3}
 BANDS = {"LOW": (20.0, 150.0), "MID": (150.0, 2000.0),
          "HIGH": (2000.0, 16000.0), "FULL": (20.0, 16000.0)}
-BAND_ITEMS = (
-    ("LOW", "Low (20-150 Hz)", "Kicks and bass"),
-    ("MID", "Mid (150-2k Hz)", "Melody and voices"),
-    ("HIGH", "High (2k-16k Hz)", "Hats and air"),
-    ("FULL", "Full range", "Everything at once"),
-)
 
 
 def _fcurve(scene, path):
@@ -323,12 +316,21 @@ class Venue:
         return Vector((p.x, p.y, self.z0))
 
 
-def _fitted_venue(scene):
-    """The venue fitted to the world bounds of every object in the scene's collection."""
+def bounds_collection(scene):
+    """Use independent environment bounds, retaining old projects' main collection fallback."""
     s = scene.afterglow
-    if s.collection is None:
-        raise ValueError("Pick a collection first")
-    objs = core.targets(s.collection)
+    return s.effects.bounds_collection or s.collection
+
+
+def _fitted_venue(scene):
+    """Fit to source objects only; generated lights, beams and cages never enlarge bounds."""
+    s = scene.afterglow
+    collection = bounds_collection(scene)
+    if collection is None:
+        raise ValueError("Choose environment bounds or a main Objects collection first")
+    if collection.get(TAG):
+        raise ValueError("Choose source objects for bounds, not a generated effects collection")
+    objs = [obj for obj in core.targets(collection) if not obj.get(TAG) and not obj.get(EMITTER_TAG)]
     if not objs:
         raise ValueError("The collection has no mesh, curve or text objects")
     fx = s.effects
@@ -349,7 +351,7 @@ def _fitted_venue(scene):
 
 def make_venue(scene):
     """The venue every layer emits in: the emitter cage when there is one, else fitted to
-    the scene's collection. The cage's outline (in its own frame, so applied scale and Edit
+    the environment bounds collection. The cage's outline (in its own frame, so applied scale and Edit
     Mode changes count) sets the venue's floor centre, half-extents and height, and its
     transform places, turns (about Z) and scales that."""
     fx = scene.afterglow.effects
@@ -367,7 +369,6 @@ def make_venue(scene):
 
 # --------------------------------------------------------------------------- emitter cage
 
-EMITTER_TAG = "afterglow_emitter"
 EMITTER_NAME = "Afterglow Emitter"
 SHAPE_TAG = "afterglow_emitter_shape"  # the Venue Shape the cage was last drawn as
 CAGE_POSTS = 8  # vertical edges drawn on a circle cage
@@ -1241,7 +1242,7 @@ def settings_sig(scene):
     # notation. Its resolved destination is stable, so that does not stale a build.
     vals += [os.path.normpath(bpy.path.abspath(s.sound.filepath, library=s.sound.library)) if s.sound else "", s.start_frame,
              round(scene.render.fps / scene.render.fps_base, 4),
-             s.collection.name if s.collection else ""]
+             bounds_collection(scene).name if fx.emitter is None and bounds_collection(scene) else ""]
     return repr(vals)
 
 

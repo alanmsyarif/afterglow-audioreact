@@ -3,7 +3,10 @@
 import bpy
 import numpy as np
 
-from . import bake, core, effects, materials, prepare, presets, tempo
+from . import bake, core, edition, materials, prepare, presets, tempo
+
+if edition.IS_PRO:
+    from . import effects
 
 
 def inspect(scene):
@@ -66,29 +69,33 @@ def inspect(scene):
             "ready": reason is None, "reason": reason, "warnings": warnings}
 
 
-def _style_preflight(scene, look_identifier, look_data):
+def _style_preflight(scene, look_identifier, look_data, scope="ALL"):
     """Check one optional style source without applying any of its controls."""
+    scope = presets._scope(scope)
     if look_identifier is not None and look_data is not None:
         raise ValueError("Choose either a built-in look or a saved custom look")
     if look_identifier is not None:
-        presets.preflight(scene, look_identifier)
+        presets.preflight(scene, look_identifier, scope=scope)
     if look_data is not None:
         from . import lookbook
-        return lookbook.preflight(scene, look_data)
+        return lookbook.preflight(scene, look_data, scope=scope)
     return None
 
 
-def create_reaction(scene, look_identifier=None, look_data=None):
+def create_reaction(scene, look_identifier=None, look_data=None, *, style_scope="ALL"):
     """Validate prerequisites, then apply, calibrate and bake the reaction.
 
     Like the existing Calibrate and Fast Playback controls, the final calibration/bake
     refreshes all Afterglow modifiers in this scene. A chosen built-in look is applied
-    after creating modifiers and before the single final bake. It never builds effects.
+    after creating modifiers and before the single final bake. style_scope selects
+    the controls the look may change; OBJECT keeps environment styling intact.
+    This operation never builds effects.
     """
+    style_scope = presets._scope(style_scope)
     state = inspect(scene)
     if not state["ready"]:
         raise ValueError(state["reason"])
-    normalized = _style_preflight(scene, look_identifier, look_data)
+    normalized = _style_preflight(scene, look_identifier, look_data, style_scope)
     mono, rate = core.load_mono(scene.afterglow.sound, "Create Reaction")
     if not len(mono) or rate <= 0 or not np.isfinite(mono).all():
         raise ValueError("Choose a sound file with readable, finite audio samples")
@@ -99,10 +106,10 @@ def create_reaction(scene, look_identifier=None, look_data=None):
     props._pending.pop(scene.name, None)
     applied, skipped, _, linked = core.apply(scene)
     if look_identifier is not None:
-        presets.apply(scene, look_identifier)
+        presets.apply(scene, look_identifier, scope=style_scope)
     elif normalized is not None:
         from . import lookbook
-        lookbook.apply(scene, normalized)
+        lookbook.apply(scene, normalized, scope=style_scope)
     curve = tempo.bake(scene)
     calibrated = core.calibrate(scene)
     if scene.afterglow.fast_playback:
@@ -121,6 +128,7 @@ def create_reaction(scene, look_identifier=None, look_data=None):
 
 def _effects_preflight(scene, enabled):
     """Validate routing for the layers a complete-show build is about to enable."""
+    edition.require_pro()
     if not enabled:
         raise ValueError("Enable an effect layer or choose a Creative Look first")
     fx = scene.afterglow.effects
@@ -144,13 +152,14 @@ def create_show(scene, look_identifier=None, look_data=None):
     are changed. Like Create Reaction, this refreshes scene Afterglow playback.
     Live mixer controls, audio placement, venue and routing remain unchanged.
     """
+    edition.require_pro()
     state = inspect(scene)
     if not state["ready"]:
         raise ValueError(state["reason"])
     normalized = _style_preflight(scene, look_identifier, look_data)
     if look_identifier is not None:
         enabled = presets.enabled_layers(look_identifier)
-    elif normalized is not None:
+    elif normalized is not None and "layers" in normalized:
         enabled = tuple(name for name in effects.LAYERS if normalized["layers"][name]["enabled"])
     else:
         enabled = tuple(name for name in effects.LAYERS

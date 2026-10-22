@@ -4,7 +4,10 @@ import bpy
 from bpy.props import (BoolProperty, EnumProperty, FloatProperty, FloatVectorProperty,
                        IntProperty, PointerProperty, StringProperty, CollectionProperty)
 
-from . import bake, core, effects, materials, nodes, presets, tempo
+from . import bake, core, edition, effect_schema, materials, nodes, presets, tempo
+
+if edition.IS_PRO:
+    from . import effects
 
 REBAKE_DELAY = 0.3  # s of quiet after the last setting change before the automatic re-bake
 _pending = {}       # scene name -> time of its last change still waiting for a re-bake
@@ -87,7 +90,7 @@ class AfterglowFXLayer:
                                          "keyframed, Build samples it per event")
     timing: FloatProperty(name="Timing", default=1.0, min=0.25, max=4.0,
                           description="Event duration multiplier; keyframeable, Build samples it per event")
-    trigger_band: EnumProperty(name="Trigger Band", default="LOW", items=effects.BAND_ITEMS,
+    trigger_band: EnumProperty(name="Trigger Band", default="LOW", items=effect_schema.BAND_ITEMS,
                                description="Which frequency band's onsets fire this layer")
 
 
@@ -140,13 +143,15 @@ def _reshape_cage(self, context):
 
 
 class AfterglowEffects(bpy.types.PropertyGroup):
+    bounds_collection: PointerProperty(type=bpy.types.Collection, name="Bounds", options=set(),
+                                       description="Fit generated effects to these objects; empty uses the main Objects collection")
     master_brightness: FloatProperty(name="Master Brightness", default=1.0, min=0.0, max=4.0,
                                      options=set(), update=_live,
                                      description="Retune all built effect lights and graphics live without rebuilding")
     solo_layer: EnumProperty(name="Solo Layer", default="ALL", options=set(), update=_live,
                              items=(("ALL", "All Layers", "See the whole lighting mix"),) + tuple(
                                  (name, name.replace("downward", "cascade trails").replace("gun", "gun bursts").title(),
-                                  "Preview this built layer without changing the show settings") for name in effects.LAYERS),
+                                  "Preview this built layer without changing the show settings") for name in effect_schema.LAYERS),
                              description="Preview one built layer while retaining all enabled layers and events")
     timing_offset: FloatProperty(name="Timing Offset", default=0.0, min=-2.0, max=2.0,
                                  soft_min=-0.25, soft_max=0.25, precision=3, unit="TIME_ABSOLUTE",
@@ -331,16 +336,34 @@ class AfterglowSavedLook(bpy.types.PropertyGroup):
     payload: StringProperty(name="Style Data", options={"HIDDEN"})
 
 
+_ENVIRONMENT_LOOK_IDS = tuple(item[0] for item in presets.ITEMS)
+
+
+def _environment_look_get(self):
+    stored = self.get("environment_look", self.creative_look)
+    return _ENVIRONMENT_LOOK_IDS.index(stored) if stored in _ENVIRONMENT_LOOK_IDS else 0
+
+
+def _environment_look_set(self, value):
+    self["environment_look"] = _ENVIRONMENT_LOOK_IDS[value]
+
+
 class AfterglowScene(bpy.types.PropertyGroup):
     show_advanced: BoolProperty(name="Advanced Controls", default=False, options=set(),
-                                description="Show individual effects, object tuning and manual build tools")
+                                description="Show object tuning, ripple motion and manual reaction tools")
+    if edition.IS_PRO:
+        environment_advanced: BoolProperty(name="Advanced Environment Controls", default=False, options=set(),
+                                           description="Show individual environment layers, routing, venue and live mix controls")
+        environment_look: EnumProperty(name="Environment Look", items=presets.ITEMS, options=set(),
+                                       get=_environment_look_get, set=_environment_look_set,
+                                       description="Choose the generated lighting style independently of the object look")
     easy_glow: BoolProperty(name="Soft Glow", default=True, options=set(),
-                           description="Create Visual adds compositor glow; turn off to remove only Afterglow's glow")
+                           description="Build Reaction adds compositor glow; turn off to remove only Afterglow's glow")
     saved_looks: CollectionProperty(type=AfterglowSavedLook)
     saved_look_index: IntProperty(name="Saved Look", default=0, min=0)
     new_look_name: StringProperty(name="Name", default="My Look", maxlen=64)
-    creative_look: EnumProperty(name="Creative Look", items=presets.ITEMS, options=set(),
-                                description="Choose a style, then Create Visual; browsing keeps your scene intact")
+    creative_look: EnumProperty(name="Object Look", items=presets.OBJECT_ITEMS, options=set(),
+                                description="Choose object colors and response, then Build Reaction")
     collection: PointerProperty(type=bpy.types.Collection, name="Collection",
                                 description="Every emissive object in here reacts", update=_sync)
     sound: PointerProperty(type=bpy.types.Sound, name="Sound", update=_retempo)
@@ -370,7 +393,8 @@ class AfterglowScene(bpy.types.PropertyGroup):
     fast_playback: BoolProperty(name="Fast Playback", description="Precompute the reaction so playback "
                                 "never evaluates the slow sound node. Re-bake after editing bands, "
                                 "Decay or Delay in the modifier panel", update=_fast)
-    effects: PointerProperty(type=AfterglowEffects, name="Environment Effects")
+    if edition.IS_PRO:
+        effects: PointerProperty(type=AfterglowEffects, name="Environment Effects")
 
 
 def _meter(self, context):
@@ -397,7 +421,8 @@ class AfterglowObject(bpy.types.PropertyGroup):
     meter_invert: BoolProperty(name="Invert", description="Fill from the far end (top down)", update=_meter)
 
 
-CLASSES = (*LAYER_TYPES.values(), AfterglowEffects, AfterglowSavedLook, AfterglowScene, AfterglowObject)
+PRO_CLASSES = (*LAYER_TYPES.values(), AfterglowEffects) if edition.IS_PRO else ()
+CLASSES = (*PRO_CLASSES, AfterglowSavedLook, AfterglowScene, AfterglowObject)
 
 
 def register():

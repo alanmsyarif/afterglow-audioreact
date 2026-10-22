@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy
 import helpers
-from afterglow import bake, core, easy, effects, finish, presets
+from afterglow import bake, core, easy, effects, finish, lookbook, presets
 
 
 def unchanged_scene_data(scene):
@@ -72,7 +72,7 @@ def test_user_collection_becomes_ready_without_source_geometry_sound_or_camera_g
     vertices = {obj: tuple(tuple(vertex.co) for vertex in obj.data.vertices) for obj in objects}
     result = easy.create_visual(bpy.context)
     assert result['applied'] == result['calibrated'] == result['baked'] == 3
-    assert result['effects'] and sum(result['effects'].values()) > 0
+    assert 'effects' not in result and not effects._collections(scene)
     assert set(collection.objects) == set(objects)
     assert {obj.data for obj in objects} == source_meshes
     assert all(vertices[obj] == tuple(tuple(vertex.co) for vertex in obj.data.vertices) for obj in objects)
@@ -83,7 +83,7 @@ def test_user_collection_becomes_ready_without_source_geometry_sound_or_camera_g
     assert not bake.outdated(scene) and not effects.outdated(scene)
 
 
-def test_repeated_creation_reuses_user_objects_and_replaces_only_owned_effects():
+def test_repeated_object_creation_reuses_sources_without_generating_environment():
     scene, collection, objects = helpers.visual_scene()
     easy.create_visual(bpy.context)
     count = len(scene.objects)
@@ -92,7 +92,7 @@ def test_repeated_creation_reuses_user_objects_and_replaces_only_owned_effects()
     assert scene.afterglow.collection == collection
     assert set(collection.objects) == set(objects) and len(scene.objects) == count
     assert all(set(obj.users_collection) == source_links[obj] for obj in objects)
-    assert len(effects._collections(scene)) == 1
+    assert not effects._collections(scene)
     assert not bpy.data.cameras
     assert not bake.outdated(scene) and not effects.outdated(scene)
 
@@ -168,34 +168,70 @@ def test_bad_glow_output_fails_before_reaction_or_lighting_changes():
     assert not any(core.find_modifier(obj) for obj in objects)
 
 
-def test_simple_creation_restores_full_mix_and_advanced_creation_retains_it():
-    scene, _, _ = helpers.visual_scene()
+def environment_state(scene):
+    data = lookbook.capture(scene)
+    generated = []
+    for collection in effects._collections(scene):
+        for obj in sorted(collection.all_objects, key=lambda obj: obj.name):
+            owners = []
+            for owner in (obj, obj.data):
+                curves = tuple((curve.data_path, curve.array_index,
+                                tuple(tuple(point.co) for point in curve.keyframe_points))
+                               for curve in helpers.fcurves(owner))
+                owners.append((owner, curves))
+            generated.append((obj, tuple(owners)))
     fx = scene.afterglow.effects
-    fx.master_brightness, fx.solo_layer = 0.0, 'signals'
-    easy.create_visual(bpy.context)
-    assert fx.master_brightness == 1.0 and fx.solo_layer == 'ALL'
-    scene.afterglow.show_advanced = True
-    fx.master_brightness, fx.solo_layer = 0.0, 'strikes'
-    easy.create_visual(bpy.context)
-    assert fx.master_brightness == 0.0 and fx.solo_layer == 'strikes'
-    assert not effects.outdated(scene) and not bake.outdated(scene)
+    return (data['layers'], data['effects'], fx.master_brightness, fx.solo_layer,
+            tuple(effects._collections(scene)), tuple(generated), effects.settings_sig(scene))
 
 
-def test_all_curated_looks_and_lasers_work_on_user_objects_without_a_camera():
+def test_main_creation_preserves_environment_settings_mix_and_existing_build():
+    scene, _, _ = helpers.visual_scene()
+    presets.apply(scene, 'NEON_CLUB', scope='EFFECTS')
+    effects.build(scene)
+    fx = scene.afterglow.effects
+    fx.master_brightness, fx.solo_layer = 0.35, 'gun'
+    before = environment_state(scene)
+    for advanced in (False, True):
+        scene.afterglow.show_advanced = advanced
+        scene.afterglow.creative_look = 'AURORA_FLOW'
+        result = easy.create_visual(bpy.context)
+        assert result['applied'] == result['baked'] == 3 and 'effects' not in result
+        assert environment_state(scene) == before
+        assert not bake.outdated(scene) and not effects.outdated(scene)
+
+
+def test_main_creation_ignores_unrelated_environment_routing_and_animation():
+    scene, _, objects = helpers.visual_scene()
+    fx = scene.afterglow.effects
+    fx.downward.enabled, fx.cascade_direction = True, 'TO_CAMERA'
+    fx.strikes.weight = 0.25
+    fx.strikes.keyframe_insert('weight', frame=1)
+    fx.strikes.weight = 0.8
+    fx.strikes.keyframe_insert('weight', frame=40)
+    helpers.at(scene.afterglow.start_frame)  # compare evaluated animation at the same preview frame
+    animation = [(curve.data_path, tuple(tuple(point.co) for point in curve.keyframe_points))
+                 for curve in helpers.fcurves(scene)]
+    before = environment_state(scene)
+    result = easy.create_visual(bpy.context)
+    assert result['applied'] == result['calibrated'] == result['baked'] == 3
+    assert all(core.find_modifier(obj) for obj in objects) and not bake.outdated(scene)
+    assert scene.camera is None and not effects._collections(scene)
+    assert environment_state(scene) == before
+    assert animation == [(curve.data_path, tuple(tuple(point.co) for point in curve.keyframe_points))
+                         for curve in helpers.fcurves(scene)]
+
+
+def test_every_object_look_works_without_generating_environment_or_a_camera():
     scene, collection, objects = helpers.visual_scene()
+    before = environment_state(scene)
     for identifier, _, _ in presets.ITEMS:
         scene.afterglow.creative_look = identifier
         result = easy.create_visual(bpy.context)
-        assert result['applied'] == 3 and result['effects']
+        assert result['applied'] == 3 and 'effects' not in result
         assert set(collection.objects) == set(objects) and not bpy.data.cameras
-        assert not bake.outdated(scene) and not effects.outdated(scene)
-        graphics = [obj for col in effects._collections(scene) for obj in col.objects
-                    if obj.type == 'CURVE' and obj.name.startswith('AFX_lasers_')]
-        if identifier == 'LASER_SHOW':
-            assert result['effects']['lasers'] > 0 and graphics
-            assert not scene.afterglow.effects.beams
-        else:
-            assert not graphics
+        assert not bake.outdated(scene) and not effects._collections(scene)
+        assert environment_state(scene) == before
 
 
 def test_create_and_update_visual_preserve_native_output_and_timeline_settings():
@@ -245,7 +281,8 @@ def test_negative_music_offset_is_independent_of_blenders_render_range():
     scene.afterglow.start_frame = -10
     before = native_settings(scene)
     result = easy.create_visual(bpy.context)
-    assert result['effects'] and scene.frame_current == -10
+    assert result['applied'] == 3 and scene.frame_current == -10
+    assert not effects._collections(scene)
     assert native_settings(scene) == before
     assert scene.sequence_editor.strips[core.STRIP_NAME].frame_start == -10
 
@@ -259,7 +296,8 @@ def test_disabled_native_compositing_does_not_block_scene_creation():
     scene.compositing_node_group = tree
     before = native_settings(scene)
     result = easy.create_visual(bpy.context)
-    assert result['effects'] and not result['glow']
+    assert result['applied'] == 3 and not result['glow']
+    assert not effects._collections(scene)
     assert native_settings(scene) == before
     assert scene.compositing_node_group == tree and set(tree.nodes) == {output}
 

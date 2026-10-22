@@ -2,11 +2,12 @@ import os
 import sys
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy
 import helpers
-from afterglow import bake, creator, effects, finish, lookbook, ui
+from afterglow import bake, core, creator, effects, finish, lookbook, nodes, ui
 
 
 def user_show():
@@ -88,11 +89,12 @@ def test_glow_operators_are_idempotent_and_reversible():
 
 
 class Layout:
-    def __init__(self, log, enabled=True):
+    def __init__(self, log, enabled=True, buttons=None):
         self.log, self.enabled = log, enabled
+        self.buttons = buttons if buttons is not None else {}
 
     def child(self, *a, **k):
-        return Layout(self.log, self.enabled)
+        return Layout(self.log, self.enabled, self.buttons)
 
     row = column = box = child
 
@@ -100,13 +102,16 @@ class Layout:
         return self.child(), self.child()
 
     def label(self, **kwargs):
-        pass
+        self.log.append(("label", kwargs.get("text", "")))
 
     def prop(self, data, name, **kwargs):
         assert name in data.bl_rna.properties
 
     def operator(self, name, **kwargs):
         self.log.append((name, self.enabled))
+        button = SimpleNamespace()
+        self.buttons[name] = button
+        return button
 
     def template_list(self, name, unused, data, prop, active_data, active_prop, **kwargs):
         assert name == "AFTERGLOW_UL_saved_looks"
@@ -133,6 +138,99 @@ def test_register_roundtrip_includes_creator_library_and_operators():
     assert hasattr(bpy.types, "AFTERGLOW_UL_saved_looks")
     assert hasattr(bpy.context.scene.afterglow, "saved_looks")
     assert hasattr(bpy.ops.afterglow, "build_show")
+
+
+def test_object_saved_look_build_preserves_environment_and_ignores_fx_animation():
+    scene = user_show()
+    creator.store_look(scene, "Object style", lookbook.capture(scene))
+    fx = scene.afterglow.effects
+    fx.strikes.weight = 0.23
+    fx.strikes.keyframe_insert("weight", frame=1)
+    fx.gun.visible_beam = False
+    fx.gun.beam_glow = 2.3
+    before = lookbook.capture(scene)
+    collections = set(effects._collections(scene))
+    objects = {obj for collection in collections for obj in collection.objects}
+    actions = {obj.name: [(curve.data_path, curve.array_index,
+                          tuple(tuple(point.co) for point in curve.keyframe_points))
+                         for curve in helpers.fcurves(obj)] for obj in objects}
+    assert bpy.ops.afterglow.build_saved_look(scope="OBJECT") == {"FINISHED"}
+    after = lookbook.capture(scene)
+    assert before["layers"] == after["layers"] and before["effects"] == after["effects"]
+    assert set(effects._collections(scene)) == collections
+    assert {obj for collection in collections for obj in collection.objects} == objects
+    assert actions == {obj.name: [(curve.data_path, curve.array_index,
+                                  tuple(tuple(point.co) for point in curve.keyframe_points))
+                                 for curve in helpers.fcurves(obj)] for obj in objects}
+    assert not bake.outdated(scene)
+
+
+def test_environment_saved_look_build_preserves_object_style_and_animation():
+    scene, collection, objects = helpers.visual_scene()
+    core.apply(scene)
+    scene.afterglow.effects.strikes.enabled = True
+    creator.store_look(scene, "Environment style", lookbook.capture(scene))
+    mod = core.find_modifier(objects[0])
+    nodes.set_input(mod, "Decay", 0.37)
+    nodes._socket(mod, "Color A").keyframe_insert("value", frame=1)
+    before = lookbook.capture(scene)["object"]
+    action = [(curve.data_path, curve.array_index, tuple(tuple(point.co) for point in curve.keyframe_points))
+              for curve in helpers.fcurves(objects[0])]
+    native = scene.frame_start, scene.frame_end, scene.afterglow.fast_playback
+    assert bpy.ops.afterglow.build_saved_look(scope="EFFECTS") == {"FINISHED"}
+    assert effects.built_counts(scene)["strikes"] > 0
+    assert lookbook.capture(scene)["object"] == before
+    assert action == [(curve.data_path, curve.array_index, tuple(tuple(point.co) for point in curve.keyframe_points))
+                      for curve in helpers.fcurves(objects[0])]
+    assert (scene.frame_start, scene.frame_end, scene.afterglow.fast_playback) == native
+    assert all(core.find_modifier(obj) for obj in objects)
+
+
+def test_environment_saved_look_build_works_without_main_objects_or_materials():
+    scene = bpy.context.scene
+    bounds = bpy.data.collections.new("Environment bounds")
+    scene.collection.children.link(bounds)
+    obj = helpers.plane("Ordinary bounds", bounds)
+    scene.afterglow.effects.bounds_collection = bounds
+    scene.afterglow.sound = helpers.sound()
+    data = lookbook.capture(scene)
+    data["layers"]["strikes"].update(enabled=True, trigger_band="FULL", weight=1.0)
+    creator.store_look(scene, "Environment only", data)
+    assert scene.afterglow.collection is None and not obj.material_slots
+    native_range = scene.frame_start, scene.frame_end
+    assert bpy.ops.afterglow.build_saved_look(scope="EFFECTS") == {"FINISHED"}
+    assert effects.built_counts(scene)["strikes"] > 0
+    assert scene.afterglow.collection is None and not core.find_modifier(obj)
+    assert not obj.material_slots and (scene.frame_start, scene.frame_end) == native_range
+    strip = scene.sequence_editor.strips[core.STRIP_NAME]
+    assert strip.sound == scene.afterglow.sound and strip.frame_start == scene.afterglow.start_frame
+    assert bpy.ops.afterglow.build_saved_look(scope="EFFECTS") == {"FINISHED"}
+    assert len(scene.sequence_editor.strips) == 1 and scene.sequence_editor.strips[core.STRIP_NAME] == strip
+
+
+def test_environment_saved_look_apply_does_not_refresh_object_bakes():
+    scene = user_show()
+    creator.store_look(scene, "Environment style", lookbook.capture(scene))
+    original = bake.bake_all
+    def unexpected_bake(scene):
+        raise AssertionError("Environment styling must not rebake object reactions")
+    bake.bake_all = unexpected_bake
+    try:
+        assert bpy.ops.afterglow.apply_saved_look(scope="EFFECTS") == {"FINISHED"}
+    finally:
+        bake.bake_all = original
+
+
+def test_library_buttons_target_their_own_workflow():
+    scene = bpy.context.scene
+    creator.store_look(scene, "Stored", lookbook.capture(scene))
+    for scope, label in (("OBJECT", "My Object Looks"), ("EFFECTS", "My Environment Looks")):
+        log = []
+        layout = Layout(log)
+        creator.draw_library(layout, bpy.context, scope=scope)
+        assert layout.buttons["afterglow.apply_saved_look"].scope == scope
+        assert layout.buttons["afterglow.build_saved_look"].scope == scope
+        assert any(kind == "label" and text.startswith(label) for kind, text in log)
 
 
 helpers.run(globals())

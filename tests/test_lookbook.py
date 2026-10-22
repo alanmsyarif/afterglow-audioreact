@@ -328,4 +328,43 @@ def test_per_effect_beam_animation_is_protected_when_applying_old_or_new_looks()
         scene.animation_data_clear()
 
 
+
+def test_object_only_looks_roundtrip_without_overwriting_animated_environment():
+    scene, objects = stage()
+    data = {"format": lookbook.OBJECT_FORMAT, "version": lookbook.OBJECT_VERSION,
+            "object": lookbook.capture(scene)["object"]}
+    data["object"]["Glow"] = 0.42
+    data = lookbook.loads(json.dumps(data))
+    scene.afterglow.effects.lasers.enabled = True
+    scene.afterglow.effects.lasers.keyframe_insert("intensity", frame=1)
+    before = lookbook.capture(scene)
+    assert lookbook.apply(scene, data) == len(objects)
+    after = lookbook.capture(scene)
+    assert after["layers"] == before["layers"] and after["effects"] == before["effects"]
+    assert all(abs(nodes.get_input(core.find_modifier(obj), "Glow") - 0.42) < 1e-6
+               for obj in objects)
+    rejects(lambda: lookbook.apply(scene, data, scope="EFFECTS"))
+    assert lookbook.capture(scene) == after
+
+
+def test_object_only_schema_rejects_extra_fields_and_invalid_values_atomically():
+    scene, objects = stage()
+    initial = lookbook.capture(scene)
+    valid = {"format": lookbook.OBJECT_FORMAT, "version": lookbook.OBJECT_VERSION,
+             "object": initial["object"]}
+    invalid = []
+    data = copy.deepcopy(valid); data["version"] = True; invalid.append(data)
+    data = copy.deepcopy(valid); data["version"] = 2; invalid.append(data)
+    data = copy.deepcopy(valid); data["layers"] = {}; invalid.append(data)
+    data = copy.deepcopy(valid); data["object"]["Glow"] = -1; invalid.append(data)
+    data = copy.deepcopy(valid); data["object"] = []; invalid.append(data)
+    for data in invalid:
+        rejects(lambda: lookbook.apply(scene, data))
+        assert lookbook.capture(scene) == initial
+    empty = {"format": lookbook.OBJECT_FORMAT, "version": lookbook.OBJECT_VERSION,
+             "object": None}
+    assert lookbook.apply(scene, empty) == 0
+    assert lookbook.capture(scene) == initial
+
+
 helpers.run(globals())

@@ -1,4 +1,4 @@
-"""One coordinated action for music-reactive lighting on the user's own objects.
+"""Build music reactions on the user's own objects independently of environment effects.
 
 Afterglow styles and animates the chosen collection. It never generates a scene,
 demo soundtrack or camera. Blender owns scene composition and rendering.
@@ -32,13 +32,12 @@ def _glow_preflight(scene, enabled):
 
 
 def create_visual(context):
-    """Apply a complete music-reactive look to the chosen collection.
+    """Apply a music-reactive object look to the chosen collection.
 
     A collection and readable audio are required. Every prerequisite is checked
-    before styling objects or changing the live mix. Repeated creation replaces the
-    owned lighting build, preserving source geometry, cameras, world and native
-    render/output settings. Simple creation restores the complete lighting mix;
-    Advanced creation retains it. Automatic glow respects disabled compositing.
+    before styling objects. Environment layers, mixer, routing and generated effects
+    remain unchanged. Source geometry, cameras, world and native render/output
+    settings stay under user control. Automatic glow respects disabled compositing.
     """
     scene = context.scene
     s = scene.afterglow
@@ -48,16 +47,11 @@ def create_visual(context):
     if not state["ready"]:
         raise ValueError(state["reason"])
     _sound_preflight(scene)
-    presets.preflight(scene, s.creative_look)
+    presets.preflight(scene, s.creative_look, scope="OBJECT")
     wants_glow = getattr(s, "easy_glow", True)
     apply_glow = wants_glow and scene.render.use_compositing
     _glow_preflight(scene, apply_glow)
-    workflow._effects_preflight(scene, presets.enabled_layers(s.creative_look))
-
-    if not getattr(s, "show_advanced", False):
-        s.effects.solo_layer = "ALL"
-        s.effects.master_brightness = 1.0
-    result = workflow.create_show(scene, look_identifier=s.creative_look)
+    result = workflow.create_reaction(scene, look_identifier=s.creative_look, style_scope="OBJECT")
     if apply_glow:
         finish.enable(scene)
     elif not wants_glow:

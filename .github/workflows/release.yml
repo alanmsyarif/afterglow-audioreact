@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag matching the manifest version (e.g. v0.10.0) to test, build and publish.
+# Tags publish Free only. Pro packages are built separately for paid delivery.
 on:
   push:
     tags: ["v*"]
@@ -25,21 +25,26 @@ jobs:
           python-version: "3.13"
 
       - name: Check the tag matches the manifest version
+        id: metadata
         run: |
           v="$(python -c "import tomllib; print(tomllib.load(open('afterglow/blender_manifest.toml', 'rb'))['version'])")"
           if [ "v$v" != "$GITHUB_REF_NAME" ]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match manifest version $v"
             exit 1
           fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
 
-      - name: Build the extension zip with Blender's builder
+      - name: Build and validate the Free extension
+        env:
+          VERSION: ${{ steps.metadata.outputs.version }}
         run: |
           pip install bpy==5.2.2
           EXT="$(python -c "import os, bpy; print(os.path.join(bpy.utils.system_resource('SCRIPTS'), 'addons_core', 'bl_pkg', 'cli', 'blender_ext.py'))" | tail -n 1)"
-          mkdir -p build  # the builder does not create it
-          python -I "$EXT" build --source-dir afterglow --output-dir build
+          python tools/build_editions.py --edition free --output-dir build/public
+          python -I "$EXT" validate "build/public/afterglow-free-$VERSION.zip"
 
       - name: Publish the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" build/afterglow-*.zip --title "Afterglow $GITHUB_REF_NAME" --generate-notes
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: gh release create "$GITHUB_REF_NAME" "build/public/afterglow-free-$VERSION.zip" --title "Afterglow Free $GITHUB_REF_NAME" --generate-notes
