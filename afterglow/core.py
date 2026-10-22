@@ -7,9 +7,10 @@ import numpy as np
 import bpy
 from mathutils import Vector
 
-from . import effect_schema, materials, nodes
+from . import effect_schema, light_reaction, materials, nodes
 
-SUPPORTED = {"MESH", "CURVE", "FONT"}
+GEOMETRY_TYPES = {"MESH", "CURVE", "FONT"}
+SUPPORTED = GEOMETRY_TYPES | {"LIGHT"}
 MOD_NAME = "Noctune"
 STRIP_NAME = "Noctune Audio"
 AUDIO_TAG = "afterglow_audio"
@@ -19,6 +20,8 @@ LOW_HZ, HIGH_HZ = 20.0, 16000.0
 
 def write_meter(ob, mod):
     """Push the object's Level Meter settings into its modifier."""
+    if ob.type == "LIGHT":
+        return
     m = ob.afterglow
     nodes.set_input(mod, "Meter", m.meter)
     nodes.set_input(mod, "Meter Axis", "XYZ".index(m.meter_axis))
@@ -76,13 +79,23 @@ def load_mono(sound, what="Audio analysis"):
     return mono, rate
 
 
+def is_target(ob):
+    return (ob.type in SUPPORTED and not ob.get(effect_schema.TAG)
+            and not ob.get(effect_schema.EMITTER_TAG))
+
+
 def targets(collection):
-    return sorted((o for o in collection.all_objects if o.type in SUPPORTED), key=lambda o: o.name)
+    return sorted((o for o in collection.all_objects if is_target(o)), key=lambda o: o.name)
 
 
 def find_modifier(ob):
     return next((m for m in ob.modifiers
                  if m.type == "NODES" and m.node_group and m.node_group.get(nodes.TAG)), None)
+
+
+def reaction(ob):
+    """A geometry modifier or native-light reaction with the same input interface."""
+    return light_reaction.reaction(ob) if ob.type == "LIGHT" else find_modifier(ob)
 
 
 def _materials(ob):
@@ -95,7 +108,7 @@ def _managed(scene):
     Switched collections and objects moved out still participate in cleanup.
     """
     from . import prepare
-    objs = {o for o in scene.objects if find_modifier(o) or prepare.TAG in o}
+    objs = {o for o in scene.objects if find_modifier(o) or light_reaction.managed(o) or prepare.TAG in o}
     if scene.afterglow.collection:
         objs |= set(targets(scene.afterglow.collection))
     return objs
@@ -108,7 +121,7 @@ def band(k, n):
 
 
 def apply(scene):
-    """Add or refresh the modifier and patch materials on every emissive object in the collection.
+    """Refresh geometry reactions and native-light drivers in the chosen collection.
 
     Returns (applied, skipped, outside, linked). 'outside' lists objects outside the collection
     that share a patched material; they have no Noctune attributes, so they render dark.
@@ -123,9 +136,11 @@ def apply(scene):
         raise ValueError("Pick an Origin object for Ripple From: Empty")
     if not sound_ok(s.sound):
         raise ValueError(f"Sound file not found: {bpy.path.abspath(s.sound.filepath, library=s.sound.library)}")
-    group = nodes.get_group()
+    objects = targets(s.collection)
+    light_reaction.preflight(objects)
+    group = nodes.get_group() if any(ob.type in GEOMETRY_TYPES for ob in objects) else None
     applied, skipped, patched, linked = [], [], set(), []
-    for ob in targets(s.collection):
+    for ob in objects:
         mats = set()
         for m in _materials(ob):
             if not materials.has_emission(m):
@@ -135,11 +150,14 @@ def apply(scene):
                     linked.append(m)
             else:
                 mats.add(m)
-        if not mats:
-            skipped.append(ob)
-            continue
-        mod = find_modifier(ob) or ob.modifiers.new(MOD_NAME, "NODES")
-        mod.node_group = group
+        if ob.type == "LIGHT":
+            mod = light_reaction.apply(ob)
+        else:
+            if not mats:
+                skipped.append(ob)
+                continue
+            mod = find_modifier(ob) or ob.modifiers.new(MOD_NAME, "NODES")
+            mod.node_group = group
         nodes.set_input(mod, "Sound", s.sound)
         nodes.set_input(mod, "Start Frame", s.start_frame)
         nodes.set_input(mod, "Ripple", s.ripple)
@@ -165,7 +183,7 @@ def respread(objs):
     free = [o for o in objs if not o.afterglow.locked]
     for k, ob in enumerate(free):
         low, high = band(k, len(free))
-        mod = find_modifier(ob)
+        mod = reaction(ob)
         nodes.set_input(mod, "Low", low)
         nodes.set_input(mod, "High", high)
 
@@ -188,14 +206,14 @@ def calibrate(scene, samples=None):
     it (that costs ~0.14 s per frame on a full song). Returns the calibrated objects."""
     from . import bake  # bake imports core
     s = scene.afterglow
-    objs = sorted((o for o in _managed(scene) if find_modifier(o)), key=lambda o: o.name)
+    objs = sorted((o for o in _managed(scene) if reaction(o)), key=lambda o: o.name)
     if not objs:
         raise ValueError("Apply first")
     if s.sound is None:
         raise ValueError("Pick a sound file first")
     duration = _seconds(s.sound)
     fps = scene.render.fps / scene.render.fps_base
-    mods = [find_modifier(o) for o in objs]
+    mods = [reaction(o) for o in objs]
     # Ripple listens to the kick band, which has its own scale: calibrate the pair in use.
     gain_key, threshold_key = ("Ripple Gain", "Ripple Threshold") if s.ripple else ("Gain", "Threshold")
     n = samples or max(1, int(duration * fps))
@@ -233,6 +251,8 @@ def _metric(pts, mode, origin):
 
 def _world_points(ob, depsgraph):
     """Every evaluated vertex in world space (the object's origin if it has none)."""
+    if ob.type == "LIGHT":
+        return np.array(ob.matrix_world.translation, dtype=np.float64)[None, :]
     ev = ob.evaluated_get(depsgraph)
     me = ev.to_mesh()
     try:
@@ -273,7 +293,7 @@ def wave(scene, objs):
         tmin, tmax = (a - lo) / span, (b - lo) / span
         if s.ripple_reverse:
             tmin, tmax = 1.0 - tmax, 1.0 - tmin
-        mod = find_modifier(ob)
+        mod = reaction(ob)
         for name, value in (("Wave Radial", radial), ("Wave Axis", tuple(axis.tolist())),
                             ("Wave Origin", tuple(centre.tolist())), ("Wave Lo", lo), ("Wave Span", span),
                             ("Wave Reverse", s.ripple_reverse), ("Tap Min", tmin), ("Tap Max", tmax)):
@@ -294,14 +314,14 @@ def place(objs, mode="LONGEST", origin=None, reverse=False):
     span = max(dist) - lo
     for ob, d in zip(objs, dist):
         pos = (d - lo) / span if span > 1e-6 else 0.0
-        nodes.set_input(find_modifier(ob), "Ripple Position", 1.0 - pos if reverse and span > 1e-6 else pos)
+        nodes.set_input(reaction(ob), "Ripple Position", 1.0 - pos if reverse and span > 1e-6 else pos)
 
 
 def replace(scene):
     """Re-place every Noctune object with the scene's Ripple From settings."""
     s = scene.afterglow
     bpy.context.view_layer.update()  # matrix_world is stale for objects moved since the last eval
-    objs = sorted((o for o in _managed(scene) if find_modifier(o)), key=lambda o: o.name)
+    objs = sorted((o for o in _managed(scene) if reaction(o)), key=lambda o: o.name)
     place(objs, s.ripple_from, s.ripple_origin, s.ripple_reverse)
     if s.through:
         wave(scene, objs)
@@ -378,7 +398,7 @@ def sync(scene):
         materials.patch_material(m, wave=s.through)  # no-op unless an older material layout
     push_sound = s.sound is None or sound_ok(s.sound)
     for ob in _managed(scene):
-        mod = find_modifier(ob)
+        mod = reaction(ob)
         if mod:
             if push_sound:
                 nodes.set_input(mod, "Sound", s.sound)
@@ -400,10 +420,12 @@ def remove(scene):
         se.strips.remove(strip)
     from . import bake  # bake imports core
     for ob in _managed(scene):
-        mod = find_modifier(ob)
+        mod = reaction(ob)
         if mod:
             bake.unkey(ob, mod)
-            ob.modifiers.remove(mod)
+            if ob.type != "LIGHT":
+                ob.modifiers.remove(mod)
+        light_reaction.remove(ob)
         for m in _materials(ob):
             materials.unpatch_material(m)
         from . import prepare

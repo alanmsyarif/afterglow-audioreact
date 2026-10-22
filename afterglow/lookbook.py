@@ -184,16 +184,17 @@ def _plain(value):
     return list(value)
 
 
-def capture(scene):
-    """Capture styling only; the first reacting target by name supplies object style."""
+def capture(scene, *, scope="ALL"):
+    """Capture styling only; OBJECT produces a portable object look for both editions."""
+    scope = presets._scope(scope)
     object_style = None
     collection = scene.afterglow.collection
     for ob in core.targets(collection) if collection else ():
-        mod = core.find_modifier(ob)
+        mod = core.reaction(ob)
         if mod:
             object_style = {name: _plain(nodes.get_input(mod, name)) for name in OBJECT_FIELDS}
             break
-    if not edition.IS_PRO:
+    if scope == "OBJECT":
         return validate({"format": OBJECT_FORMAT, "version": OBJECT_VERSION, "object": object_style})
     fx = scene.afterglow.effects
     layers = {name: {prop: _plain(getattr(getattr(fx, name), prop)) for prop in layer_fields(name)}
@@ -219,7 +220,7 @@ def _plan(scene, data, scope="ALL"):
     if scope in ("ALL", "OBJECT") and data["object"] is not None:
         collection = scene.afterglow.collection
         for ob in core.targets(collection) if collection else ():
-            mod = core.find_modifier(ob)
+            mod = core.reaction(ob)
             if mod:
                 if not ob.is_editable:
                     raise ValueError(f"Make {ob.name} local before applying a look")

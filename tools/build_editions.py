@@ -19,7 +19,7 @@ FREE_EXCLUDES = frozenset({
 EDITION_DETAILS = {
     "free": (
         "Noctune Free",
-        "Audio-reactive object materials, ready in a few clicks",
+        "Music-reactive materials and lights, ready in a few clicks",
     ),
     "pro": (
         "Noctune Pro",

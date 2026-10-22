@@ -3,7 +3,7 @@
 import bpy
 import numpy as np
 
-from . import bake, core, edition, materials, prepare, presets, tempo
+from . import bake, core, edition, light_reaction, materials, prepare, presets, tempo
 
 if edition.IS_PRO:
     from . import effects
@@ -19,10 +19,18 @@ def inspect(scene):
     s = scene.afterglow
     targets = core.targets(s.collection) if s.collection else []
     eligible, linked, patched = [], set(), set()
-    readonly = []
+    readonly, light_errors = [], []
     for ob in targets:
         if not ob.is_editable:
             readonly.append(ob)
+            continue
+        if ob.type == "LIGHT":
+            try:
+                light_reaction.preflight([ob])
+            except ValueError as error:
+                light_errors.append(str(error))
+            else:
+                eligible.append(ob)
             continue
         emissive = {m for m in core._materials(ob) if materials.has_emission(m)}
         linked.update(m for m in emissive if not m.is_editable)
@@ -37,7 +45,7 @@ def inspect(scene):
                      if ob not in eligible_set and core._materials(ob) & patched),
                     key=lambda ob: ob.name)
     skipped = [ob for ob in targets if ob not in eligible_set]
-    applied = [ob for ob in targets if core.find_modifier(ob)]
+    applied = [ob for ob in targets if core.reaction(ob)]
     warnings = []
     if skipped:
         warnings.append(f"{len(skipped)} objects have no editable emissive material")
@@ -56,8 +64,10 @@ def inspect(scene):
         reason = "Link the chosen collection to this scene first"
     elif readonly:
         reason = "Make linked objects local before creating a reaction"
+    elif light_errors:
+        reason = light_errors[0]
     elif not eligible:
-        reason = "Select your objects and press Use Selected to add emission automatically"
+        reason = "Select geometry or lights and press Use Selected to prepare the reaction"
     elif shared:
         reason = ("Make shared emissive materials single-user, or include all their objects "
                   "in the chosen collection")
@@ -86,7 +96,7 @@ def create_reaction(scene, look_identifier=None, look_data=None, *, style_scope=
     """Validate prerequisites, then apply, calibrate and bake the reaction.
 
     Like the existing Calibrate and Fast Playback controls, the final calibration/bake
-    refreshes all Noctune modifiers in this scene. A chosen built-in look is applied
+    refreshes all Noctune object and light reactions in this scene. A chosen built-in look is applied
     after creating modifiers and before the single final bake. style_scope selects
     the controls the look may change; OBJECT keeps environment styling intact.
     This operation never builds effects.
@@ -119,7 +129,7 @@ def create_reaction(scene, look_identifier=None, look_data=None, *, style_scope=
         scene.afterglow.fast_playback = True
         if bake.outdated(scene):
             raise ValueError("Fast Playback could not finish; use Re-bake to retry")
-        baked = len([ob for ob in core._managed(scene) if core.find_modifier(ob)])
+        baked = len([ob for ob in core._managed(scene) if core.reaction(ob)])
     bpms = [bpm for _, bpm in curve]
     return {"applied": len(applied), "skipped": len(skipped), "linked": len(linked),
             "calibrated": len(calibrated), "baked": baked,
@@ -174,11 +184,15 @@ def use_selected(context):
     """Prepare selected objects and link them, keeping their original collections."""
     if not context.scene.is_editable:
         raise ValueError("Make the scene local before using selected objects")
+    if any(ob.type in core.SUPPORTED and (ob.get(core.effect_schema.TAG)
+           or ob.get(core.effect_schema.EMITTER_TAG)) for ob in context.selected_objects):
+        raise ValueError("Use your own objects and lights; generated environment effects have separate controls")
     objects = sorted((ob for ob in context.selected_objects
-                      if ob.type in core.SUPPORTED and ob.is_editable), key=lambda ob: ob.name)
+                      if core.is_target(ob) and ob.is_editable), key=lambda ob: ob.name)
     if not objects:
-        raise ValueError("Select editable meshes, curves or text first")
-    prepare.selected(objects)
+        raise ValueError("Select editable meshes, curves, text or lights first")
+    light_reaction.preflight(objects)
+    prepare.selected([ob for ob in objects if ob.type in core.GEOMETRY_TYPES])
     current = context.scene.afterglow.collection
     if (current and current.is_editable and current.name in context.scene.collection.children
             and set(current.all_objects) == set(objects)):
