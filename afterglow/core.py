@@ -198,39 +198,80 @@ def _pct(values, p):
     return values[min(len(values) - 1, int(p * len(values)))]
 
 
+# Calibration leaves artistic Gain/Intensity edits unrestricted. These limits
+# apply only to automatically selected normalization values.
+CALIBRATION_FLOOR = 1e-4  # preserve the existing minimum useful band-amplitude span
+CALIBRATION_HEADROOM = 4.0
+
+
 def calibrate(scene, samples=None):
-    """Set each object's Threshold to its band's median level and Gain so its 90th percentile
-    reaches 1, from each modifier's raw band amplitude (no peak hold) across the sound: every
-    frame of the song, or the given number of evenly spaced samples. Measured with numpy from
-    the same source as Fast Playback, which matches the Sample Sound node without evaluating
-    it (that costs ~0.14 s per frame on a full song). Returns the calibrated objects."""
-    from . import bake  # bake imports core
+    """Normalize full source bands, independently of playback Delay and Ripple lag.
+
+    Every source frame is sampled once by default; an explicit sample count uses
+    fractional frame positions. Quiet/flat/sparse bands have stable fallbacks,
+    and full-envelope peaks limit automatically calibrated response to headroom.
+    """
+    from . import bake, workflow  # both import core
     s = scene.afterglow
     objs = sorted((o for o in _managed(scene) if reaction(o)), key=lambda o: o.name)
     if not objs:
         raise ValueError("Apply first")
     if s.sound is None:
         raise ValueError("Pick a sound file first")
-    duration = _seconds(s.sound)
+    workflow.calibration_preflight(scene)
+    mono, rate = load_mono(s.sound, "Calibrate")
+    if not len(mono) or rate <= 0 or not np.isfinite(mono).all():
+        raise ValueError("Choose a sound file with readable, finite audio samples")
+    duration = len(mono) / rate
     fps = scene.render.fps / scene.render.fps_base
+    if samples is None:
+        sample_frames = s.start_frame + np.arange(max(1, int(np.ceil(duration * fps))))
+    else:
+        if isinstance(samples, bool) or not isinstance(samples, (int, np.integer)) or samples < 1:
+            raise ValueError("Choose a positive integer calibration sample count")
+        sample_frames = s.start_frame + np.arange(samples) * duration * fps / samples
     mods = [reaction(o) for o in objs]
-    # Ripple listens to the kick band, which has its own scale: calibrate the pair in use.
     gain_key, threshold_key = ("Ripple Gain", "Ripple Threshold") if s.ripple else ("Gain", "Threshold")
-    n = samples or max(1, int(duration * fps))
-    sample_frames = [s.start_frame + round((i + 0.5) / n * duration * fps) for i in range(n)]
-    levels = [list(v) for v in bake.raw_levels(scene, mods, sample_frames)]
-    _set_calibration(mods, levels, gain_key, threshold_key, shared=s.ripple)
+    levels, source = bake.calibration_levels(scene, mods, sample_frames)
+    _set_calibration(mods, levels, gain_key, threshold_key, shared=s.ripple, source_levels=source)
     return objs
 
 
-def _set_calibration(mods, levels, gain_key, threshold_key, shared=False):
-    if shared:  # Ripple: everyone hears the same kick band; one pair keeps Through seams smooth
-        pooled = [v for values in levels for v in values]
-        levels = [pooled] * len(levels)
-    for m, values in zip(mods, levels):
-        median, high = _pct(values, 0.5), _pct(values, 0.9)  # p90: robust to one-off clicks
-        nodes.set_input(m, threshold_key, median)
-        nodes.set_input(m, gain_key, 1.0 / max(high - median, 1e-4))
+def _calibration_pair(values, envelope):
+    values, envelope = np.asarray(values), np.asarray(envelope)
+    if (not len(values) or not len(envelope) or not np.isfinite(values).all()
+            or not np.isfinite(envelope).all()):
+        raise ValueError("Calibration needs finite audio levels")
+    peak = float(np.max(envelope))
+    if peak <= CALIBRATION_FLOOR:
+        # Do not amplify silence or negligible spectral residue into a reaction.
+        return max(peak, 0.0), 1.0
+    median, high = _pct(values, 0.5), _pct(values, 0.9)
+    if high - median < 0.05 * peak:
+        # Sparse attacks may occupy less than 10% of the song (or fall between
+        # source frames). Use the full envelope's active region in that case.
+        active = envelope[envelope > max(CALIBRATION_FLOOR, 0.01 * peak)]
+        high = _pct(active, 0.9) if len(active) else peak
+    if high - median < 0.05 * high:
+        # A sustained band should stay stable instead of subtracting almost its
+        # entire level and amplifying tiny numerical differences.
+        median = min(median, 0.5 * high)
+    span = max(float(high - median), (peak - float(median)) / CALIBRATION_HEADROOM,
+               CALIBRATION_FLOOR)
+    return float(median), 1.0 / span
+
+
+def _set_calibration(mods, levels, gain_key, threshold_key, shared=False, source_levels=None):
+    source_levels = levels if source_levels is None else source_levels
+    if shared:  # Ripple uses one source kick envelope and a common pair at every origin.
+        pair = _calibration_pair(np.concatenate(levels), np.concatenate(source_levels))
+        pairs = [pair] * len(mods)
+    else:
+        pairs = [_calibration_pair(values, source) for values, source in zip(levels, source_levels)]
+    # Validate every measurement before writing any object's controls.
+    for mod, (threshold, gain) in zip(mods, pairs):
+        nodes.set_input(mod, threshold_key, threshold)
+        nodes.set_input(mod, gain_key, gain)
 
 
 AXES = {"X": 0, "Y": 1, "Z": 2}

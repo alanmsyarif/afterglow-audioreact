@@ -215,14 +215,17 @@ def live_calibration(scene, samples):
     Threshold 0, Decay 0) at the frames Calibrate samples, through the same percentiles."""
     fps = scene.render.fps / scene.render.fps_base
     duration = core._seconds(scene.afterglow.sound)
-    frames = [scene.afterglow.start_frame + round((i + 0.5) / samples * duration * fps) for i in range(samples)]
+    frames = [scene.afterglow.start_frame + i / samples * duration * fps for i in range(samples)]
     for n in NAMES:
         mod = core.find_modifier(bpy.data.objects[n])
         for k, v in (("Gain", 1.0), ("Threshold", 0.0), ("Decay", 0.0)):
             nodes.set_input(mod, k, v)
     levels = {n: [] for n in NAMES}
     for f in frames:
-        at(f)
+        scene.frame_set(int(f), subframe=f % 1)
+        # Warm the neighboring evaluation, matching helpers.at for fractional frames.
+        scene.frame_set(int(f) + 1, subframe=f % 1)
+        scene.frame_set(int(f), subframe=f % 1)
         for n in NAMES:
             levels[n].append(attr(bpy.data.objects[n]))
     out = {}
@@ -254,13 +257,13 @@ def test_calibrate_matches_live_node_levels():
 def test_calibrate_samples_every_frame_by_default():
     scene = stage()
     seen = []
-    real = bake.raw_levels
-    bake.raw_levels = lambda sc, mods, frames: seen.append(len(frames)) or real(sc, mods, frames)
+    real = bake.calibration_levels
+    bake.calibration_levels = lambda sc, mods, frames: seen.append(tuple(frames)) or real(sc, mods, frames)
     try:
         core.calibrate(scene)
     finally:
-        bake.raw_levels = real
-    assert seen == [72], seen  # the 3 s song at 24 fps
+        bake.calibration_levels = real
+    assert seen == [tuple(range(scene.afterglow.start_frame, scene.afterglow.start_frame + 72))], seen
 
 
 def through_stage(specs, n=21, **settings):
