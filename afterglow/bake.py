@@ -1,5 +1,5 @@
 """Fast Playback: precompute each object's held peak per frame with numpy and key it onto the
-modifier's Baked Peak input, so playback never evaluates the slow Sample Sound node."""
+Baked Peak input, so playback never evaluates the slow Sample Sound node."""
 import os
 
 import bpy
@@ -58,7 +58,7 @@ def signature(mod, scene):
 def outdated(scene):
     out = []
     for ob in core._managed(scene):
-        mod = core.find_modifier(ob)
+        mod = core.reaction(ob)
         if mod and ob.get(SIG) != signature(mod, scene):
             out.append(ob)
     return sorted(out, key=lambda o: o.name)
@@ -159,15 +159,16 @@ def raw_levels(scene, mods, frames):
     return out
 
 
-def bake_all(scene):
-    """Bake every object carrying a Noctune modifier. Returns how many were baked."""
+def bake_all(scene, *, lights_only=False):
+    """Bake managed geometry and native-light reactions; return their count."""
     s = scene.afterglow
-    objs = sorted((o for o in core._managed(scene) if core.find_modifier(o)), key=lambda o: o.name)
+    objs = sorted((o for o in core._managed(scene) if core.reaction(o)
+                   and (not lights_only or o.type == "LIGHT")), key=lambda o: o.name)
     mono, rate = _load(scene)
     if not objs:
         return 0
     fps = scene.render.fps / scene.render.fps_base
-    mods = [core.find_modifier(o) for o in objs]
+    mods = [core.reaction(o) for o in objs]
     song_frames = np.arange(s.start_frame, s.start_frame + len(mono) / rate * fps + 1)
     beat_max = float(_beat_lengths(song_frames).max())
     # Key until every object's delayed, held tail has died, or extrapolation keeps it lit.
@@ -185,11 +186,12 @@ def bake_all(scene):
         amp = series[bands.index(_band_of(m))]
         decay = nodes.get_input(m, "Decay")
         _write(ob, m, frames, held_peak(times, amp, _times(m, frames, fps, beat), decay))
-        if nodes.get_input(m, "Through"):
+        if ob.type != "LIGHT" and nodes.get_input(m, "Through"):
             tmin, tmax = nodes.get_input(m, "Tap Min"), nodes.get_input(m, "Tap Max")
             for k in range(nodes.TAPS):
                 pos = tmin + (tmax - tmin) * k / (nodes.TAPS - 1)
                 _write(ob, m, frames, held_peak(times, amp, _times(m, frames, fps, beat, pos), decay),
                        name=f"Baked Tap {k}")
         ob[SIG] = signature(m, scene)
+    bpy.context.view_layer.update()  # native light drivers read the just-keyed object inputs
     return len(objs)

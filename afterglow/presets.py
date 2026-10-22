@@ -163,7 +163,7 @@ def _plan(scene, identifier, scope="ALL"):
                          "Intensity": intensity, "Decay": decay}
         collection = scene.afterglow.collection
         for ob in core.targets(collection) if collection else ():
-            mod = core.find_modifier(ob)
+            mod = core.reaction(ob)
             if mod:
                 if ob.library and not ob.override_library:
                     raise ValueError(f"Make {ob.name} local before applying a look")

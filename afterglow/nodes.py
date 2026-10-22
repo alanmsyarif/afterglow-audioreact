@@ -103,6 +103,8 @@ def get_group():
 
 
 def _socket(mod, name):
+    if hasattr(mod, "socket"):
+        return mod.socket(name)
     return getattr(mod.properties.inputs, mod.node_group.interface.items_tree[name].identifier)
 
 
@@ -116,7 +118,10 @@ def get_input(mod, name):
 
 
 def draw_input(layout, mod, name, text=None):
-    layout.prop(_socket(mod, name), "value", text=text or name)
+    if hasattr(mod, "draw_input"):
+        mod.draw_input(layout, name, text or name)
+    else:
+        layout.prop(_socket(mod, name), "value", text=text or name)
 
 
 def _build():

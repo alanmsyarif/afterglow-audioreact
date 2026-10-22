@@ -21,7 +21,7 @@ def draw_note(layout, text, context=None, icon="NONE"):
 class AFTERGLOW_OT_create_visual(bpy.types.Operator):
     bl_idname = "afterglow.create_visual"
     bl_label = "Build Reaction"
-    bl_description = "Apply the object look, calibrated music reaction and optional glow"
+    bl_description = "Apply a calibrated music reaction to geometry and lights, with optional glow"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -30,7 +30,7 @@ class AFTERGLOW_OT_create_visual(bpy.types.Operator):
         except (ValueError, RuntimeError) as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
-        self.report({"INFO"}, "Reaction ready. Use Material Preview or Rendered view, then press Space")
+        self.report({"INFO"}, "Reaction ready. Use Rendered view, then press Space")
         return {"FINISHED"}
 
 
@@ -96,7 +96,7 @@ class AFTERGLOW_OT_create_reaction(bpy.types.Operator):
 class AFTERGLOW_OT_use_selected(bpy.types.Operator):
     bl_idname = "afterglow.use_selected"
     bl_label = "Use Selected"
-    bl_description = "Use selected meshes, curves or text, adding emission where needed and keeping their original materials"
+    bl_description = "Use selected meshes, curves, text or lights; prepare materials where needed and preserve original settings"
     bl_options = {"REGISTER", "UNDO"}
 
     @classmethod
@@ -200,7 +200,7 @@ class AFTERGLOW_OT_respread(bpy.types.Operator):
 
     def execute(self, context):
         coll = context.scene.afterglow.collection
-        core.respread([o for o in core.targets(coll) if core.find_modifier(o)])
+        core.respread([o for o in core.targets(coll) if core.reaction(o)])
         core.replace(context.scene)  # picks up a moved Origin or moved objects
         if context.scene.afterglow.fast_playback:
             try:
@@ -637,7 +637,7 @@ def next_step(scene):
         return "Pick the collection of glowing objects"
     if s.sound is None:
         return "Pick a sound (folder button loads a file)"
-    mods = [m for m in map(core.find_modifier, core.targets(s.collection)) if m]
+    mods = [m for m in map(core.reaction, core.targets(s.collection)) if m]
     if not mods:
         return "Press Apply"
     # Untouched defaults everywhere mean Calibrate never ran (or the user never tuned by hand).
@@ -670,7 +670,7 @@ class AFTERGLOW_PT_panel(bpy.types.Panel):
         row.prop(s, "sound", text="Music")
         row.operator("afterglow.load_sound", text="", icon="FILEBROWSER")
         if s.collection is None:
-            draw_note(source, "Choose a collection, or select objects and press Use Selected to prepare their materials.", context)
+            draw_note(source, "Choose a collection, or select geometry and lights and press Use Selected.", context)
         elif s.sound is None:
             draw_note(source, "Load music to drive your objects.", context)
 
@@ -678,13 +678,13 @@ class AFTERGLOW_PT_panel(bpy.types.Panel):
         action = layout.column()
         action.enabled = not playing and s.collection is not None and s.sound is not None
         action.scale_y = 1.6
-        built = bool(s.collection and any(core.find_modifier(obj) for obj in core.targets(s.collection)))
+        built = bool(s.collection and any(core.reaction(obj) for obj in core.targets(s.collection)))
         action.operator("afterglow.create_visual", text="Update Reaction" if built else "Build Reaction", icon="PLAY")
         if built:
             draw_note(layout, "Press Space to preview. Use Update Reaction after changing the music or object look.", context, "INFO")
         else:
-            note = ("Animates your objects. Generate lights and beams separately in the Noctune FX tab."
-                    if edition.IS_PRO else "Animates your objects to the music. Materials are prepared automatically with Use Selected.")
+            note = ("Animates your objects and lights. Generate lights and beams separately in the Noctune FX tab."
+                    if edition.IS_PRO else "Animates your objects and lights to the music. Use Selected prepares materials where needed.")
             draw_note(layout, note, context)
         layout.separator()
         layout.prop(s, "show_advanced", text="Advanced Controls")
@@ -725,18 +725,19 @@ def draw_advanced(layout, context):
         body.enabled = not playing
         body.operator("afterglow.create_reaction", text="Build Object Reaction Only")
         body.operator("afterglow.apply_look", text="Apply Look Settings Only")
-        body.operator("afterglow.apply", text="Refresh Object Modifiers Only")
+        body.operator("afterglow.apply", text="Refresh Reaction Setup Only")
         row = body.row(align=True)
         row.operator("afterglow.respread", text="Spread Bands")
         row.operator("afterglow.calibrate", text="Calibrate")
         body.prop(s, "fast_playback")
         body.operator("afterglow.bake", text="Refresh Playback", icon="FILE_REFRESH")
         body.operator("afterglow.remove", text="Remove Object Reaction", icon="TRASH")
-    stale = bake.outdated(context.scene) if s.fast_playback and not playing else []
+    stale = ([obj for obj in bake.outdated(context.scene) if s.fast_playback or obj.type == "LIGHT"]
+             if not playing else [])
     if stale:
         draw_note(layout, f"{len(stale)} objects need a playback refresh.", context, "INFO")
     ob = context.object
-    mod = core.find_modifier(ob) if ob else None
+    mod = core.reaction(ob) if ob else None
     if mod:
         head, body = layout.panel("AFTERGLOW_selected", default_closed=True)
         head.label(text="Selected Object", icon="OBJECT_DATA")
@@ -746,7 +747,9 @@ def draw_advanced(layout, context):
 
 def draw_object(box, s, ob, mod):
     """The selected object's reaction: what it hears (band), how it responds, how it looks."""
-    box.label(text=ob.name, icon="OBJECT_DATA")
+    box.label(text=ob.name, icon="LIGHT" if ob.type == "LIGHT" else "OBJECT_DATA")
+    if ob.type == "LIGHT":
+        nodes.draw_input(box, mod, "Base Power")
     box.label(text="Band (Hz)")
     row = box.row(align=True)
     nodes.draw_input(row, mod, "Low")
@@ -760,6 +763,8 @@ def draw_object(box, s, ob, mod):
     row = col.row(align=True)
     nodes.draw_input(row, mod, "Decay")
     nodes.draw_input(row, mod, "Delay")
+    if ob.type == "LIGHT":
+        draw_note(box, "After editing Band, Decay or Delay, press Refresh Playback above.")
     box.label(text="Look")
     row = box.row(align=True)
     nodes.draw_input(row, mod, "Intensity")
@@ -769,6 +774,8 @@ def draw_object(box, s, ob, mod):
     row.active = bool(nodes.get_input(mod, "Use Colors"))
     nodes.draw_input(row, mod, "Color A")
     nodes.draw_input(row, mod, "Color B")
+    if ob.type == "LIGHT":
+        return
     row = box.row(align=True)
     row.prop(ob.afterglow, "meter")
     sub = row.row(align=True)

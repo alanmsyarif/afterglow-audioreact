@@ -20,8 +20,8 @@ In **Noctune**, turn on **Advanced Controls** for:
 
 Free saves portable object looks that also work in Pro without changing
 environment settings. Free imports the object styling from complete Pro look
-files. **Remove Object Reaction** restores prepared materials and keeps existing
-generated environment data in the scene.
+files. **Remove Object Reaction** restores prepared materials and original light
+data, while keeping existing generated environment data in the scene.
 
 Existing scenes and custom look files remain usable. Objects from earlier built-in
 stages remain ordinary editable scene objects: choose their collection to keep using
@@ -49,9 +49,20 @@ operation does not keep adding materials or reaction collections.
 using automatically prepared materials, including after saving and reopening the
 project. Materials you reassigned manually and geometry edits stay in place.
 
-Choosing a collection directly expects emissive materials already. Select its objects
-and use **Use Selected** if they need preparation. Library-linked objects must be made
-local before their materials can be prepared.
+**Use Selected** also accepts **Point**, **Spot**, **Area** and **Sun** lights,
+including mixed selections of lights and geometry. Lights need no materials: the
+same **Build Reaction** or **Update Reaction** calibrates their music response and
+animates native power and color. Preview native lighting in **Rendered** shading.
+
+Each reacting light uses its own light-data copy, so unselected objects sharing the
+original data keep their appearance. The light's type, aim, size and transforms stay
+unchanged. **Remove Object Reaction** restores its original light data and prior
+animation, including after saving and reopening. Light data you replaced manually
+stays in place.
+
+Choosing a collection directly accepts lights and geometry with emissive materials
+already. Select geometry and use **Use Selected** if its materials need preparation.
+Library-linked objects must be made local before creating a reaction.
 
 ## Object reaction controls
 
@@ -60,9 +71,13 @@ local before their materials can be prepared.
 | Ripple | Every kick sweeps across the collection by position instead of lighting everything at once. The sweep follows the song's detected tempo. |
 | Beats per Sweep | How many beats one sweep takes to cross the collection. |
 | Ripple From | Where the sweep starts: Longest Axis, X, Y, Z, an **Empty** (outward from an Origin object), or the Collection Center. Reverse flips it. |
-| Through Objects | The wave crosses each object's surface pixel by pixel instead of lighting the whole object at once. Needs Fast Playback. |
+| Through Objects | The wave crosses geometry surfaces pixel by pixel instead of lighting the whole object at once. Needs Fast Playback. Lights respond at their origins. |
 | Fast Playback | Precomputes the reaction with numpy and keys it, so playback never evaluates Blender's slow Sample Sound node. Settings changes re-bake automatically once you stop dragging; after editing bands, Decay or Delay in the modifier, use the *Re-bake* button the panel shows. |
 | Re-spread | Spreads bands bass → treble again across objects without **Lock Band**, and picks up moved objects or a moved Origin. |
+
+Lights always use baked playback, including when **Fast Playback** is off for
+geometry. After changing a light's band, Decay or Delay, press **Refresh Playback**. Light origins
+participate in Ripple placement; surface-only Level Meter controls apply to geometry.
 
 ## Per-object controls
 
@@ -75,10 +90,15 @@ Select a Noctune object to tune it in the panel. Its box follows the order you t
 | Response | Gain / Threshold | Level = (amplitude − Threshold) × Gain. While Ripple is on, the kick band's own Ripple Gain / Ripple Threshold pair is shown instead. |
 | Response | Decay | How long a peak takes to fade (seconds). |
 | Response | Delay | Shift this object's reaction later in time (seconds). |
-| Look | Intensity | Emission brightness multiplier. Unlike Gain it leaves the colour mix and Level Meter fill alone. |
+| Look | Intensity | Brightness multiplier for geometry emission or native light power. Unlike Gain it leaves the colour mix and Level Meter fill alone. |
 | Look | Glow | Idle glow: brightness never drops below this level, so quiet parts glow dimly instead of going black. |
 | Look | Use Colors / Color A / Color B | Tint from Color A (quiet) to Color B (loud). |
-| Look | Level Meter | Fill the object along an axis by loudness, like an equalizer bar (off while Through Objects is on). |
+| Look | Level Meter | Fill geometry along an axis by loudness, like an equalizer bar (off while Through Objects is on; not shown for lights). |
+
+For a selected light, **Base Power** starts at its original native power and sets
+the response's brightness scale. Adjust it under **Advanced Controls → Selected
+Object**. Power is `Base Power × max(Level, Glow) × Intensity`; Gain can raise it
+above Base Power. Sun lights keep Blender's Sun energy units.
 
 In the main tab's advanced controls, open **Ripple Motion** to adjust these settings.
 
@@ -111,7 +131,7 @@ sudo apt install libegl1 libgl1-mesa-dri libglx-mesa0
 2. Tag the commit with that version and push the tag:
 
    ```bash
-   git tag v0.28.0 && git push origin v0.28.0
+   git tag v0.29.0 && git push origin v0.29.0
    ```
 
 [`release.yml`](../.github/workflows/release.yml) runs the full test suite, checks the tag
@@ -122,8 +142,8 @@ license details.
 
 ## Limitations
 
-- Library-linked objects must be made local before their materials can be prepared.
-- Choosing an Objects collection directly expects emissive materials already. Use
-  **Use Selected** to prepare ordinary materials automatically.
+- Library-linked objects must be made local before creating a reaction.
+- Geometry in a directly chosen Objects collection needs emissive materials already;
+  lights need no materials. Use **Use Selected** to prepare ordinary materials.
 - Blender 5.2 crashes when the Sample Sound node evaluates a missing file, so Noctune
   never hands a missing sound to its modifiers; relink or pack the sound instead.

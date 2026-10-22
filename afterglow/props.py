@@ -17,10 +17,18 @@ def _sync(self, context):
     core.sync(context.scene)
 
 
+def _has_light_reactions(scene):
+    from . import light_reaction
+    return any(light_reaction.reaction(ob) for ob in scene.objects if ob.type == "LIGHT")
+
+
 def _bake_now(scene):
-    if scene.afterglow.fast_playback:
+    if scene.afterglow.fast_playback or _has_light_reactions(scene):
         try:
-            bake.bake_all(scene)
+            if scene.afterglow.fast_playback:
+                bake.bake_all(scene)
+            else:
+                bake.bake_all(scene, lights_only=True)
         except ValueError:
             pass  # the panel's Re-bake button reports it
 
@@ -45,7 +53,7 @@ def _rebake(scene):
     """Re-bake after a setting change. Dragging a slider fires this on every step, so the
     UI waits for the value to settle instead of baking each one; scripts and headless runs
     have no event loop for timers and bake at once."""
-    if not scene.afterglow.fast_playback:
+    if not scene.afterglow.fast_playback and not _has_light_reactions(scene):
         return
     if not _interactive():
         _bake_now(scene)
@@ -365,7 +373,7 @@ class AfterglowScene(bpy.types.PropertyGroup):
     creative_look: EnumProperty(name="Object Look", items=presets.OBJECT_ITEMS, options=set(),
                                 description="Choose object colors and response, then Build Reaction")
     collection: PointerProperty(type=bpy.types.Collection, name="Collection",
-                                description="Every emissive object in here reacts", update=_sync)
+                                description="Meshes, curves, text and lights in this collection react to music", update=_sync)
     sound: PointerProperty(type=bpy.types.Sound, name="Sound", update=_retempo)
     start_frame: IntProperty(name="Start Frame", default=1,
                              description="Frame where the audio starts playing", update=_retempo)
@@ -426,6 +434,8 @@ CLASSES = (*PRO_CLASSES, AfterglowSavedLook, AfterglowScene, AfterglowObject)
 
 
 def register():
+    from . import light_reaction
+    light_reaction.register()
     for c in CLASSES:
         bpy.utils.register_class(c)
     bpy.types.Scene.afterglow = PointerProperty(type=AfterglowScene)
@@ -440,3 +450,5 @@ def unregister():
     del bpy.types.Scene.afterglow
     for c in reversed(CLASSES):
         bpy.utils.unregister_class(c)
+    from . import light_reaction
+    light_reaction.unregister()
