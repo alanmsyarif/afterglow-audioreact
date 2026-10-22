@@ -1,66 +1,85 @@
-# Afterglow 0.27
+# Noctune Free 0.28
 
-**Turn music into lighting.**
+**Choose music. Make it glow.**
 
-Audio-reactive lighting for Blender 5.2+. Choose music and a look, then build.
+Make your own meshes, curves and text react to music in Blender. Select your
+objects, load a track and choose a look. Noctune prepares the materials,
+calibrates the reaction and prepares playback for you.
 
-| | Afterglow Free | Afterglow Pro |
-|---|:---:|:---:|
-| Automatic emissive materials and music reactions | ✓ | ✓ |
-| Object looks, custom looks, ripple motion and glow | ✓ | ✓ |
-| Environment lights, beams, lasers and signal effects | | ✓ |
-| Environment looks and layer controls | | ✓ |
+[**Download Noctune Free 0.28.0**](dist/noctune-free-0.28.0.zip?raw=true)
 
-Pro includes everything in Free. Both editions run locally without an account or
-license-key service.
-
-## Animate your objects
-
-Open the **Afterglow** tab in the 3D Viewport sidebar (`N`).
-
-1. Select meshes, curves or text and press **Use Selected**. Missing emission is
-   added automatically while original materials are preserved.
-2. Load your music and choose an object **Look**.
-3. Press **Build Reaction**. Use **Material Preview** or **Rendered** shading and
-   press **Space** to preview.
-
-Use **Update Reaction** after changing the music or object look. Afterglow handles
-calibration and smooth playback. Existing emissive objects can use their collection
-directly. This build leaves generated environment effects alone.
-
-## Generate environment effects — Pro
-
-In Pro, open the **Afterglow FX** tab and its **Afterglow Pro · Environment** panel.
-
-1. Choose the collection that defines the environment bounds. Ordinary non-emissive
-   geometry works; leaving Bounds empty uses the main Objects collection.
-2. Choose an environment **Look**, such as **Laser Show**.
-3. Press **Build Environment**, or **Update Environment** to refresh it.
-
-This creates the effect lights and graphics without preparing materials or building
-object reactions. Both tabs share music and Start Frame; their looks and build
-controls are independent.
-
-Advanced environment controls contain the individual layers, venue and live mix.
-**Data Strikes** and **Gun Bursts** each keep their beam visibility, glow and style
-inside their own effect settings. Laser rays work without fog.
-
-## Render with Blender
-
-Arrange your scene and camera in Blender. Set the resolution, frame range, format
-and destination in **Output Properties**, then use **Render → Render Animation**.
-Afterglow keeps Blender's render settings and timeline range under your control.
+**Blender 5.2+ · EEVEE and Cycles · Runs locally**
 
 ## Install
 
-1. Download [Afterglow Free 0.27.0](dist/afterglow-free-0.27.0.zip), or use your Pro ZIP.
-2. In Blender 5.2+, open **Edit → Preferences → Get Extensions → Install from Disk**
+1. Download the ZIP above and keep it zipped.
+2. In Blender, open **Edit → Preferences → Get Extensions → Install from Disk**
    and choose the ZIP.
-3. Open the 3D Viewport sidebar (`N`) and select **Afterglow**. Pro also includes
-   the **Afterglow FX** tab.
+3. In the 3D Viewport, press `N` and open the **Noctune** tab.
 
-Install one edition at a time. To upgrade, save your project, disable and remove
-Free, then install Pro. Your object materials and reaction settings remain in the
-project. [Edition packages and paid distribution](docs/editions.md).
+## Make your first reaction
 
-[Advanced guide and development commands](docs/advanced.md) · [License](LICENSE)
+Start with your own scene and objects.
+
+1. **Select your objects → Use Selected.** Noctune adds emission where needed and
+   preserves the original materials for restoration.
+2. **Load your music → choose an Object Look.** Use the folder icon beside
+   **Music** to load a track.
+3. **Build Reaction → press Space.** Switch to **Material Preview** or **Rendered**
+   shading to see the materials react.
+
+After changing your music or look, press **Update Reaction**.
+
+## Included in Free
+
+- **Automatic material preparation:** use ordinary meshes, curves and text, or
+  choose a collection of objects that already have emissive materials.
+- **Five object looks:** Neon Club, Cinematic Pulse, Aurora Flow, Signal Grid and
+  Electric Violet.
+- **Custom looks:** save your style in the project and import or export look files
+  to reuse it elsewhere.
+- **Ripple motion and level meters:** send light across objects and surfaces, or
+  fill objects like equalizer bars.
+- **Soft glow:** add optional compositor glow to the final image.
+- **Playback preparation:** Noctune calibrates and bakes the reaction when you
+  build it.
+
+The main panel keeps the everyday workflow short. Open **Advanced Controls** for
+timing, colors, individual object responses, ripple settings and saved looks.
+See the [advanced guide](docs/advanced.md) for those controls.
+
+## Preview, render and cleanup
+
+Use **Material Preview** or **Rendered** shading while playing the timeline.
+Soft glow appears in the composited final image and needs Blender's
+**Compositing** option enabled.
+
+Set your camera, resolution, frame range, format and destination in Blender,
+then use **Render → Render Animation**. Noctune preserves your output settings
+and timeline range.
+
+To remove the reaction, open **Advanced Controls → Manual Build & Cleanup →
+Remove Object Reaction**. This also restores automatically prepared material
+assignments; materials you reassigned manually stay in place.
+
+## Noctune Free and Pro
+
+| Feature | Free | Pro |
+|---|:---:|:---:|
+| Object materials and music reactions | ✓ | ✓ |
+| Object looks, custom looks, ripple motion, level meters and glow | ✓ | ✓ |
+| Generated environment lights, beams, lasers and signal effects | | ✓ |
+| Environment looks and layer controls | | ✓ |
+
+Pro includes everything in Free and is distributed separately. Install one
+edition at a time. To upgrade, save your project, disable and remove Free, then
+install your Pro ZIP. Your object materials and reaction settings remain in the
+project. [More about editions and compatibility](docs/editions.md).
+
+## Documentation and license
+
+[Advanced controls and development](docs/advanced.md) ·
+[Build and edition details](docs/editions.md) · [GPL-3.0-or-later license](LICENSE)
+
+Noctune was previously named Afterglow. Existing projects and look files remain
+compatible.

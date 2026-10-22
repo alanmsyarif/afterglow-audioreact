@@ -1,6 +1,6 @@
-name: Release
+name: Release Noctune Free
 
-# Tags publish Free only. Pro packages are built separately for paid delivery.
+# This repository publishes Free only. Pro is maintained in its private repository.
 on:
   push:
     tags: ["v*"]
@@ -41,10 +41,10 @@ jobs:
           pip install bpy==5.2.2
           EXT="$(python -c "import os, bpy; print(os.path.join(bpy.utils.system_resource('SCRIPTS'), 'addons_core', 'bl_pkg', 'cli', 'blender_ext.py'))" | tail -n 1)"
           python tools/build_editions.py --edition free --output-dir build/public
-          python -I "$EXT" validate "build/public/afterglow-free-$VERSION.zip"
+          python -I "$EXT" validate "build/public/noctune-free-$VERSION.zip"
 
       - name: Publish the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.metadata.outputs.version }}
-        run: gh release create "$GITHUB_REF_NAME" "build/public/afterglow-free-$VERSION.zip" --title "Afterglow Free $GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" "build/public/noctune-free-$VERSION.zip" --title "Noctune Free $GITHUB_REF_NAME" --generate-notes

@@ -158,7 +158,7 @@ def validate(data):
         return {"format": OBJECT_FORMAT, "version": OBJECT_VERSION, "object": obj}
     _keys(data, ("format", "version", "layers", "effects", "object"), "look")
     if data["format"] != FORMAT or type(data["version"]) is not int or data["version"] not in (1, 2, VERSION):
-        raise ValueError("Unsupported look format or version; use an Afterglow look version 1, 2 or 3")
+        raise ValueError("Unsupported look format or version; use a Noctune look version 1, 2 or 3")
     version = data["version"]
     legacy = version == 1
     layer_names = _V1_LAYERS if legacy else effect_schema.LAYERS
@@ -209,7 +209,7 @@ def _plan(scene, data, scope="ALL"):
     data = validate(data)
     has_effects = data["format"] == FORMAT
     if scope == "EFFECTS" and not has_effects:
-        raise ValueError("This is an object look; apply it in the Afterglow object panel")
+        raise ValueError("This is an object look; apply it in the Noctune object panel")
     if has_effects and scope in ("ALL", "EFFECTS"):
         scene_paths = {f"afterglow.effects.{name}.{prop}"
                        for name in effect_schema.LAYERS for prop in layer_fields(name)}

@@ -76,14 +76,14 @@ def _emission_ready(material):
                 node.inputs["Emission Strength"].default_value = STRENGTH
         else:
             emission = tree.nodes.new("ShaderNodeEmission")
-            emission.label = "Afterglow emission"
+            emission.label = "Noctune emission"
             emission.inputs["Color"].default_value = material.diffuse_color
             emission.inputs["Strength"].default_value = STRENGTH
             emission.location = (output.location.x - 420, output.location.y - 180)
             if surface.is_linked:
                 original = surface.links[0].from_socket
                 add = tree.nodes.new("ShaderNodeAddShader")
-                add.label = "Original surface + Afterglow"
+                add.label = "Original surface + Noctune"
                 add.location = (output.location.x - 180, output.location.y)
                 tree.links.new(original, add.inputs[0])
                 tree.links.new(emission.outputs[0], add.inputs[1])
@@ -93,7 +93,7 @@ def _emission_ready(material):
 
 
 def _new_material(obj):
-    material = bpy.data.materials.new(f"Afterglow {obj.name}")
+    material = bpy.data.materials.new(f"Noctune {obj.name}")
     try:
         material.diffuse_color = obj.color
         node = next((node for node in material.node_tree.nodes if node.type == "BSDF_PRINCIPLED"), None)
@@ -110,7 +110,7 @@ def _new_material(obj):
 def _copy_material(material):
     local = material.copy()
     try:
-        local.name = f"Afterglow {material.name}"
+        local.name = f"Noctune {material.name}"
         local.use_fake_user = False
         if not _has_surface_emission(local):
             _emission_ready(local)

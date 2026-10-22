@@ -167,7 +167,7 @@ class AFTERGLOW_OT_remove_saved_look(bpy.types.Operator):
 class AFTERGLOW_OT_import_look(bpy.types.Operator, ImportHelper):
     bl_idname = "afterglow.import_look"
     bl_label = "Import Look"
-    bl_description = "Import a portable Afterglow look JSON file into this project's library"
+    bl_description = "Import a portable Noctune look JSON file into this project's library"
     bl_options = {"REGISTER", "UNDO"}
     filename_ext = ".json"
     filter_glob: StringProperty(default="*.json", options={"HIDDEN"})
@@ -239,7 +239,7 @@ class AFTERGLOW_OT_add_render_glow(bpy.types.Operator):
 class AFTERGLOW_OT_remove_render_glow(bpy.types.Operator):
     bl_idname = "afterglow.remove_render_glow"
     bl_label = "Remove Glow"
-    bl_description = "Remove Afterglow's glow node while preserving the compositor's other nodes"
+    bl_description = "Remove Noctune's glow node while preserving the compositor's other nodes"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):

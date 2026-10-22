@@ -18,11 +18,11 @@ class EditionPackages(unittest.TestCase):
         self.source.mkdir()
         (self.root / "LICENSE").write_text("GPL-3.0-or-later\n")
         (self.source / "blender_manifest.toml").write_text(
-            'id = "afterglow"\nversion = "1.2.3"\nname = "Afterglow"\n'
+            'id = "afterglow"\nversion = "1.2.3"\nname = "Noctune"\n'
             'tagline = "Original"\nlicense = ["SPDX:GPL-3.0-or-later"]\n'
         )
         (self.source / "edition.py").write_text(
-            'IS_PRO = True\nNAME = "Afterglow Pro"\n\ndef allowed():\n    return IS_PRO\n'
+            'IS_PRO = True\nNAME = "Noctune Pro"\n\ndef allowed():\n    return IS_PRO\n'
         )
         (self.source / "__init__.py").write_text("# addon entry point\n")
         (self.source / "core.py").write_text("# object reaction\n")
@@ -41,7 +41,7 @@ class EditionPackages(unittest.TestCase):
 
     def test_free_excludes_generators_and_keeps_core(self):
         path, files = self.contents("free")
-        self.assertEqual(path.name, "afterglow-free-1.2.3.zip")
+        self.assertEqual(path.name, "noctune-free-1.2.3.zip")
         self.assertFalse(set(files) & FREE_EXCLUDES)
         self.assertIn("core.py", files)
         self.assertIn("__init__.py", files)
@@ -49,7 +49,7 @@ class EditionPackages(unittest.TestCase):
         self.assertFalse(any("__pycache__" in name or name.startswith(".") for name in files))
         metadata = tomllib.loads(files["blender_manifest.toml"].decode())
         self.assertEqual(metadata["id"], "afterglow")
-        self.assertEqual(metadata["name"], "Afterglow Free")
+        self.assertEqual(metadata["name"], "Noctune Free")
         namespace = {}
         exec(files["edition.py"], namespace)
         self.assertFalse(namespace["IS_PRO"])
@@ -58,12 +58,12 @@ class EditionPackages(unittest.TestCase):
 
     def test_pro_contains_free_and_environment(self):
         path, files = self.contents("pro")
-        self.assertEqual(path.name, "afterglow-pro-1.2.3.zip")
+        self.assertEqual(path.name, "noctune-pro-1.2.3.zip")
         self.assertTrue(FREE_EXCLUDES.issubset(files))
         self.assertIn("core.py", files)
         metadata = tomllib.loads(files["blender_manifest.toml"].decode())
         self.assertEqual(metadata["id"], "afterglow")
-        self.assertEqual(metadata["name"], "Afterglow Pro")
+        self.assertEqual(metadata["name"], "Noctune Pro")
         namespace = {}
         exec(files["edition.py"], namespace)
         self.assertTrue(namespace["IS_PRO"])
@@ -80,6 +80,24 @@ class EditionPackages(unittest.TestCase):
             build("pro", ROOT / "dist", self.source)
         with self.assertRaisesRegex(ValueError, "public dist"):
             build("pro", ROOT / "dist" / "nested", self.source)
+
+    def test_free_only_sources_build_free_and_reject_pro(self):
+        for name in FREE_EXCLUDES:
+            (self.source / name).unlink()
+        path, files = self.contents("free")
+        self.assertEqual(path.name, "noctune-free-1.2.3.zip")
+        self.assertFalse(set(files) & FREE_EXCLUDES)
+        destination = self.root / "paid-output"
+        with self.assertRaisesRegex(ValueError, "private noctune-pro repository"):
+            build("pro", destination, self.source)
+        self.assertFalse(destination.exists())
+
+    def test_incomplete_pro_sources_are_rejected(self):
+        (self.source / "lasers.py").unlink()
+        destination = self.root / "paid-output"
+        with self.assertRaisesRegex(ValueError, "Pro environment sources are missing: lasers.py"):
+            build("pro", destination, self.source)
+        self.assertFalse(destination.exists())
 
 
 if __name__ == "__main__":

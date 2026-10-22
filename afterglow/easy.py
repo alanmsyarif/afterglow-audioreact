@@ -1,6 +1,6 @@
 """Build music reactions on the user's own objects independently of environment effects.
 
-Afterglow styles and animates the chosen collection. It never generates a scene,
+Noctune styles and animates the chosen collection. It never generates a scene,
 demo soundtrack or camera. Blender owns scene composition and rendering.
 """
 import math
@@ -28,7 +28,7 @@ def _glow_preflight(scene, enabled):
     if tree:
         _, node = finish._target(tree)
         if not finish.enabled(scene) and node and any(output.is_linked for output in node.outputs):
-            raise ValueError("The Afterglow glow was routed elsewhere; remove it in Advanced before creating the visual")
+            raise ValueError("The Noctune glow was routed elsewhere; remove it in Advanced before creating the visual")
 
 
 def create_visual(context):

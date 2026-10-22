@@ -1,11 +1,11 @@
-"""Patch emission inputs to read Afterglow attributes, and undo it exactly."""
+"""Patch emission inputs to read Noctune attributes, and undo it exactly."""
 import bpy
 
 TAG = "afterglow"
-LAYOUT_CLASSIC = 5  # Afterglow Level group, 5 attributes (incl. Level Meter, Intensity/Glow); 1 was plain Attribute nodes
-LAYOUT_WAVE = 3     # Through Objects: the Afterglow Wave group, 9 attributes (2 was v0.6's 12-attribute layout)
-WAVE_GROUP = "Afterglow Wave"
-LEVEL_GROUP = "Afterglow Level"
+LAYOUT_CLASSIC = 5  # Noctune Level group, 5 attributes (incl. Level Meter, Intensity/Glow); 1 was plain Attribute nodes
+LAYOUT_WAVE = 3     # Through Objects: the Noctune Wave group, 9 attributes (2 was v0.6's 12-attribute layout)
+WAVE_GROUP = "Noctune Wave"
+LEVEL_GROUP = "Noctune Level"
 METER_SOFT = 0.04  # Level Meter fill edge, as a fraction of the object's height
 TAPS = 8
 
@@ -34,7 +34,7 @@ def is_patched(mat):
 def _new(nt, idname, near, dx, dy=0, layout=LAYOUT_CLASSIC):
     n = nt.nodes.new(idname)
     n[TAG] = layout
-    n.label = "Afterglow"
+    n.label = "Noctune"
     n.location = (near.location.x - dx, near.location.y - dy)
     return n
 
@@ -52,7 +52,7 @@ def _route(nt, patch, orig_index, out, node, target):
 
 
 def _shader_tools(N, L):
-    """Small builders shared by the Afterglow shader groups."""
+    """Small builders shared by the Noctune shader groups."""
     def op(operation, a, b=0.0):
         n = N.new("ShaderNodeMath")
         n.operation = operation
@@ -189,8 +189,8 @@ def _layout(mat):
 
 
 def patch_material(mat, wave=False):
-    """Patch every emission input. wave=True (Through Objects) routes it through the Afterglow
-    Wave group, otherwise through the Afterglow Level group. Re-patches a different layout."""
+    """Patch every emission input. wave=True (Through Objects) routes it through the Noctune
+    Wave group, otherwise through the Noctune Level group. Re-patches a different layout."""
     if not has_emission(mat):
         return False
     want = LAYOUT_WAVE if wave else LAYOUT_CLASSIC

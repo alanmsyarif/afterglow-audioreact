@@ -358,7 +358,7 @@ class AfterglowScene(bpy.types.PropertyGroup):
                                        get=_environment_look_get, set=_environment_look_set,
                                        description="Choose the generated lighting style independently of the object look")
     easy_glow: BoolProperty(name="Soft Glow", default=True, options=set(),
-                           description="Build Reaction adds compositor glow; turn off to remove only Afterglow's glow")
+                           description="Build Reaction adds compositor glow; turn off to remove only Noctune's glow")
     saved_looks: CollectionProperty(type=AfterglowSavedLook)
     saved_look_index: IntProperty(name="Saved Look", default=0, min=0)
     new_look_name: StringProperty(name="Name", default="My Look", maxlen=64)

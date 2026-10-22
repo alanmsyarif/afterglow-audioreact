@@ -20,7 +20,7 @@ def _target(tree):
         raise ValueError("Connect the final image to the compositor output named Image first")
     owned = [node for node in tree.nodes if node.get(TAG)]
     if len(owned) > 1 or any(node.bl_idname != "CompositorNodeGlare" for node in owned):
-        raise ValueError("The compositor has ambiguous Afterglow nodes; keep one Render Glow node")
+        raise ValueError("The compositor has ambiguous Noctune nodes; keep one Render Glow node")
     return sockets[0], owned[0] if owned else None
 
 
@@ -68,10 +68,10 @@ def enable(scene):
             raise ValueError("Render Glow was routed elsewhere; remove it before adding a new glow")
         if tree.users > 1 or not tree.is_editable:
             tree = tree.copy()
-            tree.name = "Afterglow • " + scene.name + " Compositor"
+            tree.name = "Noctune • " + scene.name + " Compositor"
             scene.compositing_node_group = tree
     else:
-        tree = bpy.data.node_groups.new("Afterglow • " + scene.name + " Compositor", "CompositorNodeTree")
+        tree = bpy.data.node_groups.new("Noctune • " + scene.name + " Compositor", "CompositorNodeTree")
         tree.interface.new_socket(name="Image", in_out="OUTPUT", socket_type="NodeSocketColor")
         render = tree.nodes.new("CompositorNodeRLayers")
         render.location = (-360, 0)
@@ -86,8 +86,8 @@ def enable(scene):
     if node is None:
         node = tree.nodes.new("CompositorNodeGlare")
         node[TAG] = True
-        node.name = "Afterglow Render Glow"
-        node.label = "Afterglow • Render Glow"
+        node.name = "Noctune Render Glow"
+        node.label = "Noctune • Render Glow"
         node.inputs["Type"].default_value = "Fog Glow"
         node.inputs["Quality"].default_value = "High"
         node.inputs["Threshold"].default_value = 1.0
@@ -115,7 +115,7 @@ def disable(scene):
         raise ValueError("Make the scene local before removing Render Glow")
     if tree.users > 1 or not tree.is_editable:
         tree = tree.copy()
-        tree.name = "Afterglow • " + scene.name + " Compositor"
+        tree.name = "Noctune • " + scene.name + " Compositor"
         scene.compositing_node_group = tree
         owned = [node for node in tree.nodes if node.get(TAG)]
     for node in owned:
