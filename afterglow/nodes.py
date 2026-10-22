@@ -1,7 +1,7 @@
-"""The shared Afterglow geometry node group and modifier input helpers."""
+"""The shared Noctune geometry node group and modifier input helpers."""
 import bpy
 
-GROUP_NAME = "Afterglow AudioReact"
+GROUP_NAME = "Noctune AudioReact"
 TAG = "afterglow"
 VERSION = 8  # bump when the interface changes; get_group() migrates older groups
 SAMPLES = 8  # ponytail: fixed smoothing sample count; expose it if long tails get steppy
@@ -97,7 +97,7 @@ def _carry_tempo(old, new):
 
 
 def get_group():
-    """The current Afterglow group, found by tag so renamed copies are reused."""
+    """The current Noctune group, found by tag so renamed copies are reused."""
     migrate()
     return _current() or _build()
 
@@ -262,7 +262,7 @@ def _build():
         L.new(value, store.inputs["Value"])
         out = store.outputs["Geometry"]
 
-    # Through Objects: constant per-object vectors for the Afterglow Wave shader group, packed
+    # Through Objects: constant per-object vectors for the Noctune Wave shader group, packed
     # tight because Eevee caps attributes per material. Reverse is folded into Lo/Span and the
     # axis/origin share one vector (mode says which). Skipped unless Through and baked.
     lv = [bright(op("MULTIPLY", op("MAXIMUM", op("SUBTRACT", g[f"Baked Tap {k}"], threshold), 0.0), gain))

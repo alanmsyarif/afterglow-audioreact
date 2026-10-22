@@ -230,7 +230,7 @@ class AFTERGLOW_OT_calibrate(bpy.types.Operator):
 class AFTERGLOW_OT_bake(bpy.types.Operator):
     bl_idname = "afterglow.bake"
     bl_label = "Re-bake"
-    bl_description = "Recompute the Fast Playback bake for every Afterglow object"
+    bl_description = "Recompute the Fast Playback bake for every Noctune object"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -248,7 +248,7 @@ class AFTERGLOW_OT_bake(bpy.types.Operator):
 class AFTERGLOW_OT_remove(bpy.types.Operator):
     bl_idname = "afterglow.remove"
     bl_label = "Remove"
-    bl_description = "Remove Afterglow modifiers and restore the original materials"
+    bl_description = "Remove Noctune modifiers and restore the original materials"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -281,7 +281,7 @@ class AFTERGLOW_OT_build_effects(bpy.types.Operator):
 class AFTERGLOW_OT_remove_effects(bpy.types.Operator):
     bl_idname = "afterglow.remove_effects"
     bl_label = "Remove Effects"
-    bl_description = "Delete the Afterglow Effects collection and every datablock it owns"
+    bl_description = "Delete the Noctune Effects collection and every datablock it owns"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -504,10 +504,10 @@ LAYER_NOTES = {
 
 
 class AFTERGLOW_PT_effects(bpy.types.Panel):
-    bl_label = "Afterglow Pro · Environment"
+    bl_label = "Noctune Pro · Environment"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "Afterglow FX"
+    bl_category = "Noctune FX"
 
     @classmethod
     def poll(cls, context):
@@ -530,10 +530,10 @@ class AFTERGLOW_PT_effects(bpy.types.Panel):
         row.prop(s, "sound", text="Music")
         row.operator("afterglow.load_sound", text="", icon="FILEBROWSER")
         if fx.bounds_collection is None and s.collection is not None:
-            draw_note(source, "Bounds use Objects from Afterglow until you choose another collection.", context)
+            draw_note(source, "Bounds use Objects from Noctune until you choose another collection.", context)
         elif fx.bounds_collection is None and fx.emitter is None:
             draw_note(source, "Choose a bounds collection or use selected objects. Emissive materials are optional.", context)
-        draw_note(source, "Music and Start Frame are shared with Afterglow.", context)
+        draw_note(source, "Music and Start Frame are shared with Noctune.", context)
         layout.prop(s, "environment_look", text="Environment Look")
         action = layout.row()
         action.enabled = not playing and s.sound is not None and bool(fx.emitter or effects.bounds_collection(scene))
@@ -650,7 +650,7 @@ class AFTERGLOW_PT_panel(bpy.types.Panel):
     bl_label = edition.NAME
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "Afterglow"
+    bl_category = "Noctune"
 
     def draw(self, context):
         scene = context.scene
@@ -683,7 +683,7 @@ class AFTERGLOW_PT_panel(bpy.types.Panel):
         if built:
             draw_note(layout, "Press Space to preview. Use Update Reaction after changing the music or object look.", context, "INFO")
         else:
-            note = ("Animates your objects. Generate lights and beams separately in the Afterglow FX tab."
+            note = ("Animates your objects. Generate lights and beams separately in the Noctune FX tab."
                     if edition.IS_PRO else "Animates your objects to the music. Materials are prepared automatically with Use Selected.")
             draw_note(layout, note, context)
         layout.separator()

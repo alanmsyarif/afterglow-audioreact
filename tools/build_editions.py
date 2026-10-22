@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the Free or Pro Blender extension without changing the source tree."""
+"""Build Noctune editions from a complete source checkout without changing it."""
 
 from __future__ import annotations
 
@@ -18,11 +18,11 @@ FREE_EXCLUDES = frozenset({
 })
 EDITION_DETAILS = {
     "free": (
-        "Afterglow Free",
+        "Noctune Free",
         "Audio-reactive object materials, ready in a few clicks",
     ),
     "pro": (
-        "Afterglow Pro",
+        "Noctune Pro",
         "Audio-reactive materials, beams, lasers and environment effects",
     ),
 }
@@ -40,6 +40,13 @@ def package_files(source_dir: Path, edition: str) -> dict[str, bytes]:
         raise ValueError("Expected the afterglow extension manifest")
     if not (source_dir / "edition.py").is_file():
         raise ValueError("Source is missing edition.py")
+    if edition == "pro":
+        missing = sorted(name for name in FREE_EXCLUDES if not (source_dir / name).is_file())
+        if missing:
+            raise ValueError(
+                f"Pro environment sources are missing: {', '.join(missing)}. "
+                "Build Noctune Pro from the private noctune-pro repository"
+            )
 
     name, tagline = EDITION_DETAILS[edition]
     manifest, count = re.subn(r"(?m)^name\s*=.*$", f'name = "{name}"', manifest, count=1)
@@ -83,7 +90,7 @@ def build(edition: str, output_dir: Path, source_dir: Path = ROOT / "afterglow")
         raise ValueError("Keep Pro packages out of public dist; use build/private or another local directory")
     files = package_files(source_dir, edition)
     metadata = tomllib.loads(files["blender_manifest.toml"].decode("utf-8"))
-    filename = f"afterglow-{edition}-{metadata['version']}.zip"
+    filename = f"noctune-{edition}-{metadata['version']}.zip"
     output_dir.mkdir(parents=True, exist_ok=True)
     destination = output_dir / filename
     # A temporary sibling keeps an interrupted build from replacing a good ZIP.

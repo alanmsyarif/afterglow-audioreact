@@ -10,8 +10,10 @@ from mathutils import Vector
 from . import effect_schema, materials, nodes
 
 SUPPORTED = {"MESH", "CURVE", "FONT"}
-MOD_NAME = "Afterglow"
-STRIP_NAME = "Afterglow Audio"
+MOD_NAME = "Noctune"
+STRIP_NAME = "Noctune Audio"
+AUDIO_TAG = "afterglow_audio"
+LEGACY_STRIP_NAME = "Afterglow Audio"
 LOW_HZ, HIGH_HZ = 20.0, 16000.0
 
 
@@ -109,7 +111,7 @@ def apply(scene):
     """Add or refresh the modifier and patch materials on every emissive object in the collection.
 
     Returns (applied, skipped, outside, linked). 'outside' lists objects outside the collection
-    that share a patched material; they have no Afterglow attributes, so they render dark.
+    that share a patched material; they have no Noctune attributes, so they render dark.
     'linked' lists library-linked emissive materials, which can't be patched persistently.
     """
     s = scene.afterglow
@@ -296,7 +298,7 @@ def place(objs, mode="LONGEST", origin=None, reverse=False):
 
 
 def replace(scene):
-    """Re-place every Afterglow object with the scene's Ripple From settings."""
+    """Re-place every Noctune object with the scene's Ripple From settings."""
     s = scene.afterglow
     bpy.context.view_layer.update()  # matrix_world is stale for objects moved since the last eval
     objs = sorted((o for o in _managed(scene) if find_modifier(o)), key=lambda o: o.name)
@@ -307,6 +309,25 @@ def replace(scene):
         materials.patch_material(m, wave=s.through)  # Through switches the material layout
 
 
+def sound_strip(scene):
+    """Find the shared music strip, including projects saved before the rename.
+
+    Tags keep owned strips usable after a manual rename or a name collision.
+    Legacy canonical names retain compatibility with projects saved before tags.
+    """
+    se = scene.sequence_editor
+    if se:
+        owned = next((strip for strip in se.strips
+                      if strip.type == "SOUND" and strip.get(AUDIO_TAG)), None)
+        if owned:
+            return owned
+        for name in (STRIP_NAME, LEGACY_STRIP_NAME):
+            strip = se.strips.get(name)
+            if strip and strip.type == "SOUND":
+                return strip
+    return None
+
+
 def setup_playback(scene):
     """Play the scene's Sound at Start Frame with audio sync, preserving render ranges.
 
@@ -314,7 +335,7 @@ def setup_playback(scene):
     """
     s = scene.afterglow
     se = scene.sequence_editor_create()
-    strip = se.strips.get(STRIP_NAME)
+    strip = sound_strip(scene)
     if strip and strip.sound != s.sound:
         se.strips.remove(strip)
         strip = None
@@ -343,12 +364,13 @@ def setup_playback(scene):
         finally:
             if temporary:
                 os.remove(temporary)
+    strip[AUDIO_TAG] = True
     strip.frame_start = s.start_frame
     scene.sync_mode = "AUDIO_SYNC"
 
 
 def sync(scene):
-    """Push the scene-wide settings into every Afterglow modifier. A sound whose file is
+    """Push the scene-wide settings into every Noctune modifier. A sound whose file is
     missing is never pushed (it would crash Blender); modifiers keep the previous one."""
     nodes.migrate()  # a file saved by an older version may be edited before the next Apply
     s = scene.afterglow
@@ -365,13 +387,13 @@ def sync(scene):
             nodes.set_input(mod, "Beats per Sweep", s.beats_per_sweep)
             nodes.set_input(mod, "Use Baked", s.fast_playback)
             nodes.set_input(mod, "Through", s.through)
-    if push_sound and scene.sequence_editor and scene.sequence_editor.strips.get(STRIP_NAME):
+    if push_sound and sound_strip(scene):
         setup_playback(scene)
 
 
 def remove(scene):
     se = scene.sequence_editor
-    strip = se and se.strips.get(STRIP_NAME)
+    strip = sound_strip(scene)
     # Existing environment builds retain their shared music strip in either edition.
     has_environment = any(collection.get(effect_schema.TAG) for collection in scene.collection.children)
     if strip and not has_environment:

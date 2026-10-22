@@ -132,7 +132,7 @@ def _plan(scene, identifier, scope="ALL"):
     """Guard only the controls this style scope will change, before any edits."""
     scope = _scope(scope)
     if not isinstance(identifier, str) or identifier not in _LOOKS:
-        raise ValueError(f"Unknown Afterglow look: {identifier}")
+        raise ValueError(f"Unknown Noctune look: {identifier}")
     look = _LOOKS[identifier]
     color_a, color_b = look["colors"]
     fx, layer_values, fx_values = None, {}, {}
@@ -182,7 +182,7 @@ def preflight(scene, identifier, *, scope="ALL"):
 def enabled_layers(identifier):
     """The layers a built-in look will enable, without consulting or mutating a scene."""
     if not isinstance(identifier, str) or identifier not in _LOOKS:
-        raise ValueError(f"Unknown Afterglow look: {identifier}")
+        raise ValueError(f"Unknown Noctune look: {identifier}")
     return tuple(_LOOKS[identifier]["layers"])
 
 

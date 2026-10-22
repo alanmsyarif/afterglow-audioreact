@@ -86,7 +86,7 @@ def create_reaction(scene, look_identifier=None, look_data=None, *, style_scope=
     """Validate prerequisites, then apply, calibrate and bake the reaction.
 
     Like the existing Calibrate and Fast Playback controls, the final calibration/bake
-    refreshes all Afterglow modifiers in this scene. A chosen built-in look is applied
+    refreshes all Noctune modifiers in this scene. A chosen built-in look is applied
     after creating modifiers and before the single final bake. style_scope selects
     the controls the look may change; OBJECT keeps environment styling intact.
     This operation never builds effects.
@@ -149,7 +149,7 @@ def create_show(scene, look_identifier=None, look_data=None):
     pass look_data to use a portable custom-look snapshot, or omit both to retain
     the current styling and enabled layers. Audio, unsafe material
     sharing, animated look controls and required routing are checked before objects
-    are changed. Like Create Reaction, this refreshes scene Afterglow playback.
+    are changed. Like Create Reaction, this refreshes scene Noctune playback.
     Live mixer controls, audio placement, venue and routing remain unchanged.
     """
     edition.require_pro()
@@ -183,7 +183,7 @@ def use_selected(context):
     if (current and current.is_editable and current.name in context.scene.collection.children
             and set(current.all_objects) == set(objects)):
         return current
-    collection = bpy.data.collections.new("Afterglow Selection")
+    collection = bpy.data.collections.new("Noctune Selection")
     context.scene.collection.children.link(collection)
     for ob in objects:
         collection.objects.link(ob)

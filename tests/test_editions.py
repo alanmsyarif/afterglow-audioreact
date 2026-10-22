@@ -1,4 +1,4 @@
-"""Install the actual archives in isolated processes, including edition upgrades."""
+"""Install the actual archives in isolated processes, covering the complete Free object workflow."""
 import importlib.util
 import os
 from pathlib import Path
@@ -49,34 +49,6 @@ def native(scene):
             scene.use_preview_range, scene.frame_preview_start, scene.frame_preview_end]
 
 
-def curves(owner):
-    if owner is None:
-        return []
-    ad = owner.animation_data
-    if not ad or not ad.action:
-        return []
-    output = []
-    for layer in ad.action.layers:
-        for strip in layer.strips:
-            for bag in getattr(strip, "channelbags", ()):
-                if ad.action_slot and bag.slot_handle != ad.action_slot.handle:
-                    continue
-                for curve in bag.fcurves:
-                    output.append([curve.data_path, curve.array_index,
-                                   [[round(float(v), 6) for v in point.co]
-                                    for point in curve.keyframe_points]])
-    return sorted(output)
-
-
-def generated(scene):
-    output = []
-    for collection in scene.collection.children:
-        if collection.get(effect_schema.TAG):
-            for obj in collection.all_objects:
-                output.append([obj.name, obj.type, curves(obj), curves(obj.data)])
-    return sorted(output)
-
-
 def fixture():
     scene = bpy.context.scene
     objects = []
@@ -114,7 +86,7 @@ def fixture():
 
 
 def check_free():
-    assert not edition.IS_PRO and edition.NAME == "Afterglow Free"
+    assert not edition.IS_PRO and edition.NAME == "Noctune Free"
     assert not hasattr(bpy.context.scene.afterglow, "effects")
     assert not hasattr(bpy.types, "AFTERGLOW_PT_effects")
     for operator in ("build_environment", "build_effects", "remove_effects", "build_show"):
@@ -168,77 +140,6 @@ if mode == "free":
     assert all(not core.find_modifier(obj) for obj in objects)
     assert not scene.sequence_editor.strips
 
-elif mode == "pro_create":
-    from afterglow import effects, environment
-    assert edition.IS_PRO
-    scene, objects = fixture()
-    workflow.create_reaction(scene, "NEON_CLUB", style_scope="OBJECT")
-    scene.afterglow.effects.bounds_collection = scene.afterglow.collection
-    environment.build(scene, "LASER_SHOW")
-    assert effects.built_counts(scene)["lasers"] > 0
-    scene.afterglow.environment_advanced = True
-    scene.afterglow.effects.master_brightness = 0.62
-    scene.afterglow.effects.solo_layer = "lasers"
-    scene.afterglow.effects.gun.visible_beam = True
-    scene.afterglow.effects.gun.beam_glow = 2.3
-    environment.build(scene)
-    scene.frame_set(11)
-    data = {"native": native(scene), "generated": generated(scene),
-            "style": lookbook.capture(scene),
-            "master": scene.afterglow.effects.master_brightness,
-            "solo": scene.afterglow.effects.solo_layer,
-            "bounds": scene.afterglow.effects.bounds_collection.name,
-            "look": scene.afterglow.environment_look}
-    (folder / "pro-state.json").write_text(json.dumps(data))
-    bpy.ops.wm.save_as_mainfile(filepath=str(folder / "pro.blend"))
-
-elif mode == "free_resave":
-    check_free()
-    bpy.ops.wm.open_mainfile(filepath=str(folder / "pro.blend"))
-    scene = bpy.context.scene
-    previous = json.loads((folder / "pro-state.json").read_text())
-    assert native(scene) == previous["native"] and generated(scene) == previous["generated"]
-    core.remove(scene)
-    assert scene.sequence_editor.strips[core.STRIP_NAME].sound == scene.afterglow.sound
-    assert generated(scene) == previous["generated"]
-    # Reload to retain the original object reaction for the upgrade test.
-    bpy.ops.wm.open_mainfile(filepath=str(folder / "pro.blend"))
-    scene = bpy.context.scene
-    scene.afterglow.new_look_name = "Saved with Free"
-    assert bpy.ops.afterglow.save_look() == {"FINISHED"}
-    assert bpy.ops.afterglow.export_look(filepath=str(folder / "free-upgrade-look.json")) == {"FINISHED"}
-    bpy.ops.wm.save_as_mainfile(filepath=str(folder / "free-resaved.blend"))
-    check_free()
-
-elif mode == "pro_reopen":
-    from afterglow import effects
-    assert edition.IS_PRO
-    bpy.ops.wm.open_mainfile(filepath=str(folder / "free-resaved.blend"))
-    scene = bpy.context.scene
-    previous = json.loads((folder / "pro-state.json").read_text())
-    fx = scene.afterglow.effects
-    assert native(scene) == previous["native"] and generated(scene) == previous["generated"]
-    assert lookbook.capture(scene) == previous["style"]
-    assert fx.master_brightness == previous["master"] and fx.solo_layer == previous["solo"]
-    assert fx.bounds_collection.name == previous["bounds"]
-    assert scene.afterglow.environment_look == previous["look"] and scene.afterglow.environment_advanced
-    assert scene.afterglow.sound.packed_file and len(scene.sequence_editor.strips) == 1
-    assert not bake.outdated(scene) and not effects.outdated(scene)
-    assert bpy.ops.afterglow.import_look(filepath=str(folder / "free-upgrade-look.json")) == {"FINISHED"}
-    data = lookbook.loads(creator.selected_look(scene).payload)
-    assert data["format"] == "afterglow.object-look"
-    before = lookbook.capture(scene)
-    assert lookbook.apply(scene, data) == 2
-    assert lookbook.capture(scene) == before
-    rejected(lambda: lookbook.apply(scene, data, scope="EFFECTS"))
-    result = workflow.create_show(scene, look_data=data)
-    assert result["applied"] == 2 and result["effects"]["lasers"] > 0
-    assert lookbook.capture(scene) == before
-    afterglow.unregister()
-    afterglow.register()
-    assert hasattr(bpy.types, "AFTERGLOW_PT_effects")
-    assert bpy.ops.afterglow.build_environment.get_rna_type()
-
 else:
     raise AssertionError(mode)
 
@@ -282,21 +183,8 @@ def test_clean_free_archive_supports_complete_object_workflow():
         run_worker(worker, package, folder, "free")
 
 
-def test_pro_free_pro_project_and_object_look_compatibility():
-    with tempfile.TemporaryDirectory(prefix="afterglow-edition-upgrade-") as temporary:
-        folder = Path(temporary)
-        worker = folder / "worker.py"
-        worker.write_text(WORKER)
-        module = builder()
-        free = archive_install(module, "free", folder)
-        pro = archive_install(module, "pro", folder)
-        for package, mode in ((pro, "pro_create"), (free, "free_resave"), (pro, "pro_reopen")):
-            run_worker(worker, package, folder, mode)
-
-
 if __name__ == "__main__":
-    tests = [test_clean_free_archive_supports_complete_object_workflow,
-             test_pro_free_pro_project_and_object_look_compatibility]
+    tests = [test_clean_free_archive_supports_complete_object_workflow]
     for test in tests:
         test()
         print("PASS", test.__name__)

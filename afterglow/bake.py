@@ -78,7 +78,7 @@ def _bake_fcurve(ob, mod, name="Baked Peak"):
 
 
 def unkey(ob, mod):
-    """Delete only Afterglow's bake curves; the object's other animation stays."""
+    """Delete only Noctune's bake curves; the object's other animation stays."""
     for name in nodes.BAKE_INPUTS:
         bag, fc = _bake_fcurve(ob, mod, name)
         if fc:
@@ -160,7 +160,7 @@ def raw_levels(scene, mods, frames):
 
 
 def bake_all(scene):
-    """Bake every object carrying an Afterglow modifier. Returns how many were baked."""
+    """Bake every object carrying a Noctune modifier. Returns how many were baked."""
     s = scene.afterglow
     objs = sorted((o for o in core._managed(scene) if core.find_modifier(o)), key=lambda o: o.name)
     mono, rate = _load(scene)

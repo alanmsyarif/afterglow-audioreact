@@ -1,9 +1,9 @@
 schema_version = "1.0.0"
 
 id = "afterglow"
-version = "0.27.0"
-name = "Afterglow Pro"
-tagline = "Choose music and a look, then create audio-reactive lighting"
+version = "0.28.0"
+name = "Noctune Free"
+tagline = "Audio-reactive object materials, ready in a few clicks"
 maintainer = "alanmaulanasyarif@gmail.com"
 website = "https://github.com/alanmsyarif/afterglow-audioreact"
 type = "add-on"

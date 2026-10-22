@@ -1,16 +1,16 @@
 """Edition capabilities. Distribution builds replace only the two constants below.
 
-The development source includes Pro. Free archives omit the environment engine;
-this marker chooses the matching registration and object-only API behavior.
+This repository contains Noctune Free. The environment engine lives in the
+separate Pro repository; shared identifiers retain existing project compatibility.
 """
 
-IS_PRO = True
-NAME = "Afterglow Pro"
+IS_PRO = False
+NAME = "Noctune Free"
 
 
 def require_pro():
     if not IS_PRO:
-        raise ValueError("Environment generation is included in Afterglow Pro")
+        raise ValueError("Environment generation is included in Noctune Pro")
 
 
 def style_scope(scope):
