@@ -24,7 +24,9 @@ Existing generated Pro lights and graphics remain ordinary Blender scene data
 and can still render when a project is opened in Free. Free cannot generate or
 edit their environment controls. Saving through Free preserves those settings
 for reopening in Pro. Free object-look files also work in Pro without changing
-the environment; Free imports the object styling from older complete look files.
+the environment. Free 0.29.1 reads older complete look formats 1–3. For current
+Pro exports, choose an object-only look; its complete/environment format 6 is
+not supported by this Free version.
 
 ## Build Free
 

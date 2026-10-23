@@ -3,6 +3,9 @@
 Open **Noctune** in the 3D Viewport sidebar (`N`) to prepare your objects, apply a
 look and build their music reaction with **Build Reaction** or **Update Reaction**.
 
+For the illustrated beginner guide, download the [offline HTML manual](../dist/noctune-free-documentation.zip?raw=true),
+extract it and open `index.html`.
+
 Noctune Pro adds generated environment lights, beams, lasers and signal effects.
 Those tools are maintained separately and are not included in this public Free
 source tree. See [edition details](editions.md) for the Pro workflow and delivery.
@@ -19,8 +22,9 @@ In **Noctune**, turn on **Advanced Controls** for:
 - Per-object response and appearance controls.
 
 Free saves portable object looks that also work in Pro without changing
-environment settings. Free imports the object styling from complete Pro look
-files. **Remove Object Reaction** restores prepared materials and original light
+environment settings. Free 0.29.1 imports object-only looks and older complete
+formats 1–3. Use an object-only export from current Pro; its complete/environment
+format 6 is unsupported by this Free version. **Remove Object Reaction** restores prepared materials and original light
 data, while keeping existing generated environment data in the scene.
 
 Existing scenes and custom look files remain usable. Objects from earlier built-in
