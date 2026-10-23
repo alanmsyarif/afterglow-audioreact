@@ -10,6 +10,10 @@ calibrates the reaction and prepares playback for you.
 
 **Blender 5.2+ · EEVEE and Cycles · Runs locally**
 
+[**Download the illustrated offline guide**](dist/noctune-free-documentation.zip?raw=true).
+Extract the ZIP and open **index.html** in a browser. It includes quick steps,
+images, optional GIFs and search. [Single HTML file](docs/html/noctune-free.html?raw=true).
+
 ## Install
 
 1. Download the ZIP above and keep it zipped.

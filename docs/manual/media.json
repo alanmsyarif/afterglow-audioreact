@@ -1,0 +1,29 @@
+{
+  "free-hero": {
+    "path": "assets/free/free-hero.png",
+    "alt": "Glowing example objects using the Neon Club object look",
+    "caption": "Neon Club on example geometry, rendered with Noctune Free. Start with objects from your own scene."
+  },
+  "light-reaction": {
+    "path": "assets/free/light-reaction.png",
+    "alt": "Quiet and loud comparisons of Point, Spot, Area and Sun lights illuminating surfaces",
+    "caption": "Your own native lights can react too. These quiet/loud examples use actual Noctune Free light power and color reactions."
+  },
+  "meter-demo": {
+    "path": "assets/free/meter-demo.png",
+    "animation": "assets/free/meter-demo.gif",
+    "alt": "Equalizer-style objects filling from bottom to top as the response level rises",
+    "caption": "Level Meter on example geometry. The animation feeds controlled levels into Noctune’s prepared response to show the fill direction clearly."
+  },
+  "object-looks": {
+    "path": "assets/free/object-looks.png",
+    "alt": "Five rendered object looks: Neon Club, Cinematic Pulse, Aurora Flow, Signal Grid and Electric Violet",
+    "caption": "The five real object presets on the same example geometry. Controlled response levels make the palette differences easy to compare."
+  },
+  "ripple-demo": {
+    "path": "assets/free/ripple-demo.png",
+    "animation": "assets/free/ripple-demo.gif",
+    "alt": "A band of light travelling across one continuous object surface",
+    "caption": "Through Objects: the prepared wave moves across the surface instead of switching the entire object on at once. Play to see the native Free material response."
+  }
+}
