@@ -3,7 +3,7 @@
 import bpy
 import numpy as np
 
-from . import bake, core, edition, light_reaction, materials, prepare, presets, tempo
+from . import bake, core, edition, light_reaction, materials, nodes, prepare, presets, tempo
 
 if edition.IS_PRO:
     from . import effects
@@ -92,6 +92,36 @@ def _style_preflight(scene, look_identifier, look_data, scope="ALL"):
     return None
 
 
+def calibration_preflight(scene):
+    """Protect authored calibration controls before a build changes scene data.
+
+    The final calibration includes existing reactions outside the selected collection.
+    A first light build also writes canonical object properties, so an authored curve
+    on those inputs must be guarded before its native light data is copied.
+    """
+    names = (("Ripple Gain", "Ripple Threshold") if scene.afterglow.ripple
+             else ("Gain", "Threshold"))
+    for ob in sorted(core._managed(scene), key=lambda obj: obj.name):
+        mod = core.reaction(ob)
+        if mod is None and ob.type == "LIGHT" and core.is_target(ob):
+            mod = light_reaction.LightReaction(ob)
+        if mod is None:
+            continue
+        paths = {}
+        for name in names:
+            try:
+                paths[nodes._socket(mod, name).path_from_id("value")] = name
+            except (KeyError, AttributeError):
+                # Older geometry groups gain the Ripple pair during Apply's
+                # migration. Missing inputs cannot have authored curves yet.
+                continue
+        conflicts = presets._animation_paths(ob).intersection(paths)
+        if conflicts:
+            control = paths[sorted(conflicts)[0]]
+            raise ValueError(f"Calibration would replace animated {control} on {ob.name}. "
+                             "Remove its keyframes, NLA animation or driver before calibrating")
+
+
 def create_reaction(scene, look_identifier=None, look_data=None, *, style_scope="ALL"):
     """Validate prerequisites, then apply, calibrate and bake the reaction.
 
@@ -105,6 +135,7 @@ def create_reaction(scene, look_identifier=None, look_data=None, *, style_scope=
     state = inspect(scene)
     if not state["ready"]:
         raise ValueError(state["reason"])
+    calibration_preflight(scene)
     normalized = _style_preflight(scene, look_identifier, look_data, style_scope)
     mono, rate = core.load_mono(scene.afterglow.sound, "Create Reaction")
     if not len(mono) or rate <= 0 or not np.isfinite(mono).all():
@@ -166,6 +197,7 @@ def create_show(scene, look_identifier=None, look_data=None):
     state = inspect(scene)
     if not state["ready"]:
         raise ValueError(state["reason"])
+    calibration_preflight(scene)
     normalized = _style_preflight(scene, look_identifier, look_data)
     if look_identifier is not None:
         enabled = presets.enabled_layers(look_identifier)

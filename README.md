@@ -1,4 +1,4 @@
-# Noctune Free 0.29
+# Noctune Free 0.29.1
 
 **Choose music. Make it glow.**
 
@@ -6,7 +6,7 @@ Make your own meshes, curves, text and lights react to music in Blender. Select
 your objects, load a track and choose a look. Noctune prepares geometry materials,
 calibrates the reaction and prepares playback for you.
 
-[**Download Noctune Free 0.29.0**](dist/noctune-free-0.29.0.zip?raw=true)
+[**Download Noctune Free 0.29.1**](dist/noctune-free-0.29.1.zip?raw=true)
 
 **Blender 5.2+ · EEVEE and Cycles · Runs locally**
 
@@ -31,6 +31,8 @@ Start with your own scene and objects.
 After changing your music or look, press **Update Reaction**. Point, Spot, Area
 and Sun lights work in the same selection as geometry: their power and color
 react to the music. Use **Rendered** shading to preview native lights.
+Calibration reads the full source track, so playback Delay and Ripple placement
+keep the same normalized response.
 
 ## Included in Free
 

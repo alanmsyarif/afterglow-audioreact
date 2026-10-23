@@ -141,9 +141,28 @@ def _times(m, frames, fps, beat, pos=None):
     return (frames - g("Start Frame")) / fps - g("Delay") - lag
 
 
+def calibration_levels(scene, mods, frames):
+    """Sample full source bands without playback offsets; also return their envelopes.
+
+    Calibration describes the audio, so Delay, Ripple Position, Start Frame and
+    tempo must not truncate or change the measured distribution. Full hop-rate
+    envelopes retain brief peaks between the requested calibration frames.
+    """
+    mono, rate = _load(scene)
+    fps = scene.render.fps / scene.render.fps_base
+    source_times = (np.asarray(frames, dtype=np.float64) - scene.afterglow.start_frame) / fps
+    bands = sorted({_band_of(m) for m in mods})
+    times, series = band_series(mono, rate, bands)
+    envelopes = [series[bands.index(_band_of(m))] for m in mods]
+    return ([np.interp(source_times, times, envelope, left=0.0, right=0.0)
+             for envelope in envelopes], envelopes)
+
+
 def raw_levels(scene, mods, frames):
-    """Raw band amplitude (no peak hold) each modifier samples at the given frames: what
-    Calibrate measures live with Decay 0, from the same numpy source as the bake."""
+    """Raw scene-time levels, including playback Delay and Ripple lag.
+
+    Used for live-node comparisons; calibration_levels measures source audio.
+    """
     mono, rate = _load(scene)
     frames = np.asarray(frames, dtype=np.float64)
     fps = scene.render.fps / scene.render.fps_base

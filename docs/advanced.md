@@ -64,6 +64,35 @@ Choosing a collection directly accepts lights and geometry with emissive materia
 already. Select geometry and use **Use Selected** if its materials need preparation.
 Library-linked objects must be made local before creating a reaction.
 
+## Automatic calibration
+
+**Build Reaction** and **Update Reaction** calibrate every Noctune object and light
+in the scene, including reactions moved outside the current Objects collection.
+The manual **Calibrate** button uses the same analysis. Generated environment
+effects keep their separate build workflow.
+
+Calibration measures each frequency band across the full source track. Delay,
+Start Frame and Ripple placement affect playback timing without changing the
+measured audio. Every source frame is sampled once, and the analysis also checks
+peaks between frames.
+
+Normally, Threshold uses the band's median level and Gain maps its 90th percentile
+to a target response of 1. Sparse tracks use their active audio when that estimate
+has too little range; steady tones receive a stable response. Negligible bands
+stay dark rather than receiving extreme gain.
+
+Full-track peaks keep the automatically calibrated response within 4 before
+**Intensity**, **Glow**, material strength and light **Base Power** affect the final
+brightness. You can still raise Gain or Intensity manually. Calibration does not
+set scene exposure or equalize the final appearance of different lights and materials.
+**Glow** deliberately leaves a minimum brightness during quiet sections or silence.
+
+If Gain or Threshold has keyframes, a driver or NLA animation, calibration reports
+the conflict before changing the scene. While Ripple is enabled, this protection
+covers Ripple Gain and Ripple Threshold instead. Remove the conflicting animation
+before using automatic calibration; the authored curves remain intact when a build
+is rejected.
+
 ## Object reaction controls
 
 | Control | What it does |
@@ -131,7 +160,7 @@ sudo apt install libegl1 libgl1-mesa-dri libglx-mesa0
 2. Tag the commit with that version and push the tag:
 
    ```bash
-   git tag v0.29.0 && git push origin v0.29.0
+   git tag v0.29.1 && git push origin v0.29.1
    ```
 
 [`release.yml`](../.github/workflows/release.yml) runs the full test suite, checks the tag
