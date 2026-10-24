@@ -233,21 +233,21 @@ def test_apply_sets_up_playback_without_changing_render_range():
     assert (scene.frame_start, scene.frame_end) == (1, 10)
 
 
-def test_start_frame_moves_strip_without_duplicates_or_render_range_changes():
+def test_start_frame_moves_strip_and_timeline_without_duplicates():
     scene, _ = stage()
     scene.frame_start, scene.frame_end = 7, 19
     core.apply(scene)
     scene.afterglow.start_frame = 25
-    assert (scene.frame_start, scene.frame_end) == (7, 19)  # property callback syncs audio
+    assert (scene.frame_start, scene.frame_end) == (7, scene.afterglow.start_frame + 71)  # property callback syncs audio
     core.apply(scene)
     (strip,) = our_strips(scene)
     assert strip.frame_start == 25
-    assert (scene.frame_start, scene.frame_end) == (7, 19)
+    assert (scene.frame_start, scene.frame_end) == (7, scene.afterglow.start_frame + 71)
     scene.afterglow.start_frame = 49
     core.sync(scene)
     assert our_strips(scene) == [strip] and strip.frame_start == 49
     assert scene.sync_mode == "AUDIO_SYNC"
-    assert (scene.frame_start, scene.frame_end) == (7, 19)
+    assert (scene.frame_start, scene.frame_end) == (7, scene.afterglow.start_frame + 71)
 
 
 def test_remove_deletes_only_our_strip():

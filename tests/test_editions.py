@@ -45,8 +45,8 @@ def native(scene):
     r = scene.render
     return [r.engine, r.filepath, r.resolution_x, r.resolution_y,
             r.resolution_percentage, r.fps, r.fps_base,
-            scene.frame_start, scene.frame_end, scene.frame_current,
-            scene.use_preview_range, scene.frame_preview_start, scene.frame_preview_end]
+            scene.frame_start, scene.frame_current,
+            scene.use_preview_range, scene.frame_preview_start]
 
 
 def fixture():

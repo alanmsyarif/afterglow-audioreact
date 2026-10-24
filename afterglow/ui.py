@@ -803,7 +803,7 @@ def draw_object(layout, s, ob, mod, context=None):
         nodes.draw_input(layout, mod, "Base Power")
     row = layout.row(align=True)
     nodes.draw_input(row, mod, "Intensity")
-    nodes.draw_input(row, mod, "Glow")
+    nodes.draw_input(row, mod, "Glow", text="Idle Glow")
     nodes.draw_input(layout, mod, "Use Colors")
     row = layout.row(align=True)
     row.active = bool(nodes.get_input(mod, "Use Colors"))

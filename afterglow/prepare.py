@@ -42,6 +42,22 @@ def _has_surface_emission(material):
         for node in _reachable(output.inputs["Surface"])) for output in outputs)
 
 
+def has_authored_emission(obj):
+    """Recognize existing emission, including isolated copies of shared materials."""
+    record = obj.get(TAG)
+    for index, slot in enumerate(obj.material_slots):
+        material = slot.material
+        if material is None:
+            continue
+        if not material.get(OWNED) and _has_surface_emission(material):
+            return True
+        saved = record.get("slots", {}).get(str(index)) if record else None
+        if saved and saved.get("prepared") == material:
+            if _has_surface_emission(saved.get("original")):
+                return True
+    return False
+
+
 def _restore_slot(slot, link, material):
     # Switching to DATA alone leaves a hidden object-material ID reference behind.
     # Clear that override first, then expose the unchanged underlying data slot.

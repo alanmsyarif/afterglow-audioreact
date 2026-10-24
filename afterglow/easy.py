@@ -37,7 +37,7 @@ def create_visual(context):
     A collection and readable audio are required. Every prerequisite is checked
     before styling objects. Environment layers, mixer, routing and generated effects
     remain unchanged. Source geometry, cameras, world and native render/output
-    settings stay under user control. Automatic glow respects disabled compositing.
+    settings stay under user control; track changes fit the timeline end. Automatic glow respects disabled compositing.
     """
     scene = context.scene
     s = scene.afterglow

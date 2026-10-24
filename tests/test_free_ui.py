@@ -103,14 +103,15 @@ def test_sidebar_prepares_builds_and_restores_plain_objects_without_scene_templa
     original_objects = set(scene.objects)
     scene.frame_start, scene.frame_end = 9, 41
     scene.render.filepath = "//my-output/"
-    before = scene.camera, scene.world, scene.frame_start, scene.frame_end, scene.render.filepath
+    before = scene.camera, scene.world, scene.frame_start, scene.render.filepath
     assert bpy.ops.afterglow.use_selected() == {"FINISHED"}
     assert any(materials.has_emission(slot.material) for slot in obj.material_slots)
     scene.afterglow.sound = helpers.sound()
     assert bpy.ops.afterglow.create_visual() == {"FINISHED"}
+    assert scene.frame_end == 72
     assert core.find_modifier(obj) and not bake.outdated(scene)
     assert set(scene.objects) == original_objects
-    assert before == (scene.camera, scene.world, scene.frame_start, scene.frame_end,
+    assert before == (scene.camera, scene.world, scene.frame_start,
                       scene.render.filepath)
     assert bpy.ops.afterglow.remove() == {"FINISHED"}
     assert not core.find_modifier(obj) and not any(slot.material for slot in obj.material_slots)

@@ -1,4 +1,4 @@
-# Noctune Free 0.30.0
+# Noctune Free 0.30.1
 
 **Choose music. Make it glow.**
 
@@ -6,7 +6,7 @@ Make your own meshes, curves, text and lights react to music in Blender. Select
 your objects, load a track and choose a look. Noctune prepares geometry materials,
 calibrates the reaction and prepares playback for you.
 
-[**Download Noctune Free 0.30.0**](dist/noctune-free-0.30.0.zip?raw=true)
+[**Download Noctune Free 0.30.1**](dist/noctune-free-0.30.1.zip?raw=true)
 
 **Blender 5.2+ · EEVEE and Cycles · Runs locally**
 
@@ -72,7 +72,7 @@ Soft glow appears in the composited final image and needs Blender's
 
 Set your camera, resolution, frame range, format and destination in Blender,
 then use **Render → Render Animation**. Noctune preserves your output settings
-and timeline range.
+and output settings. The timeline end follows the music when its track, Start Frame or frame rate changes; later manual range edits are kept until that configuration changes again.
 
 To remove the reaction, expand **Cleanup → Remove Object Reaction** below the workflow. This restores automatically prepared material
 assignments and original light data, including preexisting light animation.
@@ -99,3 +99,5 @@ project. [More about editions and compatibility](docs/editions.md).
 
 Noctune was previously named Afterglow. Existing projects and look files remain
 compatible.
+
+Built-in object looks preserve existing emissive material colors and use zero idle glow. Newly prepared materials use the preset palette. To add a constant glow, adjust **Advanced Controls → Selected Object → Idle Glow**; calibration changes audio sensitivity, not this artistic control. Zero emission can still leave a surface visible under scene lighting.
