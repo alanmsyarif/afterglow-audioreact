@@ -1,12 +1,12 @@
-# Noctune Free 0.29.1
+# Noctune Free 0.32.0
 
 **Choose music. Make it glow.**
 
 Make your own meshes, curves, text and lights react to music in Blender. Select
-your objects, load a track and choose a look. Noctune prepares geometry materials,
+your objects, load a track and build. Styling is optional afterward. Noctune prepares geometry materials,
 calibrates the reaction and prepares playback for you.
 
-[**Download Noctune Free 0.29.1**](dist/noctune-free-0.29.1.zip?raw=true)
+[**Download Noctune Free 0.32.0**](dist/noctune-free-0.32.0.zip?raw=true)
 
 **Blender 5.2+ · EEVEE and Cycles · Runs locally**
 
@@ -23,20 +23,23 @@ images, optional GIFs and search. [Single HTML file](docs/html/noctune-free.html
 
 ## Make your first reaction
 
-Start with your own scene and objects.
+The panel has three views: **Setup**, **Style** and **Presets**. **Music → Track**
+and **Start Frame** remain at the top.
 
-1. **Select your objects → Use Selected.** Noctune adds emission where needed and
-   preserves the original materials for restoration.
-2. **Load your music → choose an Object Look.** Use the folder icon beside
-   **Music** to load a track.
-3. **Build Reaction → press Space.** Switch to **Material Preview** or **Rendered**
-   shading to see the materials react.
+1. Load a track using the folder icon beside **Track**.
+2. In **Setup**, select your geometry or lights and press **Use Selected**.
+   Missing emission is prepared while original materials are kept for restoration.
+3. Press **Build Reaction**. It calibrates and prepares playback, then opens **Style**.
+   Use **Material Preview** or **Rendered** shading and press **Space** to preview.
 
-After changing your music or look, press **Update Reaction**. Point, Spot, Area
-and Sun lights work in the same selection as geometry: their power and color
-react to the music. Use **Rendered** shading to preview native lights.
-Calibration reads the full source track, so playback Delay and Ripple placement
-keep the same normalized response.
+Select a reacting object to see its settings in **Style**. For an optional built-in
+look, open **Presets**, choose a thumbnail and press **Apply Look**. Browsing does
+not apply a preset. **Setup → Update Reaction** refreshes the reaction while keeping
+your current materials and appearance.
+
+Point, Spot, Area and Sun lights work beside geometry. Use **Rendered** shading to
+see native lights illuminate surfaces. Calibration reads the full source track;
+Start Frame, Delay and Ripple placement do not change that measurement.
 
 ## Included in Free
 
@@ -54,9 +57,12 @@ keep the same normalized response.
 - **Playback preparation:** Noctune calibrates and bakes the reaction when you
   build it.
 
-The main panel keeps the everyday workflow short. Open **Advanced Controls** for
-timing, colors, individual object responses, ripple settings and saved looks.
-See the [advanced guide](docs/advanced.md) for those controls.
+**Style** shows the selected object's appearance directly. Its **Audio Response**,
+**Ripple Motion** and **Glow** sections keep optional controls close to the result.
+**Presets** contains both the thumbnail browser and **My Object Looks**.
+**Setup → Tools** holds playback refresh and calibration; **Setup → Cleanup**
+removes the reaction. You can change views without changing the scene.
+See the [advanced guide](docs/advanced.md) for the full controls.
 
 ## Preview, render and cleanup
 
@@ -65,11 +71,9 @@ Soft glow appears in the composited final image and needs Blender's
 **Compositing** option enabled.
 
 Set your camera, resolution, frame range, format and destination in Blender,
-then use **Render → Render Animation**. Noctune preserves your output settings
-and timeline range.
+then use **Render → Render Animation**. Noctune preserves your output settings. The timeline end follows the music when its track, Start Frame or frame rate changes; later manual range edits are kept until that configuration changes again.
 
-To remove the reaction, open **Advanced Controls → Manual Build & Cleanup →
-Remove Object Reaction**. This restores automatically prepared material
+To remove the reaction, open **Setup → Cleanup → Remove Object Reaction**. This restores automatically prepared material
 assignments and original light data, including preexisting light animation.
 Materials or light data you reassigned manually stay in place.
 
@@ -94,3 +98,24 @@ project. [More about editions and compatibility](docs/editions.md).
 
 Noctune was previously named Afterglow. Existing projects and look files remain
 compatible.
+
+Built-in object looks preserve existing emissive material colors and use zero idle glow. Newly prepared materials use the preset palette. To add a constant glow, adjust **Style → Idle Glow**; calibration changes audio sensitivity, not this artistic control. Zero emission can still leave a surface visible under scene lighting.
+
+Build and Update leave compositor glow untouched. Add a halo explicitly under **Style → Glow → Add Glow**.
+
+## Superhive product-page files
+
+[Download the product-page HTML kit](dist/noctune-free-superhive-listing-kit.zip?raw=true).
+Extract it and open **index.html** for standalone previews, editor-ready description
+HTML and the image-upload helper. Upload the supplied renders to Superhive, paste
+their hosted URLs into the helper, then copy the generated description into the
+product editor. Set price and seller details in your dashboard and review its
+preview before publishing. The kit does not publish anything.
+
+Rebuild with `python tools/build_storefront.py --edition free`.
+
+[**Download the single-file Superhive description**](dist/noctune-free-superhive.html?raw=true).
+Open it, choose an edition, then use **Copy HTML** or **Copy formatted text**.
+All preview images are embedded; no ZIP or media folder is needed. If the
+marketplace strips embedded images, use the built-in Image links helper to save
+them for upload and substitute their hosted URLs.

@@ -389,11 +389,41 @@ def sound_strip(scene):
     return None
 
 
-def setup_playback(scene):
-    """Play the scene's Sound at Start Frame with audio sync, preserving render ranges.
+def sync_timeline(scene):
+    """Follow track duration when the music, offset or frame rate changes.
 
-    Removes the strip when there is no sound. Blender owns the output frame range.
+    Keep manual range edits until the track configuration changes again. The
+    last frame is inclusive; a partial audio frame must remain in the range.
     """
+    s = scene.afterglow
+    tag = "afterglow_timeline"
+    if s.sound is None:
+        if tag in scene:
+            del scene[tag]
+        return
+    if not sound_ok(s.sound):
+        return
+    signature = repr((audio_key(s.sound), s.start_frame,
+                      scene.render.fps, scene.render.fps_base))
+    if scene.get(tag) == signature:
+        return
+    mono, rate = load_mono(s.sound, "Fit Music Timeline")
+    if not len(mono) or not np.isfinite(rate) or rate <= 0:
+        return
+    count = max(1, int(np.ceil(len(mono) / rate * scene.render.fps / scene.render.fps_base)))
+    end = s.start_frame + count - 1
+    if scene.frame_start > end:
+        scene.frame_start = min(s.start_frame, end)
+    scene.frame_end = end
+    if scene.use_preview_range:
+        scene.frame_preview_start = min(scene.frame_preview_start, end)
+        scene.frame_preview_end = end
+    scene[tag] = signature
+
+
+def setup_playback(scene):
+    """Play music at Start Frame and fit the timeline when its configuration changes."""
+    sync_timeline(scene)
     s = scene.afterglow
     se = scene.sequence_editor_create()
     strip = sound_strip(scene)
@@ -448,8 +478,10 @@ def sync(scene):
             nodes.set_input(mod, "Beats per Sweep", s.beats_per_sweep)
             nodes.set_input(mod, "Use Baked", s.fast_playback)
             nodes.set_input(mod, "Through", s.through)
-    if push_sound and sound_strip(scene):
-        setup_playback(scene)
+    if push_sound:
+        sync_timeline(scene)
+        if sound_strip(scene):
+            setup_playback(scene)
 
 
 def remove(scene):

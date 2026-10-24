@@ -1,0 +1,16 @@
+NOCTUNE — SUPERHIVE LISTING KIT
+
+1. Extract this ZIP and open index.html.
+2. Open the *-preview.html files to review the standalone product pages. Their images are embedded and work offline.
+3. Upload the media folder images to Superhive and paste their hosted HTTPS URLs into index.html. Copy/download the resulting description HTML.
+4. Paste it into the product description editor’s HTML/source mode if offered. Marketplace sanitization can change styling; confirm its own preview before publishing. The descriptions also work as copy for a visual editor.
+5. Set pricing, listing links, license information and support details in the seller dashboard. No prices or reviews were invented.
+
+*-description.html = semantic product-description fragments, no scripts or stylesheet blocks. Relative image paths work locally; replace them with hosted URLs before use on the marketplace.
+*-listing.json = suggested title, short summary, tags and source add-on version.
+media/ = original Blender renders to upload; example scene assets/music are not included.
+
+The preview pages are original presentations and do not represent a live or published Superhive listing. The marketplace editor’s exact supported markup has not been verified.
+
+To rebuild from source: python tools/build_storefront.py --edition all
+For noninteractive hosted URLs: --image-urls path/to/image-urls.json (keys as in image-urls.example.json).

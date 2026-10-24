@@ -1,0 +1,90 @@
+{
+  "requirements": [
+    "Blender 5.2 or newer.",
+    "EEVEE and Cycles.",
+    "Your own audio and scene; no demo soundtrack or prebuilt stage included.",
+    "Install one edition at a time. Pro includes the Free features."
+  ],
+  "faq": [
+    [
+      "Will it replace my materials?",
+      "Build and Update keep the current appearance. Missing emission can be prepared on selected geometry; original material assignments are retained for restoration. Optional looks require an explicit Apply action."
+    ],
+    [
+      "Does it set up my render?",
+      "Use Blender for cameras, render settings and video output. Noctune fits the timeline end when the track, Start Frame or frame rate changes. Later manual range edits stay until that configuration changes again."
+    ],
+    [
+      "Do I need an account or license server?",
+      "The add-on runs locally without an account or license-key service."
+    ],
+    [
+      "What is included?",
+      "The Blender extension ZIP and illustrated offline HTML documentation. Example images show scenes used for demonstration; those scene assets and music are not included."
+    ]
+  ],
+  "edition": "free",
+  "name": "Noctune Free",
+  "version": "0.32.0",
+  "title": "Noctune Free — Music-Reactive Materials & Lights",
+  "summary": "Turn your Blender objects and lights into music visuals. Select, load a track and build; choose your look afterward.",
+  "headline": "Make your music visible.",
+  "intro": "Your objects. Your music. A reaction ready to style. Noctune Free handles material preparation, audio calibration and playback so you can spend less time setting up.",
+  "hero": "free-hero",
+  "badge": "FREE EDITION · BLENDER 5.2+",
+  "benefits": [
+    "Geometry and native lights",
+    "Automatic audio calibration",
+    "Build first. Style afterward."
+  ],
+  "steps": [
+    "Load your track in Music.",
+    "Select geometry or lights and press Use Selected.",
+    "Build Reaction, then explore Style or Presets."
+  ],
+  "blocks": [
+    {
+      "id": "reaction",
+      "tag": "START WITH WHAT YOU HAVE",
+      "title": "Make your own scene react.",
+      "text": "Animate emission on meshes, curves and text, or drive the power and color of Point, Spot, Area and Sun lights. Select ordinary geometry and Noctune can prepare missing emission for you.",
+      "items": [
+        "Keep existing emissive material colors and textures.",
+        "Calibrate audio response and prepare smooth playback in one build.",
+        "Update the reaction without reapplying a preset."
+      ],
+      "media": [
+        "light-reaction"
+      ]
+    },
+    {
+      "id": "looks",
+      "tag": "STYLE IS YOUR CHOICE",
+      "title": "Five looks. Your materials stay yours.",
+      "text": "Browse Neon Club, Cinematic Pulse, Aurora Flow, Signal Grid and Electric Violet. Apply a look explicitly after building, or keep your material palette and tune the reaction yourself.",
+      "items": [
+        "A visual preset browser with an explicit Apply button.",
+        "Save object looks inside the project.",
+        "Import and export object looks for reuse."
+      ],
+      "media": [
+        "object-looks"
+      ]
+    },
+    {
+      "id": "motion",
+      "tag": "MORE THAN A BRIGHTNESS PULSE",
+      "title": "Send a wave through the scene.",
+      "text": "Use Ripple Motion to spread a reaction across objects. Through Objects carries the wave across a surface. Level Meter fills geometry like an equalizer bar.",
+      "items": [
+        "Directional and radial ripple placement.",
+        "Level Meter along the object’s local axis.",
+        "Optional compositor glow, added as a separate action."
+      ],
+      "media": [
+        "ripple-demo",
+        "meter-demo"
+      ]
+    }
+  ]
+}

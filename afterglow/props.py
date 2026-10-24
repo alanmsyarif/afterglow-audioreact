@@ -4,7 +4,7 @@ import bpy
 from bpy.props import (BoolProperty, EnumProperty, FloatProperty, FloatVectorProperty,
                        IntProperty, PointerProperty, StringProperty, CollectionProperty)
 
-from . import bake, core, edition, effect_schema, materials, nodes, presets, tempo
+from . import bake, browser, core, edition, effect_schema, materials, nodes, presets, tempo
 
 if edition.IS_PRO:
     from . import effects
@@ -362,16 +362,16 @@ class AfterglowScene(bpy.types.PropertyGroup):
     if edition.IS_PRO:
         environment_advanced: BoolProperty(name="Advanced Environment Controls", default=False, options=set(),
                                            description="Show individual environment layers, routing, venue and live mix controls")
-        environment_look: EnumProperty(name="Environment Look", items=presets.ITEMS, options=set(),
+        environment_look: EnumProperty(name="Environment Look", items=browser.environment_items, options=set(),
                                        get=_environment_look_get, set=_environment_look_set,
                                        description="Choose the generated lighting style independently of the object look")
     easy_glow: BoolProperty(name="Soft Glow", default=True, options=set(),
-                           description="Build Reaction adds compositor glow; turn off to remove only Noctune's glow")
+                           description="Legacy compatibility flag; compositor glow is now a separate explicit action")
     saved_looks: CollectionProperty(type=AfterglowSavedLook)
     saved_look_index: IntProperty(name="Saved Look", default=0, min=0)
     new_look_name: StringProperty(name="Name", default="My Look", maxlen=64)
-    creative_look: EnumProperty(name="Object Look", items=presets.OBJECT_ITEMS, options=set(),
-                                description="Choose object colors and response, then Build Reaction")
+    creative_look: EnumProperty(name="Object Look", items=browser.object_items, options=set(),
+                                description="Choose an optional object look; use Apply Look after building to apply it")
     collection: PointerProperty(type=bpy.types.Collection, name="Collection",
                                 description="Meshes, curves, text and lights in this collection react to music", update=_sync)
     sound: PointerProperty(type=bpy.types.Sound, name="Sound", update=_retempo)
@@ -430,25 +430,29 @@ class AfterglowObject(bpy.types.PropertyGroup):
 
 
 PRO_CLASSES = (*LAYER_TYPES.values(), AfterglowEffects) if edition.IS_PRO else ()
-CLASSES = (*PRO_CLASSES, AfterglowSavedLook, AfterglowScene, AfterglowObject)
+CLASSES = (*PRO_CLASSES, browser.AfterglowUIState, AfterglowSavedLook, AfterglowScene, AfterglowObject)
 
 
 def register():
+    browser.register()
     from . import light_reaction
     light_reaction.register()
     for c in CLASSES:
         bpy.utils.register_class(c)
     bpy.types.Scene.afterglow = PointerProperty(type=AfterglowScene)
     bpy.types.Object.afterglow = PointerProperty(type=AfterglowObject)
+    bpy.types.WindowManager.afterglow_ui = PointerProperty(type=browser.AfterglowUIState, options={"SKIP_SAVE"})
 
 
 def unregister():
     if bpy.app.timers.is_registered(_flush):
         bpy.app.timers.unregister(_flush)
     _pending.clear()
+    del bpy.types.WindowManager.afterglow_ui
     del bpy.types.Object.afterglow
     del bpy.types.Scene.afterglow
     for c in reversed(CLASSES):
         bpy.utils.unregister_class(c)
     from . import light_reaction
     light_reaction.unregister()
+    browser.unregister()

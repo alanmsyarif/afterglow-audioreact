@@ -301,7 +301,8 @@ def test_scene_music_timing_and_ripple_edits_refresh_lights_without_fast_playbac
 def test_advanced_selected_light_ui_exposes_power_and_hides_surface_meter_controls():
     scene, _, (lamp,) = stage()
     core.apply(scene)
-    scene.afterglow.show_advanced = True
+    bpy.context.window_manager.afterglow_ui.workflow = 'OBJECT'
+    bpy.context.window_manager.afterglow_ui.object_page = 'STYLE'
     bpy.context.view_layer.objects.active = lamp
     lamp.select_set(True)
     log = []

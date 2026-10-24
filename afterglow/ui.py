@@ -2,7 +2,7 @@ import bpy
 from bpy.props import StringProperty
 from bpy_extras.io_utils import ImportHelper
 
-from . import bake, core, creator, easy, edition, nodes, presets, tempo, workflow
+from . import bake, browser, core, creator, easy, edition, nodes, presets, tempo, workflow
 
 if edition.IS_PRO:
     from . import effects
@@ -18,10 +18,15 @@ def draw_note(layout, text, context=None, icon="NONE"):
         layout.label(text=line, icon=icon if i == 0 else "NONE")
 
 
+def navigation_state(context):
+    """UI-only choices never change a scene, effect or look during drawing."""
+    return getattr(context, "window_manager", bpy.context.window_manager).afterglow_ui
+
+
 class AFTERGLOW_OT_create_visual(bpy.types.Operator):
     bl_idname = "afterglow.create_visual"
     bl_label = "Build Reaction"
-    bl_description = "Apply a calibrated music reaction to geometry and lights, with optional glow"
+    bl_description = "Build and calibrate geometry and light reactions while keeping their current appearance"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -30,7 +35,9 @@ class AFTERGLOW_OT_create_visual(bpy.types.Operator):
         except (ValueError, RuntimeError) as error:
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
-        self.report({"INFO"}, "Reaction ready. Use Rendered view, then press Space")
+        navigation_state(context).object_page = "STYLE"
+        navigation_state(context).workflow = "OBJECT"
+        self.report({"INFO"}, "Reaction ready. Select an object in Style, or press Space to preview")
         return {"FINISHED"}
 
 
@@ -110,7 +117,7 @@ class AFTERGLOW_OT_use_selected(bpy.types.Operator):
         except ValueError as e:
             self.report({"ERROR"}, str(e))
             return {"CANCELLED"}
-        self.report({"INFO"}, f"Using {collection.name}. Load music, choose a look, then Build Reaction")
+        self.report({"INFO"}, f"Using {collection.name}. Load music, then Build Reaction")
         return {"FINISHED"}
 
 
@@ -119,6 +126,14 @@ class AFTERGLOW_OT_apply_look(bpy.types.Operator):
     bl_label = "Apply Look"
     bl_description = "Apply the object colors and response without changing environment effects"
     bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        scene = context.scene
+        collection = scene.afterglow.collection
+        return (scene.is_editable and not getattr(context.screen, "is_animation_playing", False)
+                and collection is not None
+                and any(core.reaction(obj) for obj in collection.all_objects if core.is_target(obj)))
 
     def execute(self, context):
         scene = context.scene
@@ -132,6 +147,8 @@ class AFTERGLOW_OT_apply_look(bpy.types.Operator):
                 bake.bake_all(scene)
             except ValueError as e:
                 self.report({"WARNING"}, f"Look applied; refresh playback: {e}")
+        navigation_state(context).object_page = "STYLE"
+        navigation_state(context).workflow = "OBJECT"
         self.report({"INFO"}, f"Object look applied to {n} objects")
         return {"FINISHED"}
 
@@ -627,6 +644,15 @@ def draw_environment_controls(layout, context):
         body.prop(fx, "timing_offset")
 
 
+OBJECT_HINTS = {
+    "NEON_CLUB": "Cyan & pink · Punchy",
+    "CINEMATIC_PULSE": "Blue & gold · Slow",
+    "AURORA_FLOW": "Mint & violet · Soft",
+    "SIGNAL_GRID": "Cyan & amber · Crisp",
+    "LASER_SHOW": "Violet & green · Quick",
+}
+
+
 CALIBRATE = "Press Calibrate so quiet parts go dark"
 
 
@@ -646,6 +672,91 @@ def next_step(scene):
         return CALIBRATE
 
 
+def draw_music(layout, context):
+    """The shared track has one visible home, with timing available on demand."""
+    s = context.scene.afterglow
+    playing = getattr(context.screen, "is_animation_playing", False)
+    music = layout.box()
+    music.label(text="Music", icon="SOUND")
+    row = music.row(align=True)
+    row.enabled = not playing
+    row.prop(s, "sound", text="Track")
+    row.operator("afterglow.load_sound", text="", icon="FILEBROWSER")
+    row = music.row(align=True)
+    row.enabled = not playing
+    row.prop(s, "start_frame")
+    if playing:
+        draw_note(music, "Stop playback to change the track or rebuild.", context, "INFO")
+    elif s.sound is None:
+        draw_note(music, "Choose a track to begin.", context)
+    elif not core.sound_ok(s.sound):
+        draw_note(music, "Track file missing. Reload it or pack the sound into this project.", context, "ERROR")
+
+
+def draw_object_workflow(layout, context):
+    """A short setup, selected-object inspector and a separate visual preset shelf."""
+    state = navigation_state(context)
+    layout.row(align=True).prop(state, "object_page", expand=True)
+    scene = context.scene
+    s = scene.afterglow
+    playing = getattr(context.screen, "is_animation_playing", False)
+    built = bool(s.collection and any(core.reaction(obj) for obj in s.collection.all_objects if core.is_target(obj)))
+    if state.object_page == "STYLE":
+        if built:
+            draw_advanced(layout, context)
+        else:
+            draw_note(layout, "Build a reaction in Setup, then select an object to style it.", context, "INFO")
+        return
+    if state.object_page == "PRESETS":
+        layout.label(text="Object Looks", icon="PRESET")
+        selector = layout.column()
+        selector.enabled = not playing
+        browser.draw(selector, s, "creative_look")
+        draw_note(layout, OBJECT_HINTS.get(s.creative_look, "Choose an optional look."), context)
+        action = layout.column()
+        action.enabled = not playing and built
+        action.scale_y = 1.4
+        action.operator("afterglow.apply_look", text="Apply Look", icon="BRUSH_DATA")
+        draw_note(layout, "Apply changes the style once. Build and Update keep it." if built
+                  else "Build a reaction in Setup before applying a look.", context)
+        creator.draw_library(layout, context, scope="OBJECT")
+        return
+    source = layout.box()
+    source.label(text="Objects", icon="OBJECT_DATA")
+    field = source.row()
+    field.enabled = not playing
+    field.prop(s, "collection", text="Collection")
+    selected = source.row()
+    selected.enabled = not playing and bool(getattr(context, "selected_objects", ()))
+    selected.operator("afterglow.use_selected", text="Use Selected", icon="RESTRICT_SELECT_OFF")
+    music_ready = bool(s.sound and core.sound_ok(s.sound))
+    action = layout.column()
+    action.enabled = not playing and s.collection is not None and music_ready
+    action.scale_y = 1.5
+    action.operator("afterglow.create_visual", text="Update Reaction" if built else "Build Reaction", icon="PLAY")
+    if playing:
+        draw_note(layout, "Stop playback to update the setup.", context, "INFO")
+    elif s.collection is None:
+        draw_note(layout, "Select objects, then Use Selected.", context, "FORWARD")
+    elif not music_ready:
+        draw_note(layout, "Load a readable track in Music above.", context, "FORWARD")
+    else:
+        draw_note(layout, "Reaction ready. Style and Presets keep setup separate." if built
+                  else "Ready. Build keeps your existing materials and appearance.", context, "CHECKMARK")
+    draw_object_tools(layout, context)
+    draw_cleanup(layout, context)
+
+
+def draw_cleanup(layout, context):
+    """Removal stays reachable without opening the tuning and playback tools."""
+    head, body = layout.panel("AFTERGLOW_object_cleanup", default_closed=True)
+    head.label(text="Cleanup", icon="TRASH")
+    if body:
+        body.enabled = not getattr(context.screen, "is_animation_playing", False)
+        body.operator("afterglow.remove", text="Remove Object Reaction", icon="TRASH")
+        draw_note(body, "Restores prepared materials and original light data. Keeps your objects.", context)
+
+
 class AFTERGLOW_PT_panel(bpy.types.Panel):
     bl_label = edition.NAME
     bl_space_type = "VIEW_3D"
@@ -653,61 +764,29 @@ class AFTERGLOW_PT_panel(bpy.types.Panel):
     bl_category = "Noctune"
 
     def draw(self, context):
-        scene = context.scene
-        s = scene.afterglow
-        layout = self.layout
-        playing = getattr(context.screen, "is_animation_playing", False)
-        source = layout.box()
-        source.label(text="Scene & Music", icon="SOUND")
-        row = source.row(align=True)
-        row.enabled = not playing
-        row.prop(s, "collection", text="Objects")
-        selected = source.row()
-        selected.enabled = not playing and bool(getattr(context, "selected_objects", ()))
-        selected.operator("afterglow.use_selected", text="Use Selected", icon="RESTRICT_SELECT_OFF")
-        row = source.row(align=True)
-        row.enabled = not playing
-        row.prop(s, "sound", text="Music")
-        row.operator("afterglow.load_sound", text="", icon="FILEBROWSER")
-        if s.collection is None:
-            draw_note(source, "Choose a collection, or select geometry and lights and press Use Selected.", context)
-        elif s.sound is None:
-            draw_note(source, "Load music to drive your objects.", context)
-
-        layout.prop(s, "creative_look", text="Object Look")
-        action = layout.column()
-        action.enabled = not playing and s.collection is not None and s.sound is not None
-        action.scale_y = 1.6
-        built = bool(s.collection and any(core.reaction(obj) for obj in core.targets(s.collection)))
-        action.operator("afterglow.create_visual", text="Update Reaction" if built else "Build Reaction", icon="PLAY")
-        if built:
-            draw_note(layout, "Press Space to preview. Use Update Reaction after changing the music or object look.", context, "INFO")
-        else:
-            note = ("Animates your objects and lights. Generate lights and beams separately in the Noctune FX tab."
-                    if edition.IS_PRO else "Animates your objects and lights to the music. Use Selected prepares materials where needed.")
-            draw_note(layout, note, context)
-        layout.separator()
-        layout.prop(s, "show_advanced", text="Advanced Controls")
-        if s.show_advanced:
-            draw_advanced(layout, context)
+        draw_music(self.layout, context)
+        draw_object_workflow(self.layout, context)
 
 
 def draw_advanced(layout, context):
-    """Manual tools have one home; the default flow uses Build Reaction instead."""
+    """Inspect the selected reacting object; keep optional motion and glow folded."""
     s = context.scene.afterglow
     playing = getattr(context.screen, "is_animation_playing", False)
-    head, body = layout.panel("AFTERGLOW_sources", default_closed=True)
-    head.label(text="Timing & Glow", icon="TIME")
+    ob = getattr(context, "object", None)
+    mod = core.reaction(ob) if ob else None
+    if mod:
+        head, body = layout.panel("AFTERGLOW_selected", default_closed=False)
+        head.label(text="Selected Object", icon="OBJECT_DATA")
+        if body:
+            draw_object(body, s, ob, mod, context)
+    else:
+        draw_note(layout, "Select a reacting object or light to edit its appearance.", context, "RESTRICT_SELECT_OFF")
+    head, body = layout.panel("AFTERGLOW_ripple", default_closed=True)
+    toggle = head.row()
+    toggle.enabled = not playing
+    toggle.prop(s, "ripple", text="Ripple Motion")
     if body:
         body.enabled = not playing
-        body.prop(s, "start_frame")
-        body.prop(s, "easy_glow", text="Add Soft Glow")
-    creator.draw_library(layout, context, scope="OBJECT")
-    creator.draw_finish(layout, context)
-
-    head, body = layout.panel("AFTERGLOW_ripple", default_closed=True)
-    head.prop(s, "ripple", text="Ripple Motion")
-    if body:
         body.active = s.ripple
         body.prop(s, "beats_per_sweep")
         row = body.row(align=True)
@@ -718,74 +797,73 @@ def draw_advanced(layout, context):
         body.prop(s, "through")
         if s.through and not s.fast_playback:
             draw_note(body, "Through Objects needs Fast Playback.", context, "INFO")
+    creator.draw_finish(layout, context)
 
+
+def draw_object_tools(layout, context):
+    s = context.scene.afterglow
+    playing = getattr(context.screen, "is_animation_playing", False)
     head, body = layout.panel("AFTERGLOW_tools", default_closed=True)
-    head.label(text="Manual Build & Cleanup", icon="PREFERENCES")
-    if body:
-        body.enabled = not playing
-        body.operator("afterglow.create_reaction", text="Build Object Reaction Only")
-        body.operator("afterglow.apply_look", text="Apply Look Settings Only")
-        body.operator("afterglow.apply", text="Refresh Reaction Setup Only")
-        row = body.row(align=True)
+    head.label(text="Tools", icon="PREFERENCES")
+    if not body:
+        return
+    body.enabled = not playing
+    body.operator("afterglow.bake", text="Refresh Playback", icon="FILE_REFRESH")
+    body.prop(s, "fast_playback")
+    head, expert = body.panel("AFTERGLOW_expert_tools", default_closed=True)
+    head.label(text="Audio & Setup", icon="SOUND")
+    if expert:
+        expert.operator("afterglow.apply", text="Refresh Reaction Setup")
+        row = expert.row(align=True)
         row.operator("afterglow.respread", text="Spread Bands")
         row.operator("afterglow.calibrate", text="Calibrate")
-        body.prop(s, "fast_playback")
-        body.operator("afterglow.bake", text="Refresh Playback", icon="FILE_REFRESH")
-        body.operator("afterglow.remove", text="Remove Object Reaction", icon="TRASH")
-    stale = ([obj for obj in bake.outdated(context.scene) if s.fast_playback or obj.type == "LIGHT"]
-             if not playing else [])
-    if stale:
-        draw_note(layout, f"{len(stale)} objects need a playback refresh.", context, "INFO")
-    ob = context.object
-    mod = core.reaction(ob) if ob else None
-    if mod:
-        head, body = layout.panel("AFTERGLOW_selected", default_closed=True)
-        head.label(text="Selected Object", icon="OBJECT_DATA")
-        if body:
-            draw_object(body, s, ob, mod)
+    if not playing:
+        stale = [obj for obj in bake.outdated(context.scene) if s.fast_playback or obj.type == "LIGHT"]
+        if stale:
+            draw_note(body, f"{len(stale)} objects need Refresh Playback.", context, "INFO")
 
 
-def draw_object(box, s, ob, mod):
-    """The selected object's reaction: what it hears (band), how it responds, how it looks."""
-    box.label(text=ob.name, icon="LIGHT" if ob.type == "LIGHT" else "OBJECT_DATA")
+def draw_object(layout, s, ob, mod, context=None):
+    """Appearance is immediately available; audio response is an optional panel."""
+    draw_note(layout, ob.name, context, "LIGHT" if ob.type == "LIGHT" else "OBJECT_DATA")
+    layout.label(text="Appearance")
     if ob.type == "LIGHT":
-        nodes.draw_input(box, mod, "Base Power")
-    box.label(text="Band (Hz)")
-    row = box.row(align=True)
-    nodes.draw_input(row, mod, "Low")
-    nodes.draw_input(row, mod, "High")
-    row.prop(ob.afterglow, "locked", text="", icon="LOCKED" if ob.afterglow.locked else "UNLOCKED")
-    box.label(text="Response (Ripple)" if s.ripple else "Response")
-    col = box.column(align=True)
-    row = col.row(align=True)  # while rippling, the gain pair actually in use
-    for name in ("Gain", "Threshold"):
-        nodes.draw_input(row, mod, nodes.RIPPLE_PAIR[name] if s.ripple else name, text=name)
-    row = col.row(align=True)
-    nodes.draw_input(row, mod, "Decay")
-    nodes.draw_input(row, mod, "Delay")
-    if ob.type == "LIGHT":
-        draw_note(box, "After editing Band, Decay or Delay, press Refresh Playback above.")
-    box.label(text="Look")
-    row = box.row(align=True)
+        nodes.draw_input(layout, mod, "Base Power")
+    row = layout.row(align=True)
     nodes.draw_input(row, mod, "Intensity")
-    nodes.draw_input(row, mod, "Glow")
-    nodes.draw_input(box, mod, "Use Colors")
-    row = box.row(align=True)
+    nodes.draw_input(row, mod, "Glow", text="Idle Glow")
+    nodes.draw_input(layout, mod, "Use Colors")
+    row = layout.row(align=True)
     row.active = bool(nodes.get_input(mod, "Use Colors"))
     nodes.draw_input(row, mod, "Color A")
     nodes.draw_input(row, mod, "Color B")
-    if ob.type == "LIGHT":
+    if ob.type != "LIGHT":
+        row = layout.row(align=True)
+        row.prop(ob.afterglow, "meter")
+        sub = row.row(align=True)
+        sub.active = ob.afterglow.meter and not s.through
+        sub.prop(ob.afterglow, "meter_axis", expand=True)
+        sub.prop(ob.afterglow, "meter_invert", text="", icon="ARROW_LEFTRIGHT")
+        if ob.afterglow.meter and s.through:
+            draw_note(layout, "Level Meter is off while Through Objects is on.", context, "INFO")
+
+    head, body = layout.panel("AFTERGLOW_selected_response", default_closed=True)
+    head.label(text="Audio Response", icon="SOUND")
+    if not body:
         return
-    row = box.row(align=True)
-    row.prop(ob.afterglow, "meter")
-    sub = row.row(align=True)
-    sub.active = ob.afterglow.meter and not s.through
-    sub.prop(ob.afterglow, "meter_axis", expand=True)
-    sub.prop(ob.afterglow, "meter_invert", text="", icon="ARROW_LEFTRIGHT")
-    if ob.afterglow.meter and s.through:
-        hint = box.row()
-        hint.alert = True
-        hint.label(text="Level Meter is off while Through Objects is on", icon="INFO")
+    body.label(text="Band (Hz)")
+    row = body.row(align=True)
+    nodes.draw_input(row, mod, "Low")
+    nodes.draw_input(row, mod, "High")
+    row.prop(ob.afterglow, "locked", text="", icon="LOCKED" if ob.afterglow.locked else "UNLOCKED")
+    body.label(text="Response (Ripple)" if s.ripple else "Response")
+    row = body.row(align=True)
+    for name in ("Gain", "Threshold"):
+        nodes.draw_input(row, mod, nodes.RIPPLE_PAIR[name] if s.ripple else name, text=name)
+    row = body.row(align=True)
+    nodes.draw_input(row, mod, "Decay")
+    nodes.draw_input(row, mod, "Delay")
+    draw_note(body, "After editing Band, Decay or Delay, use Setup → Tools → Refresh Playback.", context)
 
 
 PRO_CLASSES = (AFTERGLOW_OT_build_environment, AFTERGLOW_OT_use_environment_selected,

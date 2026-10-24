@@ -4,7 +4,7 @@ Applying a look edits controls only. Build Effects and, when Decay changes,
 Re-bake are still explicit operations. No geometry or materials are created here.
 """
 
-from . import core, edition, effect_schema, nodes
+from . import core, edition, effect_schema, nodes, prepare
 
 
 DESCRIPTIONS = {
@@ -41,7 +41,7 @@ _LOOKS = {
                    "gun": (0.5, "HIGH", 0.6, 0.9)},
         "fx": {"beams": True, "strike_style": "TWIN", "gun_style": "TRACER",
                "strike_companions": 1, "gun_length": 1.25},
-        "object": (0.025, 1.2, 0.12),
+        "object": (0.0, 1.2, 0.12),
     },
     "CINEMATIC_PULSE": {
         "colors": ((0.08, 0.22, 0.6), (1.0, 0.48, 0.09)),
@@ -49,7 +49,7 @@ _LOOKS = {
                    "blooms": (0.65, "MID", 1.8, 0.8)},
         "fx": {"beams": True, "strike_style": "FILAMENT", "gun_style": "DART",
                "strike_companions": 0, "gun_length": 1.0},
-        "object": (0.01, 0.9, 0.35),
+        "object": (0.0, 0.9, 0.35),
     },
     "AURORA_FLOW": {
         "colors": ((0.035, 0.8, 0.45), (0.45, 0.1, 1.0)),
@@ -58,7 +58,7 @@ _LOOKS = {
                    "downward": (0.3, "HIGH", 1.5, 0.5)},
         "fx": {"beams": False, "strike_style": "RIBBON", "gun_style": "STREAK",
                "strike_companions": 0, "gun_length": 1.5},
-        "object": (0.08, 0.85, 0.5),
+        "object": (0.0, 0.85, 0.5),
     },
     "SIGNAL_GRID": {
         "colors": ((0.02, 0.7, 1.0), (1.0, 0.3, 0.025)),
@@ -66,7 +66,7 @@ _LOOKS = {
                    "strikes": (0.45, "LOW", 0.6, 0.8)},
         "fx": {"beams": True, "strike_style": "FILAMENT", "gun_style": "STREAK",
                "strike_companions": 0, "gun_length": 0.8},
-        "object": (0.015, 1.1, 0.09),
+        "object": (0.0, 1.1, 0.09),
     },
     "LASER_SHOW": {
         "colors": ((0.42, 0.025, 1.0), (0.08, 1.0, 0.2)),
@@ -75,7 +75,7 @@ _LOOKS = {
                    "blooms": (0.4, "MID", 1.8, 0.45)},
         "fx": {"beams": False, "strike_style": "FILAMENT", "gun_style": "TRACER",
                "strike_companions": 0, "gun_length": 1.0},
-        "object": (0.02, 0.85, 0.18),
+        "object": (0.0, 0.85, 0.18),
     },
 }
 
@@ -198,5 +198,7 @@ def apply(scene, identifier, *, scope="ALL"):
         setattr(fx, name, value)
     for ob, mod in objects:
         for name, value in object_values.items():
+            if name == "Use Colors" and ob.type != "LIGHT" and prepare.has_authored_emission(ob):
+                value = False
             nodes.set_input(mod, name, value)
     return len(objects) if scope == "OBJECT" else sum(values["enabled"] for values in layer_values.values())
