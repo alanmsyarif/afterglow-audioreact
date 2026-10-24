@@ -102,3 +102,14 @@ compatible.
 Built-in object looks preserve existing emissive material colors and use zero idle glow. Newly prepared materials use the preset palette. To add a constant glow, adjust **Style → Idle Glow**; calibration changes audio sensitivity, not this artistic control. Zero emission can still leave a surface visible under scene lighting.
 
 Build and Update leave compositor glow untouched. Add a halo explicitly under **Style → Glow → Add Glow**.
+
+## Superhive product-page files
+
+[Download the product-page HTML kit](dist/noctune-free-superhive-listing-kit.zip?raw=true).
+Extract it and open **index.html** for standalone previews, editor-ready description
+HTML and the image-upload helper. Upload the supplied renders to Superhive, paste
+their hosted URLs into the helper, then copy the generated description into the
+product editor. Set price and seller details in your dashboard and review its
+preview before publishing. The kit does not publish anything.
+
+Rebuild with `python tools/build_storefront.py --edition free`.
