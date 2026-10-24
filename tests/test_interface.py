@@ -1,159 +1,209 @@
-"""The everyday interface stays clear, safe during playback and natively drawable."""
+"""The organized browser stays compact, natively drawable and safe during playback."""
 import os
-from pathlib import Path
 import sys
-import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy
 import helpers
-from afterglow import bake, core, ui, workflow
+from afterglow import bake, core, edition, nodes, ui, workflow
+if edition.IS_PRO:
+    from afterglow import effects
 
 
 class Layout:
-    """Record real RNA controls and reject native full-width panel violations."""
-    def __init__(self, log, *, enabled=True, full_width=True, opened=(), path="root"):
-        self.log, self.enabled = log, enabled
-        self.full_width, self.opened, self.path = full_width, opened, path
-
-    def child(self, kind, full_width=False):
-        return Layout(self.log, enabled=self.enabled, full_width=full_width,
-                      opened=self.opened, path=self.path + "/" + kind)
-
-    def row(self, *args, **kwargs):
-        return self.child("row")
-
-    def column(self, *args, **kwargs):
-        return self.child("column")
-
-    def box(self, *args, **kwargs):
-        return self.child("box")
-
-    def panel(self, name, default_closed=False):
-        assert self.full_width, f"Native UILayout.panel requires full width: {self.path}"
-        self.log.append(dict(kind="panel", name=name, closed=default_closed, path=self.path))
-        opened = self.opened is None or name in self.opened or not default_closed
-        return self.child(name + "/head", True), self.child(name + "/body", True) if opened else None
-
-    def prop(self, data, name, **kwargs):
-        assert name in data.bl_rna.properties, name
-        self.log.append(dict(kind="prop", name=name, text=kwargs.get("text", name),
-                             enabled=self.enabled, path=self.path))
-
-    def operator(self, name, **kwargs):
-        self.log.append(dict(kind="op", name=name, text=kwargs.get("text", ""),
-                             enabled=self.enabled, path=self.path))
+    def __init__(self, log, parent=None, full_width=True, opened=(), closed=(), scope='root'):
+        self.log, self.parent, self.full_width = log, parent, full_width
+        self.opened, self.closed, self.scope = opened, closed, scope
+        self.enabled = self.active = True
+        self.alert = False
+    def available(self):
+        return self.enabled and self.active and (self.parent is None or self.parent.available())
+    def child(self, *args, **kwargs):
+        return Layout(self.log,self,False,self.opened,self.closed,self.scope)
+    row = column = box = grid_flow = split = child
+    def panel(self, ident, default_closed=False):
+        assert self.full_width, f'Native panels require full region width: {ident}'
+        self.log.append(('panel',ident,default_closed,self.scope))
+        header=self.child();header.scope=ident+':header'
+        visible=ident not in self.closed and (not default_closed or ident in self.opened)
+        body=Layout(self.log,self,True,self.opened,self.closed,ident) if visible else None
+        return header,body
+    def prop(self,owner,name,**kwargs):
+        assert name in owner.bl_rna.properties,name
+        self.log.append(('prop',name,kwargs.get('text'),self.available(),self.scope))
+    def operator(self,ident,**kwargs):
+        self.log.append(('operator',ident,kwargs.get('text'),self.available(),self.scope))
         return SimpleNamespace()
-
-    def label(self, **kwargs):
-        self.log.append(dict(kind="label", name=kwargs.get("text", ""), path=self.path))
-
-    def template_list(self, *args, **kwargs):
-        pass
-
-    def separator(self):
-        pass
-
-
-def context(scene, obj=None, *, playing=False, width=300):
-    return SimpleNamespace(scene=scene, object=obj,
-                           selected_objects=[obj] if obj else [],
-                           screen=SimpleNamespace(is_animation_playing=playing),
-                           region=SimpleNamespace(width=width),
-                           preferences=SimpleNamespace(system=SimpleNamespace(ui_scale=1.0)))
+    def label(self,**kwargs):
+        self.log.append(('label',kwargs.get('text',''),self.alert,self.scope))
+    def template_list(self,*args,**kwargs):self.log.append(('library',self.scope))
+    def template_icon_view(self,owner,name,**kwargs):
+        assert name in owner.bl_rna.properties,name
+        self.log.append(('preview',name,None,self.available(),self.scope))
+    def template_icon(self,*args,**kwargs):self.log.append(('image',self.scope))
+    def separator(self,*args,**kwargs):pass
 
 
-def draw(ctx, opened=()):
-    log = []
-    ui.AFTERGLOW_PT_panel.draw(SimpleNamespace(layout=Layout(log, opened=opened)), ctx)
+def nav(workflow='OBJECT',page='SETUP',effect='strikes'):
+    state=bpy.context.window_manager.afterglow_ui
+    state.workflow=workflow
+    if workflow=='OBJECT':state.object_page=page
+    else:state.environment_page=page
+    if edition.IS_PRO:state.active_effect=effect
+    return state
+
+
+def draw(context=None,opened=(),closed=()):
+    log=[]
+    layout=Layout(log,opened=opened,closed=closed)
+    ui.AFTERGLOW_PT_panel.draw(SimpleNamespace(layout=layout),context or bpy.context)
     return log
 
 
-def controls(log, kind, name):
-    return [entry for entry in log if entry["kind"] == kind and entry["name"] == name]
+def operators(log,ident):return [item for item in log if item[:2]==('operator',ident)]
+def props(log,name):return [item for item in log if item[:2]==('prop',name)]
+def pickers(log,name):return [item for item in log if item[:2] in [('prop',name),('preview',name)]]
 
 
-def built_scene():
-    scene, _, objects = helpers.visual_scene()
-    workflow.create_reaction(scene, "NEON_CLUB")
-    return scene, objects[0]
+def build_objects():
+    scene,_,objects=helpers.visual_scene()
+    bpy.ops.afterglow.create_visual()
+    bpy.context.view_layer.objects.active=objects[0]
+    return scene,objects
 
 
-def test_basic_workflow_is_music_objects_look_and_one_build_action():
-    log = draw(context(bpy.context.scene))
-    labels = [entry["name"] for entry in log if entry["kind"] == "label"]
-    assert labels.index("Music") < labels.index("Objects") < labels.index("Reaction")
-    assert controls(log, "prop", "sound")[0]["text"] == "Track"
-    assert controls(log, "op", "afterglow.use_selected")[0]["text"] == "Use Selected"
-    assert not controls(log, "prop", "start_frame")
-    assert not controls(log, "op", "afterglow.create_reaction")
-    assert not controls(log, "op", "afterglow.remove")
-    main = controls(log, "op", "afterglow.create_visual")
-    assert len(main) == 1 and main[0]["text"] == "Build Reaction" and not main[0]["enabled"]
-    assert any("Keeps your materials" in label for label in labels)
+def test_setup_shows_shared_music_and_one_independent_object_build():
+    nav()
+    log=draw()
+    assert len(props(log,'sound'))==1
+    assert operators(log,'afterglow.use_selected')[0][2]=='Use Selected'
+    assert len(operators(log,'afterglow.create_visual'))==1
+    assert not pickers(log,'creative_look')
+    assert not operators(log,'afterglow.apply_look')
+    assert not operators(log,'afterglow.build_environment')
+    assert not props(log,'bounds_collection')
 
 
-def test_missing_track_disables_build_but_keeps_audio_reload_available():
-    scene, _, _ = helpers.visual_scene()
-    with tempfile.TemporaryDirectory() as folder:
-        scene.afterglow.sound.filepath = str(Path(folder) / "missing.wav")
-        log = draw(context(scene))
-    assert not controls(log, "op", "afterglow.create_visual")[0]["enabled"]
-    assert controls(log, "op", "afterglow.load_sound")[0]["enabled"]
-    assert any("missing" in entry["name"].lower() for entry in log if entry["kind"] == "label")
+def test_missing_music_disables_build_but_keeps_reload_available():
+    helpers.visual_scene();nav()
+    with patch.object(core,'sound_ok',return_value=False):log=draw()
+    assert not operators(log,'afterglow.create_visual')[0][3]
+    assert operators(log,'afterglow.load_sound')[0][3]
+    assert 'missing' in ' '.join(x[1].lower() for x in log if x[0]=='label')
 
 
-def test_appearance_precedes_optional_response_and_tools_keep_full_width():
-    scene, obj = built_scene()
-    scene.afterglow.show_advanced = True
-    log = draw(context(scene, obj), opened=None)
-    panels = [entry["name"] for entry in log if entry["kind"] == "panel"]
-    assert panels.index("AFTERGLOW_selected") < panels.index("AFTERGLOW_ripple")
-    assert panels.index("AFTERGLOW_finish") < panels.index("AFTERGLOW_library_OBJECT") < panels.index("AFTERGLOW_tools")
-    appearance = next(index for index, entry in enumerate(log) if entry["kind"] == "prop" and entry["text"] == "Intensity")
-    response = next(index for index, entry in enumerate(log) if entry["kind"] == "panel" and entry["name"] == "AFTERGLOW_selected_response")
-    assert appearance < response
-    assert controls(log, "op", "afterglow.create_visual")[0]["text"] == "Update Reaction"
-    custom = controls(log, "op", "afterglow.create_reaction")[0]
-    assert custom["text"] == "Build with Current Settings"
-    remove = controls(log, "op", "afterglow.remove")[0]
-    assert "AFTERGLOW_object_cleanup" in remove["path"] and "AFTERGLOW_tools" not in remove["path"]
+def test_style_prioritizes_appearance_and_keeps_response_optional():
+    scene,objects=build_objects();nav(page='STYLE')
+    captured=[]
+    with patch.object(nodes,'draw_input',side_effect=lambda layout,mod,name,text=None:captured.append(name)):
+        log=draw()
+    assert {'Intensity','Glow','Use Colors','Color A','Color B'} <= set(captured)
+    assert not {'Low','High','Gain','Threshold','Decay','Delay'} & set(captured)
+    assert not pickers(log,'creative_look')
+    assert any(item[:2]==('panel','AFTERGLOW_selected_response') and item[2] for item in log)
+    with patch.object(nodes,'draw_input',side_effect=lambda layout,mod,name,text=None:captured.append(name)):
+        draw(opened=('AFTERGLOW_selected_response',))
+    assert {'Low','High','Gain','Threshold','Decay','Delay'} <= set(captured)
 
 
-def test_response_stays_closed_and_glow_and_timing_have_single_homes():
-    scene, obj = built_scene()
-    scene.afterglow.show_advanced = True
-    log = draw(context(scene, obj), opened=("AFTERGLOW_finish",))
-    assert len(controls(log, "prop", "start_frame")) == 1
-    assert "/box/row" in controls(log, "prop", "start_frame")[0]["path"]
-    assert not controls(log, "prop", "easy_glow")
-    assert controls(log, "op", "afterglow.add_render_glow")
-    assert any(entry["kind"] == "prop" and entry["text"] == "Intensity" for entry in log)
-    assert not any(entry["kind"] == "prop" and entry["text"] in ("Low", "Gain", "Delay") for entry in log)
+def test_presets_are_explicit_after_build_and_browsing_does_not_style():
+    scene,objects=build_objects();nav(page='PRESETS')
+    snapshot={obj.name:tuple(nodes.get_input(core.reaction(obj),name) for name in ('Intensity','Glow','Use Colors','Decay')) for obj in objects}
+    scene.afterglow.creative_look='AURORA_FLOW'
+    log=draw()
+    assert pickers(log,'creative_look')
+    assert len(operators(log,'afterglow.apply_look'))==1 and operators(log,'afterglow.apply_look')[0][3]
+    assert snapshot=={obj.name:tuple(nodes.get_input(core.reaction(obj),name) for name in ('Intensity','Glow','Use Colors','Decay')) for obj in objects}
+    assert not operators(log,'afterglow.create_reaction')
+    assert any(item[0]=='panel' and item[1]=='AFTERGLOW_library_OBJECT' for item in log)
 
 
-def test_playback_draw_never_analyzes_audio_or_scans_stale_playback():
-    scene, obj = built_scene()
-    scene.afterglow.show_advanced = True
-    with patch.object(workflow, "inspect", side_effect=AssertionError("No preflight during draw")), \
-            patch.object(core, "load_mono", side_effect=AssertionError("No audio analysis during draw")), \
-            patch.object(bake, "outdated", side_effect=AssertionError("No stale scan during playback")):
-        log = draw(context(scene, obj, playing=True), opened=None)
-    for name in ("afterglow.load_sound", "afterglow.use_selected", "afterglow.create_visual",
-                 "afterglow.create_reaction", "afterglow.bake", "afterglow.remove"):
-        assert controls(log, "op", name) and not controls(log, "op", name)[0]["enabled"], name
-    assert not controls(log, "prop", "creative_look")[0]["enabled"]
+def test_cleanup_and_playback_tools_remain_available_from_setup():
+    scene,_=build_objects();nav();scene.afterglow.show_advanced=True
+    log=draw(opened=('AFTERGLOW_tools','AFTERGLOW_expert_tools','AFTERGLOW_object_cleanup'))
+    assert operators(log,'afterglow.bake')
+    assert operators(log,'afterglow.calibrate')
+    assert operators(log,'afterglow.remove')[0][3]
+    scene.afterglow.collection=None
+    log=draw(opened=('AFTERGLOW_object_cleanup',))
+    assert operators(log,'afterglow.remove')[0][3]
 
 
-def test_cleanup_stays_reachable_after_switching_away_from_reaction_collection():
-    scene, _ = built_scene()
-    scene.afterglow.collection = None
-    assert not scene.afterglow.show_advanced
-    log = draw(context(scene), opened=("AFTERGLOW_object_cleanup",))
-    assert controls(log, "op", "afterglow.remove")[0]["enabled"]
-    assert not controls(log, "op", "afterglow.create_reaction")
+def test_every_page_draws_without_mutating_art_or_analyzing_audio_during_playback():
+    scene,objects=build_objects();scene.afterglow.show_advanced=True
+    ctx=SimpleNamespace(scene=scene,object=objects[0],window_manager=bpy.context.window_manager,
+                        selected_objects=objects,screen=SimpleNamespace(is_animation_playing=True),
+                        region=SimpleNamespace(width=220),preferences=bpy.context.preferences)
+    snapshot={obj.name:helpers.snapshot(obj.active_material) for obj in objects}
+    workflows=['OBJECT']
+    if edition.IS_PRO:
+        workflows.append('ENVIRONMENT');scene.afterglow.effects.blooms.enabled=True
+        bpy.ops.afterglow.build_environment()
+    with patch.object(workflow,'inspect',side_effect=AssertionError('No preflight during draw')), \
+         patch.object(core,'load_mono',side_effect=AssertionError('No audio decoding during draw')), \
+         patch.object(bake,'outdated',side_effect=AssertionError('No bake scan during playback')):
+        for workflow_name in workflows:
+            for page in ('SETUP','STYLE','PRESETS'):
+                nav(workflow_name,page)
+                log=draw(ctx,opened=('AFTERGLOW_tools','AFTERGLOW_expert_tools','AFTERGLOW_object_cleanup','AFTERGLOW_environment_cleanup'))
+                for name in ('load_sound','use_selected','create_visual','apply_look','create_reaction','bake','remove',
+                             'build_environment','use_environment_selected','add_environment_cage','apply_environment_preset','remove_effects'):
+                    assert all(not item[3] for item in operators(log,'afterglow.'+name)),(workflow_name,page,name)
+    assert snapshot=={obj.name:helpers.snapshot(obj.active_material) for obj in objects}
+
+
+if edition.IS_PRO:
+    def test_environment_setup_has_compact_enables_and_no_effect_inspectors():
+        helpers.visual_scene();nav('ENVIRONMENT')
+        log=draw()
+        assert len(props(log,'enabled'))==len(effects.LAYERS)
+        assert len(operators(log,'afterglow.build_environment'))==1
+        assert not operators(log,'afterglow.create_visual')
+        assert not props(log,'laser_shape') and not props(log,'strike_style')
+        assert not pickers(log,'environment_look')
+        assert not operators(log,'afterglow.build_environment')[0][3]
+        bpy.context.scene.afterglow.effects.blooms.enabled=True
+        assert operators(draw(),'afterglow.build_environment')[0][3]
+
+    def test_selected_effect_inspector_only_draws_the_current_effect():
+        fx=bpy.context.scene.afterglow.effects
+        fx.lasers.enabled=fx.strikes.enabled=True
+        nav('ENVIRONMENT','STYLE','lasers')
+        log=draw()
+        assert props(log,'laser_shape') and not props(log,'strike_style')
+        nav('ENVIRONMENT','STYLE','strikes')
+        fx.strikes.visible_beam=True
+        log=draw()
+        assert props(log,'strike_style') and not props(log,'laser_shape')
+        assert len(props(log,'trigger_band'))==1
+
+    def test_environment_presets_and_live_mix_stay_independent_of_setup():
+        scene,_,_=helpers.visual_scene();scene.afterglow.effects.blooms.enabled=True
+        bpy.ops.afterglow.build_environment();scene.afterglow.effects.solo_layer='blooms'
+        for page in ('SETUP','STYLE','PRESETS'):
+            nav('ENVIRONMENT',page)
+            log=draw(closed=('AFTERGLOW_live_mix',))
+            assert any(item[0]=='label' and 'Solo' in item[1] and item[2] for item in log)
+            assert any(item[:2]==('panel','AFTERGLOW_live_mix') for item in log)
+        nav('ENVIRONMENT','PRESETS');log=draw()
+        assert pickers(log,'environment_look')
+        assert operators(log,'afterglow.apply_environment_preset')[0][3]
+        assert len(props(log,'master_brightness'))==1 and len(props(log,'solo_layer'))==1
+
+    def test_custom_bounds_buttons_report_active_cage_and_valid_source_selection():
+        nav('ENVIRONMENT')
+        assert bpy.ops.afterglow.add_environment_cage()=={'FINISHED'}
+        log=draw()
+        assert operators(log,'afterglow.add_environment_cage')[0][2]=='Select Cage'
+        assert len(props(log,'emitter'))==1
+        assert not operators(log,'afterglow.use_environment_selected')[0][3]
+        geometry=helpers.plane('Custom bounds')
+        for obj in bpy.context.selected_objects:obj.select_set(False)
+        geometry.select_set(True)
+        assert operators(draw(),'afterglow.use_environment_selected')[0][3]
+        geometry[effects.TAG]=1
+        assert not operators(draw(),'afterglow.use_environment_selected')[0][3]
 
 
 helpers.run(globals())

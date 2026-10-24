@@ -13,7 +13,7 @@ class Layout:
     def __init__(self, log, full=True):
         self.log, self.full = log, full
     def child(self, *args, **kwargs): return Layout(self.log, False)
-    row = column = box = child
+    row = column = box = grid_flow = split = child
     def panel(self, name, **kwargs):
         assert self.full, name
         self.log.append(('panel', name))
@@ -22,6 +22,12 @@ class Layout:
     def operator(self, name, **kwargs):
         self.log.append(('op', name));return SimpleNamespace()
     def label(self, **kwargs): pass
+    def template_icon_view(self, data, name, **kwargs):
+        self.prop(data, name)
+
+    def template_icon(self, *args, **kwargs):
+        pass
+
     def separator(self): pass
     def template_list(self, *args, **kwargs): pass
 
@@ -49,8 +55,10 @@ def test_build_precedes_optional_appearance_and_look_is_never_implicit():
     assert nodes.get_input(mod,'Intensity') == 1.0 and nodes.get_input(mod,'Glow') == 0.0
     assert objects[0].active_material == original and scene.compositing_node_group is None
     assert ui.AFTERGLOW_OT_apply_look.poll(bpy.context)
+    assert bpy.context.window_manager.afterglow_ui.object_page == 'STYLE'
+    assert ('op','afterglow.apply_look') not in draw()
+    bpy.context.window_manager.afterglow_ui.object_page = 'PRESETS'
     log=draw()
-    assert log.index(('op','afterglow.create_visual')) < log.index(('panel','AFTERGLOW_object_appearance'))
     assert log.count(('op','afterglow.apply_look')) == 1
     assert bpy.ops.afterglow.apply_look() == {'FINISHED'}
     assert abs(nodes.get_input(mod,'Decay')-0.5) < 1e-6

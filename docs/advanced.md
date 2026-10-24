@@ -1,52 +1,23 @@
 # Noctune Free advanced controls
 
-Open **Noctune** in the 3D Viewport sidebar (`N`) to prepare your objects, apply a
-look and build their music reaction with **Build Reaction** or **Update Reaction**.
+For short steps and examples, download the [offline HTML guide](../dist/noctune-free-documentation.zip?raw=true).
 
-For the illustrated beginner guide, download the [offline HTML manual](../dist/noctune-free-documentation.zip?raw=true),
-extract it and open `index.html`.
+Noctune Free uses three views in the **Noctune** sidebar tab (`N`):
 
-Noctune Pro adds generated environment lights, beams, lasers and signal effects.
-Those tools are maintained separately and are not included in this public Free
-source tree. See [edition details](editions.md) for the Pro workflow and delivery.
+- **Setup:** choose objects, build or update, refresh playback under **Tools**, or remove the reaction under **Cleanup**.
+- **Style:** tune the selected reacting object's appearance. Audio Response, Ripple Motion and Glow are optional sections here.
+- **Presets:** browse built-in look thumbnails, explicitly press **Apply Look**, or open **My Object Looks** for saved looks and JSON import/export.
 
-## Where the manual tools live
-
-The default workflow follows **Music → Objects → Reaction → Appearance**. Load **Track**,
-choose Objects with **Use Selected**, then build the selected Object Look.
-
-Turn on **Advanced Controls** for:
-
-- **Selected Object:** appearance first; expand **Audio Response** for bands,
-  Gain, Threshold, Decay and Delay.
-- **Ripple Motion:** choose direction and surface travel.
-- **Glow:** set **Add Soft Glow on Build**, or add/remove compositor glow manually.
-- **My Object Looks:** save, apply, import or export object styling.
-- **Playback & Tools:** refresh playback, calibrate or use manual build actions.
-
-**Start Frame** appears in the Music card while Advanced Controls is on.
-Build/Update Reaction keeps current appearance and recalibrates audio. Build first,
-then choose an optional preset under **Appearance → Apply Look**. Add compositor
-glow separately under **Advanced Controls → Glow → Add Glow**.
-
-Free saves portable object looks that also work in Pro without changing
-environment settings. Free 0.30.0 imports object-only looks and older complete
-formats 1–3. Use an object-only export from current Pro; its complete/environment
-format 7 is unsupported by this Free version. **Remove Object Reaction** restores prepared materials and original light
-data, while keeping existing generated environment data in the scene.
-
-Existing scenes and custom look files remain usable. Objects from earlier built-in
-stages remain ordinary editable scene objects: choose their collection to keep using
-them. Your active camera and world stay under your control.
-Commands below run from the repository root.
+Music and Start Frame remain at the top. A successful Build Reaction opens Style.
+View changes and preset browsing do not change the scene. Inside Setup → Tools, expand **Audio & Setup** for Spread Bands, Calibrate and Refresh Reaction Setup. Build and Update calibrate
+audio while preserving appearance. Add compositor glow explicitly under **Style →
+Glow → Add Glow**.
 
 ## Rendering
 
 Use Blender's **Output Properties** for resolution, frame range, output format and
 destination, then choose **Render → Render Animation**. Playback loops use Blender's
-timeline preview range. Object builds preserve native output settings and timeline
-ranges. Automatic object glow is skipped when native compositing is disabled;
-existing compositor nodes stay in place.
+timeline preview range. Object builds preserve native output settings. The timeline end follows the track when music, Start Frame or frame rate changes; later manual range edits remain until that configuration changes again. Build and Update leave the compositor untouched; add glow explicitly from Style.
 
 ## Prepare your objects
 
@@ -122,7 +93,7 @@ participate in Ripple placement; surface-only Level Meter controls apply to geom
 
 ## Per-object controls
 
-Select a Noctune object and open **Advanced Controls → Selected Object**.
+Select a Noctune object and open **Style**.
 Appearance controls come first. Expand **Audio Response** for its frequency band,
 sensitivity and timing:
 
@@ -139,11 +110,10 @@ sensitivity and timing:
 | Appearance | Level Meter | Fill geometry along an axis by loudness, like an equalizer bar (off while Through Objects is on; not shown for lights). |
 
 For a selected light, **Base Power** starts at its original native power and sets
-the response's brightness scale. Adjust it under **Advanced Controls → Selected
-Object**. Power is `Base Power × max(Level, Glow) × Intensity`; Gain can raise it
+the response's brightness scale. Adjust it under **Style**. Power is `Base Power × max(Level, Glow) × Intensity`; Gain can raise it
 above Base Power. Sun lights keep Blender's Sun energy units.
 
-In the main tab's advanced controls, open **Ripple Motion** to adjust these settings.
+In **Style**, open **Ripple Motion** to adjust these settings.
 
 ## Tests
 

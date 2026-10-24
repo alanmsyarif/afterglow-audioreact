@@ -16,7 +16,7 @@ class Layout:
     def child(self, *args, **kwargs):
         return Layout(self.log, self.enabled, self.opened)
 
-    row = column = box = child
+    row = column = box = grid_flow = split = child
 
     def panel(self, name, default_closed=False):
         self.log.append(("panel", name, default_closed))
@@ -37,6 +37,12 @@ class Layout:
 
     def template_list(self, *args, **kwargs):
         self.log.append(("list", args[0]))
+
+    def template_icon_view(self, data, name, **kwargs):
+        self.prop(data, name)
+
+    def template_icon(self, *args, **kwargs):
+        pass
 
     def separator(self, **kwargs):
         pass
@@ -69,23 +75,30 @@ def test_default_sidebar_has_one_creation_action_and_no_parameter_tuning():
     log = draw(bpy.context)
     assert {item[1] for item in log if item[0] == "op"} == {
         "afterglow.use_selected", "afterglow.load_sound", "afterglow.create_visual"}
-    assert {item[1] for item in log if item[0] == "prop"} == {
-        "collection", "sound", "show_advanced"}
+    props = {item[1] for item in log if item[0] == "prop"}
+    assert {"collection", "sound", "start_frame", "object_page"} <= props
+    assert not {"creative_look", "bounds_collection", "environment_look"} & props
     assert not any("Noctune FX" in item[1] for item in log if item[0] == "label")
 
 
-def test_advanced_controls_keep_object_tuning_and_custom_looks_available():
-    bpy.context.scene.afterglow.show_advanced = True
-    log = draw(bpy.context, opened=None)
-    tools = {item[1] for item in log if item[0] == "op"}
-    assert {"afterglow.calibrate", "afterglow.bake", "afterglow.remove",
-            "afterglow.save_look", "afterglow.import_look", "afterglow.export_look",
-            "afterglow.add_render_glow"} <= tools
-    assert not tools.intersection({"afterglow.build_environment", "afterglow.build_effects",
-                                    "afterglow.build_show"})
-    assert {"ripple", "through", "start_frame"} <= {
-        item[1] for item in log if item[0] == "prop"}
-
+def test_style_tools_and_saved_looks_have_separate_pages():
+    state = bpy.context.window_manager.afterglow_ui
+    state.object_page = 'SETUP'
+    setup = draw(bpy.context, opened=None)
+    tools = {item[1] for item in setup if item[0] == 'op'}
+    assert {'afterglow.calibrate','afterglow.bake','afterglow.remove'} <= tools
+    helpers.visual_scene()
+    bpy.ops.afterglow.create_visual()
+    state.object_page = 'STYLE'
+    style = draw(bpy.context, opened=None)
+    style_tools = {item[1] for item in style if item[0] == 'op'}
+    assert 'afterglow.add_render_glow' in style_tools
+    assert {'ripple','through'} <= {item[1] for item in style if item[0] == 'prop'}
+    state.object_page = 'PRESETS'
+    library = draw(bpy.context, opened=None)
+    library_tools = {item[1] for item in library if item[0] == 'op'}
+    assert {'afterglow.save_look','afterglow.import_look','afterglow.export_look'} <= library_tools
+    assert not library_tools.intersection({'afterglow.build_environment','afterglow.build_effects','afterglow.build_show'})
 
 def test_playback_disables_creation_and_music_loading():
     context = SimpleNamespace(scene=bpy.context.scene,
@@ -131,7 +144,7 @@ def test_saved_look_actions_use_object_scope_and_restore_the_shared_style():
     assert all(abs(nodes.get_input(core.find_modifier(obj), "Glow") - expected) < 1e-6
                for obj in objects)
     assert not bake.outdated(scene)
-    scene.afterglow.show_advanced = True
+    bpy.context.window_manager.afterglow_ui.object_page = "PRESETS"
     log = draw(bpy.context, opened=None)
     actions = [item for item in log if item[0] == "op" and item[1] in {
         "afterglow.apply_saved_look", "afterglow.build_saved_look"}]
