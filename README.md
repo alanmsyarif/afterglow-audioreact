@@ -113,3 +113,9 @@ product editor. Set price and seller details in your dashboard and review its
 preview before publishing. The kit does not publish anything.
 
 Rebuild with `python tools/build_storefront.py --edition free`.
+
+[**Download the single-file Superhive description**](dist/noctune-free-superhive.html?raw=true).
+Open it, choose an edition, then use **Copy HTML** or **Copy formatted text**.
+All preview images are embedded; no ZIP or media folder is needed. If the
+marketplace strips embedded images, use the built-in Image links helper to save
+them for upload and substitute their hosted URLs.
