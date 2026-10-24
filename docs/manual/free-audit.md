@@ -1,6 +1,6 @@
 # Noctune Free manual source audit
 
-Content: `free.json`; verified against Free 0.29.1 in `/workspace/afterglow-audioreact`.
+Content: `free.json`; verified against Free 0.30.0 in `/workspace/afterglow-audioreact`.
 
 | Manual section | Source checked | Covered features |
 |---|---|---|
@@ -17,10 +17,10 @@ Content: `free.json`; verified against Free 0.29.1 in `/workspace/afterglow-audi
 
 ## Accurate edge cases retained
 
-- Main Build/Update Reaction reapplies the selected built-in Object Look. Keep custom styling with Build Object Reaction Only (which recalibrates), Refresh Playback, or saved-look Apply & Build as appropriate.
-- Free 0.29.1 accepts object-only look format 1, and older complete formats 1–3. Current Pro complete/environment format 6 is unsupported in this Free version: export an object-only look for exchange.
-- Free's automatic-glow control lives in Timing & Glow; Pro's current UI moved it to Glow. `pro_body` supplies the alternate wording.
-- Pro exposes Track and advanced Start Frame in one shared Music box. `pro_body` supplies the current Pro location without inventing a repeated music control.
+- Main Build/Update Reaction reapplies the selected built-in Object Look. Keep custom styling with Build with Current Settings (which recalibrates), Refresh Playback, or saved-look Apply & Build as appropriate.
+- Free 0.30.0 accepts object-only look format 1, and older complete formats 1–3. Current Pro complete/environment format 6 is unsupported in this Free version: export an object-only look for exchange.
+- Both editions place Add Soft Glow on Build in Glow. Start Frame lives in the Music card while advanced/custom controls are visible.
+- Both editions expose Track in one Music card. Pro shares that card between Object Reaction and Environment Effects; Use Custom Layers reveals its Start Frame as well.
 - Through Objects needs Fast Playback; Level Meter is off while Through Objects is on; lights react at object origins and have no geometry meter.
 - Calibrate normalizes audio response, not scene exposure, material strength or native light Base Power.
 

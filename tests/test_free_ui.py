@@ -10,16 +10,18 @@ from afterglow import bake, core, creator, edition, lookbook, materials, nodes, 
 
 
 class Layout:
-    def __init__(self, log, enabled=True):
-        self.log, self.enabled = log, enabled
+    def __init__(self, log, enabled=True, opened=()):
+        self.log, self.enabled, self.opened = log, enabled, opened
 
     def child(self, *args, **kwargs):
-        return Layout(self.log, self.enabled)
+        return Layout(self.log, self.enabled, self.opened)
 
     row = column = box = child
 
-    def panel(self, *args, **kwargs):
-        return self.child(), self.child()
+    def panel(self, name, default_closed=False):
+        self.log.append(("panel", name, default_closed))
+        opened = self.opened is None or name in self.opened or not default_closed
+        return self.child(), self.child() if opened else None
 
     def prop(self, data, name, **kwargs):
         assert name in data.bl_rna.properties
@@ -40,9 +42,9 @@ class Layout:
         pass
 
 
-def draw(context):
+def draw(context, opened=()):
     log = []
-    ui.AFTERGLOW_PT_panel.draw(SimpleNamespace(layout=Layout(log)), context)
+    ui.AFTERGLOW_PT_panel.draw(SimpleNamespace(layout=Layout(log, opened=opened)), context)
     return log
 
 
@@ -74,7 +76,7 @@ def test_default_sidebar_has_one_creation_action_and_no_parameter_tuning():
 
 def test_advanced_controls_keep_object_tuning_and_custom_looks_available():
     bpy.context.scene.afterglow.show_advanced = True
-    log = draw(bpy.context)
+    log = draw(bpy.context, opened=None)
     tools = {item[1] for item in log if item[0] == "op"}
     assert {"afterglow.calibrate", "afterglow.bake", "afterglow.remove",
             "afterglow.save_look", "afterglow.import_look", "afterglow.export_look",
@@ -129,7 +131,7 @@ def test_saved_look_actions_use_object_scope_and_restore_the_shared_style():
                for obj in objects)
     assert not bake.outdated(scene)
     scene.afterglow.show_advanced = True
-    log = draw(bpy.context)
+    log = draw(bpy.context, opened=None)
     actions = [item for item in log if item[0] == "op" and item[1] in {
         "afterglow.apply_saved_look", "afterglow.build_saved_look"}]
     assert len(actions) == 2 and all(item[3].scope == "OBJECT" for item in actions)

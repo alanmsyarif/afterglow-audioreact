@@ -12,19 +12,28 @@ source tree. See [edition details](editions.md) for the Pro workflow and deliver
 
 ## Where the manual tools live
 
-In **Noctune**, turn on **Advanced Controls** for:
+The default workflow follows **Music → Objects → Look & Build**. Load **Track**,
+choose Objects with **Use Selected**, then build the selected Object Look.
 
-- **Timing & Glow:** offset the song or change automatic glow.
-- Saved object looks, including JSON import/export and object-only application.
+Turn on **Advanced Controls** for:
+
+- **Selected Object:** appearance first; expand **Audio Response** for bands,
+  Gain, Threshold, Decay and Delay.
 - **Ripple Motion:** choose direction and surface travel.
-- **Manual Build & Cleanup:** apply an object look, calibrate, redistribute bands,
-  refresh playback or remove object reactions.
-- Per-object response and appearance controls.
+- **Glow:** set **Add Soft Glow on Build**, or add/remove compositor glow manually.
+- **My Object Looks:** save, apply, import or export object styling.
+- **Playback & Tools:** refresh playback, calibrate or use manual build actions.
+
+**Start Frame** appears in the Music card while Advanced Controls is on.
+Main Build/Update Reaction reapplies the selected Object Look. To retain custom
+colors and styling, use **Playback & Tools → Build with Current Settings**; it
+recalibrates Gain and Threshold. **Cleanup → Remove Object Reaction** is available
+outside Advanced Controls.
 
 Free saves portable object looks that also work in Pro without changing
-environment settings. Free 0.29.1 imports object-only looks and older complete
+environment settings. Free 0.30.0 imports object-only looks and older complete
 formats 1–3. Use an object-only export from current Pro; its complete/environment
-format 6 is unsupported by this Free version. **Remove Object Reaction** restores prepared materials and original light
+format 7 is unsupported by this Free version. **Remove Object Reaction** restores prepared materials and original light
 data, while keeping existing generated environment data in the scene.
 
 Existing scenes and custom look files remain usable. Objects from earlier built-in
@@ -105,8 +114,8 @@ is rejected.
 | Beats per Sweep | How many beats one sweep takes to cross the collection. |
 | Ripple From | Where the sweep starts: Longest Axis, X, Y, Z, an **Empty** (outward from an Origin object), or the Collection Center. Reverse flips it. |
 | Through Objects | The wave crosses geometry surfaces pixel by pixel instead of lighting the whole object at once. Needs Fast Playback. Lights respond at their origins. |
-| Fast Playback | Precomputes the reaction with numpy and keys it, so playback never evaluates Blender's slow Sample Sound node. Settings changes re-bake automatically once you stop dragging; after editing bands, Decay or Delay in the modifier, use the *Re-bake* button the panel shows. |
-| Re-spread | Spreads bands bass → treble again across objects without **Lock Band**, and picks up moved objects or a moved Origin. |
+| Fast Playback | Precomputes the reaction with numpy and keys it, so playback never evaluates Blender's slow Sample Sound node. Settings changes re-bake automatically once you stop dragging; after editing bands, Decay or Delay in the modifier, use the **Refresh Playback** button the panel shows. |
+| Spread Bands | Spreads bands bass → treble again across objects without **Lock Band**, and picks up moved objects or a moved Origin. |
 
 Lights always use baked playback, including when **Fast Playback** is off for
 geometry. After changing a light's band, Decay or Delay, press **Refresh Playback**. Light origins
@@ -114,19 +123,21 @@ participate in Ripple placement; surface-only Level Meter controls apply to geom
 
 ## Per-object controls
 
-Select a Noctune object to tune it in the panel. Its box follows the order you tune in:
+Select a Noctune object and open **Advanced Controls → Selected Object**.
+Appearance controls come first. Expand **Audio Response** for its frequency band,
+sensitivity and timing:
 
 | Group | Control | What it does |
 |---|---|---|
-| Band | Low / High | The frequency band (Hz) this object listens to. |
-| Band | Lock (padlock) | Keep this object's band when re-spreading. |
-| Response | Gain / Threshold | Level = (amplitude − Threshold) × Gain. While Ripple is on, the kick band's own Ripple Gain / Ripple Threshold pair is shown instead. |
-| Response | Decay | How long a peak takes to fade (seconds). |
-| Response | Delay | Shift this object's reaction later in time (seconds). |
-| Look | Intensity | Brightness multiplier for geometry emission or native light power. Unlike Gain it leaves the colour mix and Level Meter fill alone. |
-| Look | Glow | Idle glow: brightness never drops below this level, so quiet parts glow dimly instead of going black. |
-| Look | Use Colors / Color A / Color B | Tint from Color A (quiet) to Color B (loud). |
-| Look | Level Meter | Fill geometry along an axis by loudness, like an equalizer bar (off while Through Objects is on; not shown for lights). |
+| Audio Response | Low / High | The frequency band (Hz) this object listens to. |
+| Audio Response | Lock (padlock) | Keep this object's band when re-spreading. |
+| Audio Response | Gain / Threshold | Level = (amplitude − Threshold) × Gain. While Ripple is on, the kick band's own Ripple Gain / Ripple Threshold pair is shown instead. |
+| Audio Response | Decay | How long a peak takes to fade (seconds). |
+| Audio Response | Delay | Shift this object's reaction later in time (seconds). |
+| Appearance | Intensity | Brightness multiplier for geometry emission or native light power. Unlike Gain it leaves the colour mix and Level Meter fill alone. |
+| Appearance | Glow | Idle glow: brightness never drops below this level, so quiet parts glow dimly instead of going black. |
+| Appearance | Use Colors / Color A / Color B | Tint from Color A (quiet) to Color B (loud). |
+| Appearance | Level Meter | Fill geometry along an axis by loudness, like an equalizer bar (off while Through Objects is on; not shown for lights). |
 
 For a selected light, **Base Power** starts at its original native power and sets
 the response's brightness scale. Adjust it under **Advanced Controls → Selected
@@ -164,7 +175,7 @@ sudo apt install libegl1 libgl1-mesa-dri libglx-mesa0
 2. Tag the commit with that version and push the tag:
 
    ```bash
-   git tag v0.29.1 && git push origin v0.29.1
+   git tag v0.30.0 && git push origin v0.30.0
    ```
 
 [`release.yml`](../.github/workflows/release.yml) runs the full test suite, checks the tag

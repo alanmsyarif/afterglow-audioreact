@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "afterglow"
-version = "0.29.1"
+version = "0.30.0"
 name = "Noctune Free"
 tagline = "Music-reactive materials and lights, ready in a few clicks"
 maintainer = "alanmaulanasyarif@gmail.com"

@@ -1,4 +1,4 @@
-# Noctune Free 0.29.1
+# Noctune Free 0.30.0
 
 **Choose music. Make it glow.**
 
@@ -6,7 +6,7 @@ Make your own meshes, curves, text and lights react to music in Blender. Select
 your objects, load a track and choose a look. Noctune prepares geometry materials,
 calibrates the reaction and prepares playback for you.
 
-[**Download Noctune Free 0.29.1**](dist/noctune-free-0.29.1.zip?raw=true)
+[**Download Noctune Free 0.30.0**](dist/noctune-free-0.30.0.zip?raw=true)
 
 **Blender 5.2+ · EEVEE and Cycles · Runs locally**
 
@@ -25,12 +25,12 @@ images, optional GIFs and search. [Single HTML file](docs/html/noctune-free.html
 
 Start with your own scene and objects.
 
-1. **Select your objects → Use Selected.** Noctune adds emission where needed and
-   preserves the original materials for restoration.
-2. **Load your music → choose an Object Look.** Use the folder icon beside
-   **Music** to load a track.
-3. **Build Reaction → press Space.** Switch to **Material Preview** or **Rendered**
-   shading to see the materials react.
+1. **Music → Track.** Use the folder icon to load a track.
+2. **Objects → Use Selected.** Select your geometry and lights, then use the
+   full-width button. Missing emission is prepared while original materials are
+   preserved for restoration.
+3. **Look & Build → Object Look → Build Reaction.** Press **Space** to preview.
+   Use **Material Preview** or **Rendered** shading to see materials react.
 
 After changing your music or look, press **Update Reaction**. Point, Spot, Area
 and Sun lights work in the same selection as geometry: their power and color
@@ -54,8 +54,14 @@ keep the same normalized response.
 - **Playback preparation:** Noctune calibrates and bakes the reaction when you
   build it.
 
-The main panel keeps the everyday workflow short. Open **Advanced Controls** for
-timing, colors, individual object responses, ripple settings and saved looks.
+The panel follows **Music → Objects → Look & Build**. The full-width **Use Selected**
+button prepares your selection. Open **Advanced Controls** for the selected object's
+appearance, audio response, ripple, glow, saved looks and playback tools. **Start
+Frame** appears in Music while those controls are open.
+
+Build/Update Reaction reapplies the selected **Object Look**. To keep your own
+style, use **Advanced Controls → Playback & Tools → Build with Current Settings**;
+that action preserves styling and recalibrates the audio response.
 See the [advanced guide](docs/advanced.md) for those controls.
 
 ## Preview, render and cleanup
@@ -68,8 +74,7 @@ Set your camera, resolution, frame range, format and destination in Blender,
 then use **Render → Render Animation**. Noctune preserves your output settings
 and timeline range.
 
-To remove the reaction, open **Advanced Controls → Manual Build & Cleanup →
-Remove Object Reaction**. This restores automatically prepared material
+To remove the reaction, expand **Cleanup → Remove Object Reaction** below the workflow. This restores automatically prepared material
 assignments and original light data, including preexisting light animation.
 Materials or light data you reassigned manually stay in place.
 
