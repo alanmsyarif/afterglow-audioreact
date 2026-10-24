@@ -21,7 +21,7 @@ def draw_note(layout, text, context=None, icon="NONE"):
 class AFTERGLOW_OT_create_visual(bpy.types.Operator):
     bl_idname = "afterglow.create_visual"
     bl_label = "Build Reaction"
-    bl_description = "Apply a calibrated music reaction to geometry and lights, with optional glow"
+    bl_description = "Build and calibrate geometry and light reactions while keeping their current appearance"
     bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
@@ -119,6 +119,14 @@ class AFTERGLOW_OT_apply_look(bpy.types.Operator):
     bl_label = "Apply Look"
     bl_description = "Apply the object colors and response without changing environment effects"
     bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        scene = context.scene
+        collection = scene.afterglow.collection
+        return (scene.is_editable and not getattr(context.screen, "is_animation_playing", False)
+                and collection is not None
+                and any(core.reaction(obj) for obj in collection.all_objects if core.is_target(obj)))
 
     def execute(self, context):
         scene = context.scene
@@ -678,7 +686,7 @@ def draw_music(layout, context):
 
 
 def draw_object_workflow(layout, context):
-    """Choose objects and a preset before the single everyday build action."""
+    """Build first; optional appearance changes are explicit actions afterward."""
     s = context.scene.afterglow
     playing = getattr(context.screen, "is_animation_playing", False)
     source = layout.box()
@@ -691,35 +699,35 @@ def draw_object_workflow(layout, context):
     selected.operator("afterglow.use_selected", text="Use Selected", icon="RESTRICT_SELECT_OFF")
     if s.collection is None:
         draw_note(source, "Select geometry or lights, then Use Selected.", context)
-
-    look = layout.box()
-    look.label(text="Look & Build", icon="PRESET")
-    field = look.row()
-    field.enabled = not playing
-    field.prop(s, "creative_look", text="Object Look")
-    description = OBJECT_HINTS.get(s.creative_look, "")
-    if description:
-        draw_note(look, description, context)
+    card = layout.box()
+    card.label(text="Reaction", icon="SOUND")
     built = bool(s.collection and any(core.reaction(obj) for obj in s.collection.all_objects if core.is_target(obj)))
-    ready = s.collection is not None and s.sound is not None and core.sound_ok(s.sound)
-    action = look.column()
-    action.enabled = not playing and ready
+    music_ready = bool(s.sound and core.sound_ok(s.sound))
+    action = card.column()
+    action.enabled = not playing and s.collection is not None and music_ready
     action.scale_y = 1.6
     action.operator("afterglow.create_visual", text="Update Reaction" if built else "Build Reaction", icon="PLAY")
-    draw_note(look, "Applies the selected Object Look.", context)
+    draw_note(card, "Keeps your materials and current appearance.", context)
     if playing:
-        status = "Stop playback to build."
+        draw_note(card, "Stop playback to change the setup.", context, "INFO")
     elif s.collection is None:
-        status = "Choose objects first."
-    elif s.sound is None:
-        status = "Load a track first."
-    elif not ready:
-        status = "Reload the missing track to build."
-    elif built:
-        status = "Reaction built. Press Space to preview."
+        draw_note(card, "Choose objects to build their reaction.", context, "FORWARD")
+    elif not music_ready:
+        draw_note(card, "Load a readable track in Music above.", context, "FORWARD")
     else:
-        status = "Ready to build your reaction."
-    draw_note(look, status, context, "CHECKMARK" if ready and built and not playing else "INFO")
+        draw_note(card, "Reaction built. Press Space to preview." if built else "Ready to build your reaction.",
+                  context, "CHECKMARK")
+    if built:
+        head, body = layout.panel("AFTERGLOW_object_appearance", default_closed=False)
+        head.label(text="Appearance", icon="PRESET")
+        if body:
+            body.enabled = not playing
+            body.prop(s, "creative_look", text="Object Look")
+            draw_note(body, OBJECT_HINTS.get(s.creative_look, "Choose an optional look."), context)
+            body.operator("afterglow.apply_look", text="Apply Look", icon="BRUSH_DATA")
+            draw_note(body, "Optional. Apply a look once; later updates keep your edits.", context)
+    else:
+        draw_note(layout, "Build first to choose an optional look.", context)
     layout.prop(s, "show_advanced", text="Advanced Controls")
     if s.show_advanced:
         draw_advanced(layout, context)
@@ -784,7 +792,6 @@ def draw_advanced(layout, context):
         body.operator("afterglow.bake", text="Refresh Playback", icon="FILE_REFRESH")
         body.prop(s, "fast_playback")
         body.separator()
-        body.operator("afterglow.apply_look", text="Apply Look Settings Only")
         body.operator("afterglow.apply", text="Refresh Reaction Setup Only")
         row = body.row(align=True)
         row.operator("afterglow.respread", text="Spread Bands")

@@ -84,7 +84,7 @@ def built_scene():
 def test_basic_workflow_is_music_objects_look_and_one_build_action():
     log = draw(context(bpy.context.scene))
     labels = [entry["name"] for entry in log if entry["kind"] == "label"]
-    assert labels.index("Music") < labels.index("Objects") < labels.index("Look & Build")
+    assert labels.index("Music") < labels.index("Objects") < labels.index("Reaction")
     assert controls(log, "prop", "sound")[0]["text"] == "Track"
     assert controls(log, "op", "afterglow.use_selected")[0]["text"] == "Use Selected"
     assert not controls(log, "prop", "start_frame")
@@ -92,7 +92,7 @@ def test_basic_workflow_is_music_objects_look_and_one_build_action():
     assert not controls(log, "op", "afterglow.remove")
     main = controls(log, "op", "afterglow.create_visual")
     assert len(main) == 1 and main[0]["text"] == "Build Reaction" and not main[0]["enabled"]
-    assert any("Applies the selected Object Look" in label for label in labels)
+    assert any("Keeps your materials" in label for label in labels)
 
 
 def test_missing_track_disables_build_but_keeps_audio_reload_available():
@@ -128,9 +128,8 @@ def test_response_stays_closed_and_glow_and_timing_have_single_homes():
     log = draw(context(scene, obj), opened=("AFTERGLOW_finish",))
     assert len(controls(log, "prop", "start_frame")) == 1
     assert "/box/row" in controls(log, "prop", "start_frame")[0]["path"]
-    assert len(controls(log, "prop", "easy_glow")) == 1
-    assert controls(log, "prop", "easy_glow")[0]["text"] == "Add Soft Glow on Build"
-    assert "AFTERGLOW_finish" in controls(log, "prop", "easy_glow")[0]["path"]
+    assert not controls(log, "prop", "easy_glow")
+    assert controls(log, "op", "afterglow.add_render_glow")
     assert any(entry["kind"] == "prop" and entry["text"] == "Intensity" for entry in log)
     assert not any(entry["kind"] == "prop" and entry["text"] in ("Low", "Gain", "Delay") for entry in log)
 

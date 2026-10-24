@@ -1,4 +1,4 @@
-# Noctune Free 0.30.1
+# Noctune Free 0.31.0
 
 **Choose music. Make it glow.**
 
@@ -6,7 +6,7 @@ Make your own meshes, curves, text and lights react to music in Blender. Select
 your objects, load a track and choose a look. Noctune prepares geometry materials,
 calibrates the reaction and prepares playback for you.
 
-[**Download Noctune Free 0.30.1**](dist/noctune-free-0.30.1.zip?raw=true)
+[**Download Noctune Free 0.31.0**](dist/noctune-free-0.31.0.zip?raw=true)
 
 **Blender 5.2+ · EEVEE and Cycles · Runs locally**
 
@@ -29,10 +29,10 @@ Start with your own scene and objects.
 2. **Objects → Use Selected.** Select your geometry and lights, then use the
    full-width button. Missing emission is prepared while original materials are
    preserved for restoration.
-3. **Look & Build → Object Look → Build Reaction.** Press **Space** to preview.
+3. **Reaction → Build Reaction.** Press **Space** to preview.
    Use **Material Preview** or **Rendered** shading to see materials react.
 
-After changing your music or look, press **Update Reaction**. Point, Spot, Area
+After changing music, press **Update Reaction**. For a preset, use **Appearance → Object Look → Apply Look** after building. Point, Spot, Area
 and Sun lights work in the same selection as geometry: their power and color
 react to the music. Use **Rendered** shading to preview native lights.
 Calibration reads the full source track, so playback Delay and Ripple placement
@@ -54,14 +54,12 @@ keep the same normalized response.
 - **Playback preparation:** Noctune calibrates and bakes the reaction when you
   build it.
 
-The panel follows **Music → Objects → Look & Build**. The full-width **Use Selected**
+The panel follows **Music → Objects → Reaction → Appearance**. The full-width **Use Selected**
 button prepares your selection. Open **Advanced Controls** for the selected object's
 appearance, audio response, ripple, glow, saved looks and playback tools. **Start
 Frame** appears in Music while those controls are open.
 
-Build/Update Reaction reapplies the selected **Object Look**. To keep your own
-style, use **Advanced Controls → Playback & Tools → Build with Current Settings**;
-that action preserves styling and recalibrates the audio response.
+Build and Update calibrate the audio response while keeping your current appearance. After building, choose an optional preset under **Appearance → Apply Look**. Browsing the picker does not apply it.
 See the [advanced guide](docs/advanced.md) for those controls.
 
 ## Preview, render and cleanup
@@ -71,8 +69,7 @@ Soft glow appears in the composited final image and needs Blender's
 **Compositing** option enabled.
 
 Set your camera, resolution, frame range, format and destination in Blender,
-then use **Render → Render Animation**. Noctune preserves your output settings
-and output settings. The timeline end follows the music when its track, Start Frame or frame rate changes; later manual range edits are kept until that configuration changes again.
+then use **Render → Render Animation**. Noctune preserves your output settings. The timeline end follows the music when its track, Start Frame or frame rate changes; later manual range edits are kept until that configuration changes again.
 
 To remove the reaction, expand **Cleanup → Remove Object Reaction** below the workflow. This restores automatically prepared material
 assignments and original light data, including preexisting light animation.
@@ -101,3 +98,5 @@ Noctune was previously named Afterglow. Existing projects and look files remain
 compatible.
 
 Built-in object looks preserve existing emissive material colors and use zero idle glow. Newly prepared materials use the preset palette. To add a constant glow, adjust **Advanced Controls → Selected Object → Idle Glow**; calibration changes audio sensitivity, not this artistic control. Zero emission can still leave a surface visible under scene lighting.
+
+Build and Update leave compositor glow untouched. Add a halo explicitly under **Advanced Controls → Glow → Add Glow**.

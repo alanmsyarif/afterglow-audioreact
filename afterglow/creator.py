@@ -294,7 +294,6 @@ def draw_finish(layout, context):
     head.label(text="Glow", icon="LIGHT")
     if body:
         body.enabled = not getattr(context.screen, "is_animation_playing", False)
-        body.prop(context.scene.afterglow, "easy_glow", text="Add Soft Glow on Build")
         tree = context.scene.compositing_node_group
         owned = [node for node in tree.nodes if node.get(finish.TAG)] if tree else []
         if owned:

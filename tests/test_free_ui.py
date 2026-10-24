@@ -55,7 +55,7 @@ def test_free_registers_object_tools_without_paid_or_export_controls():
     assert bpy.types.Panel.bl_rna_get_subclass_py("AFTERGLOW_PT_panel") is not None
     assert bpy.types.Panel.bl_rna_get_subclass_py("AFTERGLOW_PT_effects") is None
     properties = set(bpy.context.scene.afterglow.bl_rna.properties.keys())
-    assert {"collection", "sound", "creative_look", "show_advanced", "saved_looks"} <= properties
+    assert {"collection", "sound", "show_advanced", "saved_looks"} <= properties
     assert not properties.intersection({"effects", "environment_look", "environment_advanced",
                                         "output_format", "output_path", "stage_layout"})
     for name in ("AFTERGLOW_OT_build_environment", "AFTERGLOW_OT_build_effects",
@@ -70,7 +70,7 @@ def test_default_sidebar_has_one_creation_action_and_no_parameter_tuning():
     assert {item[1] for item in log if item[0] == "op"} == {
         "afterglow.use_selected", "afterglow.load_sound", "afterglow.create_visual"}
     assert {item[1] for item in log if item[0] == "prop"} == {
-        "collection", "sound", "creative_look", "show_advanced"}
+        "collection", "sound", "show_advanced"}
     assert not any("Noctune FX" in item[1] for item in log if item[0] == "label")
 
 
@@ -83,7 +83,7 @@ def test_advanced_controls_keep_object_tuning_and_custom_looks_available():
             "afterglow.add_render_glow"} <= tools
     assert not tools.intersection({"afterglow.build_environment", "afterglow.build_effects",
                                     "afterglow.build_show"})
-    assert {"ripple", "through", "start_frame", "easy_glow"} <= {
+    assert {"ripple", "through", "start_frame"} <= {
         item[1] for item in log if item[0] == "prop"}
 
 

@@ -52,6 +52,7 @@ def test_preset_keeps_authored_emission_and_goes_dark_after_band_release():
     for identifier, _, _ in presets.OBJECT_ITEMS:
         scene.afterglow.creative_look = identifier
         easy.create_visual(bpy.context)
+        assert bpy.ops.afterglow.apply_look() == {"FINISHED"}
         for obj in objects:
             mod = core.reaction(obj)
             nodes.set_input(mod, 'Low', 70.0)
@@ -98,6 +99,8 @@ def test_new_automatic_material_uses_preset_colors_without_an_idle_glow():
     scene.afterglow.easy_glow = False
     easy.create_visual(bpy.context)
     mod = core.reaction(obj)
+    assert not nodes.get_input(mod, 'Use Colors')
+    assert bpy.ops.afterglow.apply_look() == {"FINISHED"}
     assert nodes.get_input(mod, 'Use Colors') and nodes.get_input(mod, 'Glow') == 0.0
     assert not prepare.has_authored_emission(obj)
 

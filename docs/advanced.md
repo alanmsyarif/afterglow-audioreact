@@ -12,7 +12,7 @@ source tree. See [edition details](editions.md) for the Pro workflow and deliver
 
 ## Where the manual tools live
 
-The default workflow follows **Music → Objects → Look & Build**. Load **Track**,
+The default workflow follows **Music → Objects → Reaction → Appearance**. Load **Track**,
 choose Objects with **Use Selected**, then build the selected Object Look.
 
 Turn on **Advanced Controls** for:
@@ -25,10 +25,9 @@ Turn on **Advanced Controls** for:
 - **Playback & Tools:** refresh playback, calibrate or use manual build actions.
 
 **Start Frame** appears in the Music card while Advanced Controls is on.
-Main Build/Update Reaction reapplies the selected Object Look. To retain custom
-colors and styling, use **Playback & Tools → Build with Current Settings**; it
-recalibrates Gain and Threshold. **Cleanup → Remove Object Reaction** is available
-outside Advanced Controls.
+Build/Update Reaction keeps current appearance and recalibrates audio. Build first,
+then choose an optional preset under **Appearance → Apply Look**. Add compositor
+glow separately under **Advanced Controls → Glow → Add Glow**.
 
 Free saves portable object looks that also work in Pro without changing
 environment settings. Free 0.30.0 imports object-only looks and older complete
