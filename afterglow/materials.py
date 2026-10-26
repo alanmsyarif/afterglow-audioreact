@@ -3,7 +3,7 @@ import bpy
 
 TAG = "afterglow"
 LAYOUT_CLASSIC = 5  # Noctune Level group, 5 attributes (incl. Level Meter, Intensity/Glow); 1 was plain Attribute nodes
-LAYOUT_WAVE = 3     # Through Objects: the Noctune Wave group, 9 attributes (2 was v0.6's 12-attribute layout)
+LAYOUT_WAVE = 6     # Through Objects: 9 attributes, including native spline direction
 WAVE_GROUP = "Noctune Wave"
 LEVEL_GROUP = "Noctune Level"
 METER_SOFT = 0.04  # Level Meter fill edge, as a fraction of the object's height
@@ -168,7 +168,12 @@ def _build_wave():
     along = vmath("DOT_PRODUCT", p, wave).outputs["Value"]
     radius = vmath("LENGTH", vmath("SUBTRACT", p, wave).outputs["Vector"]).outputs["Value"]
     dist = op("ADD", along, op("MULTIPLY", radial, op("SUBTRACT", radius, along)))
-    pos = clamp01(op("DIVIDE", op("SUBTRACT", dist, lo), span))
+    spatial_pos = clamp01(op("DIVIDE", op("SUBTRACT", dist, lo), span))
+    curve_mode = op("GREATER_THAN", mode, 2.5)
+    curve_pos = N.new("ShaderNodeSeparateXYZ")
+    L.new(wave, curve_pos.inputs[0])
+    pos = clamp01(op("ADD", spatial_pos, op("MULTIPLY", curve_mode,
+                     op("SUBTRACT", curve_pos.outputs["X"], spatial_pos))))
     u = op("MULTIPLY", clamp01(op("DIVIDE", op("SUBTRACT", pos, tmin),
                                   op("MAXIMUM", op("SUBTRACT", tmax, tmin), 1e-6))), TAPS - 1)
     blend = None

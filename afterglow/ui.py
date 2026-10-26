@@ -795,6 +795,8 @@ def draw_advanced(layout, context):
         if s.ripple_from == "EMPTY":
             body.prop(s, "ripple_origin")
         body.prop(s, "through")
+        if s.through:
+            draw_note(body, "Curves follow their spline direction. Reverse flips it.", context, "CURVE_DATA")
         if s.through and not s.fast_playback:
             draw_note(body, "Through Objects needs Fast Playback.", context, "INFO")
 

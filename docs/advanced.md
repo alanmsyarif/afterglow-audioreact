@@ -5,19 +5,18 @@ For short steps and examples, download the [offline HTML guide](../dist/noctune-
 Noctune Free uses three views in the **Noctune** sidebar tab (`N`):
 
 - **Setup:** choose objects, build or update, refresh playback under **Tools**, or remove the reaction under **Cleanup**.
-- **Style:** tune the selected reacting object's appearance. Audio Response, Ripple Motion and Glow are optional sections here.
+- **Style:** tune the selected reacting object's appearance. Audio Response and Ripple Motion are optional sections here.
 - **Presets:** browse built-in look thumbnails, explicitly press **Apply Look**, or open **My Object Looks** for saved looks and JSON import/export.
 
 Music and Start Frame remain at the top. A successful Build Reaction opens Style.
 View changes and preset browsing do not change the scene. Inside Setup → Tools, expand **Audio & Setup** for Spread Bands, Calibrate and Refresh Reaction Setup. Build and Update calibrate
-audio while preserving appearance. Add compositor glow explicitly under **Style →
-Glow → Add Glow**.
+audio while preserving appearance. Add any compositor glow directly in Blender.
 
 ## Rendering
 
 Use Blender's **Output Properties** for resolution, frame range, output format and
 destination, then choose **Render → Render Animation**. Playback loops use Blender's
-timeline preview range. Object builds preserve native output settings. The timeline end follows the track when music, Start Frame or frame rate changes; later manual range edits remain until that configuration changes again. Build and Update leave the compositor untouched; add glow explicitly from Style.
+timeline preview range. Object builds preserve native output settings. The timeline end follows the track when music, Start Frame or frame rate changes; later manual range edits remain until that configuration changes again. Build and Update leave the compositor untouched; add any glow directly in Blender.
 
 ## Prepare your objects
 
@@ -162,3 +161,7 @@ license details.
   never hands a missing sound to its modifiers; relink or pack the sound instead.
 
 Compositor integration has been removed in 0.32.1. Noctune no longer adds, removes or edits compositor nodes or changes render settings. Existing nodes saved in older projects stay in place; mute/bypass old **Noctune Render Glow** nodes manually in Blender if needed. Material Idle Glow and Pro beam/effect Glow remain object-level brightness controls.
+
+### Ripple along curves
+
+Enable **Ripple Motion → Through Objects** with **Fast Playback** on. Native curve objects follow each spline from its first point to its last; **Reverse** flips the direction. Closed curves start at their spline seam, and multiple splines each span a full sweep. Beveled/extruded curves use Blender’s generated UVMap along the spline; keep it intact in modifiers before Noctune. Converted mesh objects continue to use the selected world-space direction. Use **Update Reaction** once after installing the update.

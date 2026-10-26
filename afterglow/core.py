@@ -331,11 +331,14 @@ def wave(scene, objs):
     span = max(r[1] for r in ranges) - lo
     span = span if span > 1e-6 else 1.0
     for ob, (a, b) in zip(objs, ranges):
-        tmin, tmax = (a - lo) / span, (b - lo) / span
+        follows_curve = ob.type == "CURVE"
+        # Each spline traverses its own full length; collection axes still place
+        # ordinary meshes and native lights. Reverse is folded into its factor.
+        tmin, tmax = (0.0, 1.0) if follows_curve else ((a - lo) / span, (b - lo) / span)
         if s.ripple_reverse:
             tmin, tmax = 1.0 - tmax, 1.0 - tmin
         mod = reaction(ob)
-        for name, value in (("Wave Radial", radial), ("Wave Axis", tuple(axis.tolist())),
+        for name, value in (("Wave Curve", follows_curve), ("Wave Radial", radial), ("Wave Axis", tuple(axis.tolist())),
                             ("Wave Origin", tuple(centre.tolist())), ("Wave Lo", lo), ("Wave Span", span),
                             ("Wave Reverse", s.ripple_reverse), ("Tap Min", tmin), ("Tap Max", tmax)):
             nodes.set_input(mod, name, value)

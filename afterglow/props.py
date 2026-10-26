@@ -396,7 +396,7 @@ class AfterglowScene(bpy.types.PropertyGroup):
     ripple_reverse: BoolProperty(name="Reverse", description="Flip the direction: from the far end, "
                                  "or inward instead of outward", update=_replace)
     through: BoolProperty(name="Through Objects", description="The wave crosses each object's surface "
-                          "pixel by pixel instead of lighting it all at once (needs Fast Playback)",
+                          "pixel by pixel; curves follow their spline direction (needs Fast Playback)",
                           update=_replace)
     fast_playback: BoolProperty(name="Fast Playback", description="Precompute the reaction so playback "
                                 "never evaluates the slow sound node. Re-bake after editing bands, "

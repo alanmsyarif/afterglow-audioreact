@@ -3,7 +3,7 @@ import bpy
 
 GROUP_NAME = "Noctune AudioReact"
 TAG = "afterglow"
-VERSION = 8  # bump when the interface changes; get_group() migrates older groups
+VERSION = 9  # bump when the interface changes; get_group() migrates older groups
 SAMPLES = 8  # ponytail: fixed smoothing sample count; expose it if long tails get steppy
 BEAT_NODE = "Beat Length"
 TEMPO_TAGS = ("afterglow_tempo_path", "afterglow_tempo_start", "afterglow_tempo_size")  # set by tempo.bake
@@ -46,10 +46,11 @@ INPUTS = (
     ("Meter Invert", "NodeSocketBool", False),
     ("Intensity", "NodeSocketFloat", 1.0),   # emission brightness multiplier (colour mix unaffected)
     ("Glow", "NodeSocketFloat", 0.0),        # idle glow: brightness never drops below this level
+    ("Wave Curve", "NodeSocketBool", False),  # internal: follow native spline direction
 )
 METER_INPUTS = ("Meter", "Meter Axis", "Meter Invert")  # driven by the object's afterglow props
 BAKE_INPUTS = ("Baked Peak",) + tuple(f"Baked Tap {k}" for k in range(TAPS))
-WAVE_INPUTS = ("Wave Radial", "Wave Axis", "Wave Origin", "Wave Lo", "Wave Span", "Wave Reverse")
+WAVE_INPUTS = ("Wave Radial", "Wave Axis", "Wave Origin", "Wave Lo", "Wave Span", "Wave Reverse", "Wave Curve")
 SCENE_INPUTS = {"Sound", "Start Frame", "Ripple", "Beats per Sweep", "Use Baked", "Through", *WAVE_INPUTS}
 RIPPLE_PAIR = {"Gain": "Ripple Gain", "Threshold": "Ripple Threshold"}
 OBJECT_INPUTS = [name for name, _, _ in INPUTS
@@ -222,12 +223,14 @@ def _build():
                 socket.default_value = v
         return n.outputs[0]
 
-    # mode: 0 = plain, 1 = Through along an axis, 2 = Through radial (only while baked)
+    # mode: 0 plain, 1 axis, 2 radial, 3 spline direction (only while baked)
     on = N.new("FunctionNodeBooleanMath")
     on.operation = "AND"
     L.new(g["Through"], on.inputs[0])
     L.new(g["Use Baked"], on.inputs[1])
-    mode = op("MULTIPLY", on.outputs[0], op("ADD", g["Wave Radial"], 1.0))
+    spatial_mode = op("ADD", g["Wave Radial"], 1.0)
+    mode = op("MULTIPLY", on.outputs[0], op("ADD", spatial_mode,
+              op("MULTIPLY", g["Wave Curve"], op("SUBTRACT", 3.0, spatial_mode))))
 
     realize = N.new("GeometryNodeRealizeInstances")
     L.new(g["Geometry"], realize.inputs[0])
@@ -286,13 +289,35 @@ def _build():
     wave_vec.operation = "ADD"
     L.new(g["Wave Axis"], wave_vec.inputs[0])
     L.new(scaled.outputs["Vector"], wave_vec.inputs[1])
+    # Legacy curves with bevel/extrusion enter modifiers as meshes. Blender's
+    # generated UVMap X follows each spline, including its cyclic seam. Bare
+    # curve components use Spline Parameter instead. Neither changes geometry.
+    uv = N.new("GeometryNodeInputNamedAttribute")
+    uv.data_type = "FLOAT_VECTOR"
+    uv.inputs["Name"].default_value = "UVMap"
+    uv_x = N.new("ShaderNodeSeparateXYZ")
+    L.new(uv.outputs["Attribute"], uv_x.inputs[0])
+    parameter = N.new("GeometryNodeSplineParameter")
+    factor = N.new("GeometryNodeSwitch")
+    factor.input_type = "FLOAT"
+    L.new(uv.outputs["Exists"], factor.inputs["Switch"])
+    L.new(parameter.outputs["Factor"], factor.inputs["False"])
+    L.new(uv_x.outputs["X"], factor.inputs["True"])
+    curve_pos = op("ADD", factor.outputs[0], op("MULTIPLY", g["Wave Reverse"],
+                   op("SUBTRACT", 1.0, op("MULTIPLY", factor.outputs[0], 2.0))))
+    curve_vec = vec(curve_pos, 0.0, 0.0)
+    coordinate = N.new("GeometryNodeSwitch")
+    coordinate.input_type = "VECTOR"
+    L.new(g["Wave Curve"], coordinate.inputs["Switch"])
+    L.new(wave_vec.outputs["Vector"], coordinate.inputs["False"])
+    L.new(curve_vec, coordinate.inputs["True"])
     waved = out
     for name, value in (
         ("ar_tap0", vec(lv[0], lv[1], lv[2])),
         ("ar_tap1", vec(lv[3], lv[4], lv[5])),
         ("ar_tap2", vec(lv[6], lv[7], lo)),
         ("ar_tap3", vec(span, g["Tap Min"], g["Tap Max"])),
-        ("ar_wave", wave_vec.outputs["Vector"]),
+        ("ar_wave", coordinate.outputs[0]),
         ("ar_color_a", g["Color A"]),
         ("ar_color_b", g["Color B"]),
     ):
@@ -303,6 +328,24 @@ def _build():
         L.new(waved, store.inputs["Geometry"])
         L.new(value, store.inputs["Value"])
         waved = store.outputs["Geometry"]
+    # Preserve per-corner UVs: averaging to points would smear a closed spline's
+    # 0/1 seam. Other meshes retain their existing constant wave attribute.
+    corners = N.new("GeometryNodeStoreNamedAttribute")
+    corners.data_type = "FLOAT_VECTOR"
+    corners.domain = "CORNER"
+    corners.inputs["Name"].default_value = "ar_wave"
+    L.new(waved, corners.inputs["Geometry"])
+    L.new(curve_vec, corners.inputs["Value"])
+    size = N.new("GeometryNodeAttributeDomainSize")
+    size.component = "MESH"
+    L.new(out, size.inputs["Geometry"])
+    mesh_curve = op("MULTIPLY", g["Wave Curve"], op("GREATER_THAN", size.outputs["Point Count"], 0.0))
+    corner_pick = N.new("GeometryNodeSwitch")
+    corner_pick.input_type = "GEOMETRY"
+    L.new(mesh_curve, corner_pick.inputs["Switch"])
+    L.new(waved, corner_pick.inputs["False"])
+    L.new(corners.outputs["Geometry"], corner_pick.inputs["True"])
+    waved = corner_pick.outputs[0]
     pick = N.new("GeometryNodeSwitch")
     pick.input_type = "GEOMETRY"
     L.new(on.outputs[0], pick.inputs["Switch"])
