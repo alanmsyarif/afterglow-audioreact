@@ -25,7 +25,7 @@
   ],
   "edition": "free",
   "name": "Noctune Free",
-  "version": "0.32.0",
+  "version": "0.32.1",
   "title": "Noctune Free — Music-Reactive Materials & Lights",
   "summary": "Turn your Blender objects and lights into music visuals. Select, load a track and build; choose your look afterward.",
   "headline": "Make your music visible.",
@@ -79,7 +79,7 @@
       "items": [
         "Directional and radial ripple placement.",
         "Level Meter along the object’s local axis.",
-        "Optional compositor glow, added as a separate action."
+        "Compositor and render settings stay under your control."
       ],
       "media": [
         "ripple-demo",

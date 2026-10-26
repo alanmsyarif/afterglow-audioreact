@@ -1,4 +1,4 @@
-# Noctune Free 0.32.0
+# Noctune Free 0.32.1
 
 **Choose music. Make it glow.**
 
@@ -6,7 +6,7 @@ Make your own meshes, curves, text and lights react to music in Blender. Select
 your objects, load a track and build. Styling is optional afterward. Noctune prepares geometry materials,
 calibrates the reaction and prepares playback for you.
 
-[**Download Noctune Free 0.32.0**](dist/noctune-free-0.32.0.zip?raw=true)
+[**Download Noctune Free 0.32.1**](dist/noctune-free-0.32.1.zip?raw=true)
 
 **Blender 5.2+ · EEVEE and Cycles · Runs locally**
 
@@ -53,12 +53,11 @@ Start Frame, Delay and Ripple placement do not change that measurement.
   to reuse it elsewhere.
 - **Ripple motion and level meters:** send light across objects and surfaces, or
   fill objects like equalizer bars.
-- **Soft glow:** add optional compositor glow to the final image.
 - **Playback preparation:** Noctune calibrates and bakes the reaction when you
   build it.
 
 **Style** shows the selected object's appearance directly. Its **Audio Response**,
-**Ripple Motion** and **Glow** sections keep optional controls close to the result.
+**Ripple Motion** sections keep optional controls close to the result.
 **Presets** contains both the thumbnail browser and **My Object Looks**.
 **Setup → Tools** holds playback refresh and calibration; **Setup → Cleanup**
 removes the reaction. You can change views without changing the scene.
@@ -82,7 +81,7 @@ Materials or light data you reassigned manually stay in place.
 | Feature | Free | Pro |
 |---|:---:|:---:|
 | Object materials, native lights and music reactions | ✓ | ✓ |
-| Object looks, custom looks, ripple motion, level meters and glow | ✓ | ✓ |
+| Object looks, custom looks, ripple motion and level meters | ✓ | ✓ |
 | Generated environment lights, beams, lasers and signal effects | | ✓ |
 | Environment looks and layer controls | | ✓ |
 
@@ -101,7 +100,7 @@ compatible.
 
 Built-in object looks preserve existing emissive material colors and use zero idle glow. Newly prepared materials use the preset palette. To add a constant glow, adjust **Style → Idle Glow**; calibration changes audio sensitivity, not this artistic control. Zero emission can still leave a surface visible under scene lighting.
 
-Build and Update leave compositor glow untouched. Add a halo explicitly under **Style → Glow → Add Glow**.
+Noctune does not modify the compositor. Add any glow directly in Blender.
 
 ## Superhive product-page files
 
@@ -119,3 +118,5 @@ Open it, choose an edition, then use **Copy HTML** or **Copy formatted text**.
 All preview images are embedded; no ZIP or media folder is needed. If the
 marketplace strips embedded images, use the built-in Image links helper to save
 them for upload and substitute their hosted URLs.
+
+Compositor integration has been removed in 0.32.1. Noctune no longer adds, removes or edits compositor nodes or changes render settings. Existing nodes saved in older projects stay in place; mute/bypass old **Noctune Render Glow** nodes manually in Blender if needed. Material Idle Glow and Pro beam/effect Glow remain object-level brightness controls.

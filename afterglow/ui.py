@@ -797,7 +797,6 @@ def draw_advanced(layout, context):
         body.prop(s, "through")
         if s.through and not s.fast_playback:
             draw_note(body, "Through Objects needs Fast Playback.", context, "INFO")
-    creator.draw_finish(layout, context)
 
 
 def draw_object_tools(layout, context):

@@ -7,7 +7,7 @@ import math
 
 import numpy as np
 
-from . import core, finish, workflow
+from . import core, workflow
 
 
 def _sound_preflight(scene):
@@ -38,4 +38,4 @@ def create_visual(context):
     result = workflow.create_reaction(scene, style_scope="OBJECT")
     scene.frame_set(s.start_frame)
     return {**result, "camera": scene.camera,
-            "glow": finish.enabled(scene) and scene.render.use_compositing}
+            "glow": False}

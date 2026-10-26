@@ -92,7 +92,7 @@ def test_style_tools_and_saved_looks_have_separate_pages():
     state.object_page = 'STYLE'
     style = draw(bpy.context, opened=None)
     style_tools = {item[1] for item in style if item[0] == 'op'}
-    assert 'afterglow.add_render_glow' in style_tools
+    assert 'afterglow.add_render_glow' not in style_tools
     assert {'ripple','through'} <= {item[1] for item in style if item[0] == 'prop'}
     state.object_page = 'PRESETS'
     library = draw(bpy.context, opened=None)

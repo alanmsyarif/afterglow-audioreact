@@ -365,8 +365,8 @@ class AfterglowScene(bpy.types.PropertyGroup):
         environment_look: EnumProperty(name="Environment Look", items=browser.environment_items, options=set(),
                                        get=_environment_look_get, set=_environment_look_set,
                                        description="Choose the generated lighting style independently of the object look")
-    easy_glow: BoolProperty(name="Soft Glow", default=True, options=set(),
-                           description="Legacy compatibility flag; compositor glow is now a separate explicit action")
+    easy_glow: BoolProperty(name="Legacy Soft Glow", default=False, options={"HIDDEN"},
+                           description="Unused compatibility flag; compositor integration has been removed")
     saved_looks: CollectionProperty(type=AfterglowSavedLook)
     saved_look_index: IntProperty(name="Saved Look", default=0, min=0)
     new_look_name: StringProperty(name="Name", default="My Look", maxlen=64)

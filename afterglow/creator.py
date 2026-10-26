@@ -1,4 +1,4 @@
-"""Creator actions: reusable project looks, complete shows, and creative glow."""
+"""Creator actions: reusable project looks, complete shows, and style libraries."""
 import json
 from pathlib import Path
 
@@ -6,7 +6,7 @@ import bpy
 from bpy.props import EnumProperty, StringProperty
 from bpy_extras.io_utils import ExportHelper, ImportHelper
 
-from . import bake, edition, finish, lookbook, workflow
+from . import bake, edition, lookbook, workflow
 
 MAX_LOOKS = 64
 SCOPE_ITEMS = (
@@ -220,37 +220,6 @@ class AFTERGLOW_UL_saved_looks(bpy.types.UIList):
         layout.prop(item, "name", text="", emboss=False, icon="PRESET")
 
 
-class AFTERGLOW_OT_add_render_glow(bpy.types.Operator):
-    bl_idname = "afterglow.add_render_glow"
-    bl_label = "Add Glow"
-    bl_description = "Add reversible compositor fog glow to this scene's render output"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        try:
-            finish.enable(context.scene)
-        except ValueError as error:
-            self.report({"ERROR"}, str(error))
-            return {"CANCELLED"}
-        self.report({"INFO"}, "Glow added. The compositor applies it to the final image")
-        return {"FINISHED"}
-
-
-class AFTERGLOW_OT_remove_render_glow(bpy.types.Operator):
-    bl_idname = "afterglow.remove_render_glow"
-    bl_label = "Remove Glow"
-    bl_description = "Remove Noctune's glow node while preserving the compositor's other nodes"
-    bl_options = {"REGISTER", "UNDO"}
-
-    def execute(self, context):
-        try:
-            finish.disable(context.scene)
-        except ValueError as error:
-            self.report({"ERROR"}, str(error))
-            return {"CANCELLED"}
-        return {"FINISHED"}
-
-
 def draw_library(layout, context, scope="ALL"):
     from .ui import draw_note
     s = context.scene.afterglow
@@ -288,36 +257,10 @@ def draw_library(layout, context, scope="ALL"):
     draw_note(body, note, context)
 
 
-def draw_finish(layout, context):
-    from .ui import draw_note
-    head, body = layout.panel("AFTERGLOW_finish", default_closed=True)
-    head.label(text="Glow", icon="LIGHT")
-    if body:
-        body.enabled = not getattr(context.screen, "is_animation_playing", False)
-        tree = context.scene.compositing_node_group
-        owned = [node for node in tree.nodes if node.get(finish.TAG)] if tree else []
-        if owned:
-            body.operator("afterglow.remove_render_glow", icon="X")
-            if finish.enabled(context.scene):
-                glare = owned[0]
-                body.prop(glare.inputs["Strength"], "default_value", text="Glow Strength", slider=True)
-                body.prop(glare.inputs["Threshold"], "default_value", text="Highlight Threshold")
-                if context.scene.render.use_compositing:
-                    draw_note(body, "Glow is active in the final render. Other compositor nodes remain editable.", context, "CHECKMARK")
-                else:
-                    draw_note(body, "Glow is connected. Enable Compositing in Blender's Render Properties to see it.", context, "INFO")
-            else:
-                draw_note(body, "The glow node is bypassed. Remove it here to clear the old node before adding another.", context, "INFO")
-        else:
-            body.operator("afterglow.add_render_glow", icon="SHADING_RENDERED")
-            draw_note(body, "Optional glow for the final image. Keeps the existing output chain and render engine.", context)
-
-
 PRO_CLASSES = (AFTERGLOW_OT_build_show,) if edition.IS_PRO else ()
 CLASSES = (*PRO_CLASSES, AFTERGLOW_OT_save_look, AFTERGLOW_OT_apply_saved_look,
            AFTERGLOW_OT_build_saved_look, AFTERGLOW_OT_remove_saved_look,
-           AFTERGLOW_OT_import_look, AFTERGLOW_OT_export_look, AFTERGLOW_UL_saved_looks,
-           AFTERGLOW_OT_add_render_glow, AFTERGLOW_OT_remove_render_glow)
+           AFTERGLOW_OT_import_look, AFTERGLOW_OT_export_look, AFTERGLOW_UL_saved_looks)
 
 
 def register():

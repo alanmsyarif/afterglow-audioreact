@@ -7,7 +7,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy
 import helpers
-from afterglow import bake, core, effect_schema, finish, lookbook, materials, nodes, prepare, workflow
+from afterglow import bake, core, effect_schema, lookbook, materials, nodes, prepare, workflow
 
 
 def stage():
@@ -28,9 +28,6 @@ def test_new_generated_data_uses_noctune_names():
     plain = helpers.plane("Plain")
     prepare.selected([plain])
     assert plain.active_material.name.startswith("Noctune ")
-    glow = finish.enable(scene)
-    assert glow.name == "Noctune Render Glow" and glow.label == "Noctune • Render Glow"
-    assert scene.compositing_node_group.name.startswith("Noctune • ")
 
 
 def test_legacy_named_modifiers_and_shader_groups_are_reused():
@@ -104,18 +101,6 @@ def test_legacy_audio_is_kept_while_environment_owns_it():
     core.remove(scene)
     assert core.sound_strip(scene) == strip and strip.name == "Afterglow Audio"
     assert not any(core.find_modifier(obj) for obj in objects)
-
-
-def test_legacy_compositor_glow_is_reused_without_renaming_user_data():
-    scene = bpy.context.scene
-    node = finish.enable(scene)
-    tree = scene.compositing_node_group
-    node.name, node.label = "Afterglow Render Glow", "My glow"
-    tree.name = "Afterglow • Scene Compositor"
-    assert finish.enable(scene) == node
-    assert node.name == "Afterglow Render Glow" and node.label == "My glow"
-    assert scene.compositing_node_group == tree and tree.name == "Afterglow • Scene Compositor"
-    assert finish.disable(scene) and len(tree.nodes) == 2
 
 
 def test_legacy_project_reopens_with_bakes_looks_and_names_intact():

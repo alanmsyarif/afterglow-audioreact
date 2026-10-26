@@ -160,3 +160,5 @@ license details.
   lights need no materials. Use **Use Selected** to prepare ordinary materials.
 - Blender 5.2 crashes when the Sample Sound node evaluates a missing file, so Noctune
   never hands a missing sound to its modifiers; relink or pack the sound instead.
+
+Compositor integration has been removed in 0.32.1. Noctune no longer adds, removes or edits compositor nodes or changes render settings. Existing nodes saved in older projects stay in place; mute/bypass old **Noctune Render Glow** nodes manually in Blender if needed. Material Idle Glow and Pro beam/effect Glow remain object-level brightness controls.

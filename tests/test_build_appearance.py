@@ -6,7 +6,7 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bpy
 import helpers
-from afterglow import core, easy, finish, nodes, presets, ui
+from afterglow import core, easy, nodes, presets, ui
 
 
 class Layout:
@@ -47,8 +47,7 @@ def test_build_precedes_optional_appearance_and_look_is_never_implicit():
     snapshot = helpers.snapshot(original)
     scene.afterglow.creative_look = 'AURORA_FLOW'
     with patch.object(presets, 'preflight', side_effect=AssertionError('No preset preflight during build')), \
-         patch.object(presets, 'apply', side_effect=AssertionError('No preset application during build')), \
-         patch.object(finish, 'enable', side_effect=AssertionError('Glow is an explicit appearance action')):
+         patch.object(presets, 'apply', side_effect=AssertionError('No preset application during build')):
         assert bpy.ops.afterglow.create_visual() == {'FINISHED'}
     mod = core.reaction(objects[0])
     assert not nodes.get_input(mod,'Use Colors')
