@@ -80,6 +80,20 @@ def _replace(self, context):
     _rebake(context.scene)
 
 
+def _ripple_toggle(self, context):
+    if self.ripple and self.ripple_style != "CLASSIC":
+        self["fast_playback"] = True
+        self["through"] = True
+    _retempo(self, context)
+
+
+def _ripple_preset(self, context):
+    if self.ripple_style != "CLASSIC":
+        self["fast_playback"] = True
+        self["through"] = True
+    _replace(self, context)
+
+
 def _live(self, context):
     """A live effect control changed: retune the last build in place, no rebuild."""
     effects.live_update(self.id_data)
@@ -332,6 +346,7 @@ def _retempo(self, context):
     """Sound, Start Frame or Ripple changed: sync, and re-key the tempo curve if rippling."""
     core.sync(context.scene)
     if context.scene.afterglow.ripple:
+        core.replace(context.scene)
         try:
             tempo.bake(context.scene)
         except ValueError:
@@ -378,7 +393,28 @@ class AfterglowScene(bpy.types.PropertyGroup):
     start_frame: IntProperty(name="Start Frame", default=1,
                              description="Frame where the audio starts playing", update=_retempo)
     ripple: BoolProperty(name="Ripple", description="Every kick sweeps across the collection by "
-                         "position; the sweep follows the song's tempo", update=_retempo)
+                         "position; the sweep follows the song's tempo", update=_ripple_toggle)
+    ripple_style: EnumProperty(name="Preset", default="CLASSIC", update=_ripple_preset,
+        items=(("FLOW", "Flow", "A smooth leading edge with a fading tail", 1),
+               ("CHASE", "Chase", "Four short pulses run one after another", 2),
+               ("BOUNCE", "Bounce", "Travel to the end, then return", 3),
+               ("ECHO", "Echo", "A main pulse followed by two weaker copies", 4),
+               ("COLLISION", "Collision", "Opposing pulses meet in a bright center flash", 5),
+               ("CLASSIC", "Original", "Keep the original audio-envelope ripple", 0)))
+    ripple_speed: FloatProperty(name="Speed", default=1.0, min=.25, max=4.0,
+                               update=_sync_rebake, description="Travel speed relative to the music tempo")
+    ripple_width: FloatProperty(name="Width", default=.16, min=.025, max=.4,
+                               update=_sync_rebake, description="Pulse width as a fraction of the route")
+    ripple_intensity: FloatProperty(name="Intensity", default=1.0, min=0.0, soft_max=4.0,
+                                   update=_sync_rebake, description="Brightness multiplier for the ripple")
+    ripple_dynamics: FloatProperty(name="Beat Dynamics", default=1.0, min=0.0, max=1.0,
+                                  update=_sync_rebake, description="Stronger beats make wider pulses")
+    ripple_color_trails: BoolProperty(name="Color Trails", default=False, update=_sync_rebake,
+                                     description="Use Color A for heads and Color B for fading tails; off preserves authored colors")
+    ripple_connect: BoolProperty(name="Connect Curves", default=True, update=_replace,
+                                 description="Join touching single-spline curve objects into routes; branches split the wave")
+    ripple_join_distance: FloatProperty(name="Join Distance", default=0, min=0, unit="LENGTH",
+                                       update=_replace, description="Endpoint distance for joining curves; zero chooses a scale-aware tolerance")
     beats_per_sweep: FloatProperty(name="Beats per Sweep", default=1.0, min=0.05, max=16.0,
                                    description="How many beats one sweep takes to cross the collection",
                                    update=_sync_rebake)

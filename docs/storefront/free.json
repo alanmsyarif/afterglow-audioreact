@@ -25,7 +25,7 @@
   ],
   "edition": "free",
   "name": "Noctune Free",
-  "version": "0.33.0",
+  "version": "0.34.0",
   "title": "Noctune Free — Music-Reactive Materials & Lights",
   "summary": "Turn your Blender objects and lights into music visuals. Select, load a track and build; choose your look afterward.",
   "headline": "Make your music visible.",
@@ -75,14 +75,14 @@
       "id": "motion",
       "tag": "MORE THAN A BRIGHTNESS PULSE",
       "title": "Send a wave through the scene.",
-      "text": "Use Ripple Motion to spread a reaction across objects. Through Objects carries the wave across a surface. Level Meter fills geometry like an equalizer bar.",
+      "text": "Choose Flow, Chase, Bounce, Echo or Collision. Curve waves follow their paths and continue across touching single-spline curve objects. Speed, Width and Intensity keep the main controls simple.",
       "items": [
-        "Directional and radial ripple placement.",
-        "Level Meter along the object’s local axis.",
-        "Compositor and render settings stay under your control."
+        "Beat-driven pulse size and smooth closed-loop travel.",
+        "Automatic connected routes and branch splits.",
+        "Optional color trails; authored emission colors stay yours when tinting is off."
       ],
       "media": [
-        "ripple-demo",
+        "ripple-presets",
         "meter-demo"
       ]
     }

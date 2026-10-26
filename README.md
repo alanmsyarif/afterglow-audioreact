@@ -1,4 +1,4 @@
-# Noctune Free 0.33.0
+# Noctune Free 0.34.0
 
 **Choose music. Make it glow.**
 
@@ -6,7 +6,7 @@ Make your own meshes, curves, text and lights react to music in Blender. Select
 your objects, load a track and build. Styling is optional afterward. Noctune prepares geometry materials,
 calibrates the reaction and prepares playback for you.
 
-[**Download Noctune Free 0.33.0**](dist/noctune-free-0.33.0.zip?raw=true)
+[**Download Noctune Free 0.34.0**](dist/noctune-free-0.34.0.zip?raw=true)
 
 **Blender 5.2+ · EEVEE and Cycles · Runs locally**
 
@@ -63,7 +63,7 @@ Start Frame, Delay and Ripple placement do not change that measurement.
 removes the reaction. You can change views without changing the scene.
 See the [advanced guide](docs/advanced.md) for the full controls.
 
-Curves automatically carry the wave along each spline when **Style → Ripple Motion → Through Objects** is enabled. Keep **Fast Playback** on; **Reverse** flips the travel direction. Closed loops start at their spline seam, and each spline runs its own sweep. After installing this update, press **Update Reaction** once for existing projects.
+**Ripple Motion** now has **Flow, Chase, Bounce, Echo and Collision** presets. Choose one under **Style → Ripple Motion**, then adjust **Speed, Width** and **Intensity**. Surface travel and Fast Playback are prepared automatically. Touching single-spline curve objects connect into routes, with branch splits and closed-loop travel. **Advanced** holds Beat Dynamics, optional Color Trails, connection distance and direction. Existing reactions keep **Original** until you choose a preset.
 
 ## Preview, render and cleanup
 

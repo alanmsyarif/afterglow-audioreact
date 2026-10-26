@@ -211,7 +211,7 @@ def test_v8_geometry_and_v3_wave_patch_migrate_preserving_keys_and_authored_emis
             node[materials.TAG] = 3
     core.sync(scene)
     core.replace(scene)
-    assert mod.node_group != old and mod.node_group[nodes.TAG] == 9
+    assert mod.node_group != old and mod.node_group[nodes.TAG] == nodes.VERSION
     assert abs(nodes.get_input(mod, 'Intensity') - 2.3) < 1e-5
     assert nodes.get_input(mod, 'Wave Curve')
     assert any(fc.data_path == path for fc in helpers.fcurves(obj))

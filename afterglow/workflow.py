@@ -145,6 +145,13 @@ def create_reaction(scene, look_identifier=None, look_data=None, *, style_scope=
     # with one final bake after tempo and calibration, rather than running it twice.
     from . import props
     props._pending.pop(scene.name, None)
+    s = scene.afterglow
+    # Fresh main-workflow builds start with Flow. Existing projects keep Original
+    # until a preset is explicitly chosen; the low-level legacy API is unchanged.
+    if not s.is_property_set("ripple_style") and not any(core.reaction(o) for o in core._managed(scene)):
+        s["ripple_style"] = 1
+        if s.ripple:
+            s["through"] = True
     applied, skipped, _, linked = core.apply(scene)
     if look_identifier is not None:
         presets.apply(scene, look_identifier, scope=style_scope)

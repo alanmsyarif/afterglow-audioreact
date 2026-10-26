@@ -72,7 +72,7 @@ def _properties():
             elif kind == "NodeSocketVector":
                 prop = FloatVectorProperty(default=default, size=3, **args)
             else:
-                if name != "Wave Lo":
+                if name not in {"Wave Lo", "Pulse Phase"}:
                     args["min"] = 0.0
                 if name in {"Ripple Position", "Tap Min", "Tap Max"}:
                     args["max"] = 1.0
@@ -149,7 +149,7 @@ def _ensure_properties(obj):
         if key not in obj:
             obj[key] = default
         metadata = {"default": default, "description": name}
-        if kind in {"NodeSocketFloat", "NodeSocketInt"} and name != "Wave Lo":
+        if kind in {"NodeSocketFloat", "NodeSocketInt"} and name not in {"Wave Lo", "Pulse Phase"}:
             metadata["min"] = 0
         if name in {"Ripple Position", "Tap Min", "Tap Max"}:
             metadata["max"] = 1
@@ -258,9 +258,9 @@ def _drivers(obj, data):
     _driver(data, "energy", obj, f"base*max({level},glow)*intensity",
             {**response, "base": "base_power", "glow": "glow", "intensity": "intensity"})
     for index in range(3):
-        expression = f"a+(b-a)*min({level},1) if colors else original"
+        expression = f"a+(b-a)*abs((trail and style>0 and ripple)-min({level},1)) if colors or (trail and style>0 and ripple) else original"
         _driver(data, "color", obj, expression,
-                {**response, "colors": "use_colors", "a": f"color_a[{index}]",
+                {**response, "colors": "use_colors", "trail": "pulse_color", "style": "pulse_style", "a": f"color_a[{index}]",
                  "b": f"color_b[{index}]", "original": f"base_color[{index}]"}, index)
 
 

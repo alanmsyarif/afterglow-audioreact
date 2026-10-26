@@ -162,6 +162,22 @@ license details.
 
 Compositor integration has been removed in 0.32.1. Noctune no longer adds, removes or edits compositor nodes or changes render settings. Existing nodes saved in older projects stay in place; mute/bypass old **Noctune Render Glow** nodes manually in Blender if needed. Material Idle Glow and Pro beam/effect Glow remain object-level brightness controls.
 
-### Ripple along curves
+### Ripple presets and connected curves
 
-Enable **Ripple Motion → Through Objects** with **Fast Playback** on. Native curve objects follow each spline from its first point to its last; **Reverse** flips the direction. Closed curves start at their spline seam, and multiple splines each span a full sweep. Beveled/extruded curves use Blender’s generated UVMap along the spline; keep it intact in modifiers before Noctune. Converted mesh objects continue to use the selected world-space direction. Use **Update Reaction** once after installing the update.
+After building, enable **Style → Ripple Motion** and choose **Flow**, **Chase**, **Bounce**, **Echo** or **Collision**. Choosing a preset prepares surface travel and Fast Playback automatically. The main controls are **Speed**, **Width** and **Intensity**; the arrow reverses travel.
+
+| Preset | Motion |
+|---|---|
+| Flow | Smooth leading edge and fading tail. |
+| Chase | Four short fronts in succession. |
+| Bounce | Travel to the end, then return. |
+| Echo | Main pulse with two weaker copies. |
+| Collision | Opposing fronts meet in a center flash. |
+
+Under **Advanced**, Beat Dynamics makes stronger beats wider. Color Trails uses Color A for heads and Color B for tails. Leave Color Trails and Use Colors off to retain authored emission colors and textures.
+
+Connect Curves joins touching single-spline curve objects into length-weighted routes. Branches split a wave; closed chains wrap it around their seam. Join Distance zero chooses a scale-aware tolerance. An Empty + Origin can choose the route's start. After editing endpoints, use Update Reaction. Multi-spline curve objects keep independent sweeps; separate their splines into objects to connect them. Beveled/extruded curves need their generated UVMap intact before Noctune. Converted meshes use the selected world-space direction.
+
+Beats per Sweep remains available in Advanced. Speed multiplies its travel rate; Width changes the pulse shape. Turn Through Objects off for whole-object pulses. Native lights use their object origins and support every preset. Selecting a preset enables surface travel once; later timing changes preserve your Advanced surface choice.
+
+New main-workflow builds start with Flow. Existing reactions retain Original until you select a preset. Original preserves the earlier audio-envelope wave. Native animation supports reopening with scripts disabled. Six recent beat launches can overlap, and each Chase launch contains four fronts. Quiet audio creates no launches; active tails finish, then emission goes dark when Idle Glow is zero. Refresh Playback after manual modifier edits to bands, Delay or response sensitivity.

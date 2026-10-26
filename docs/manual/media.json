@@ -25,5 +25,11 @@
     "animation": "assets/free/ripple-demo.gif",
     "alt": "A band of light travelling across one continuous object surface",
     "caption": "Through Objects: the prepared wave moves across the surface instead of switching the entire object on at once. Play to see the native Free material response."
+  },
+  "ripple-presets": {
+    "path": "assets/free/ripple-presets.png",
+    "animation": "assets/free/ripple-presets.gif",
+    "alt": "Native Blender renders of Flow, Chase, Bounce, Echo and Collision traveling on curved paths",
+    "caption": "Five real ripple presets with controlled prepared launches and optional Color Trails enabled. These native Cycles renders demonstrate motion without a bundled music track or stage."
   }
 }

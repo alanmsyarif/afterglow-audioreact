@@ -7,7 +7,7 @@ import numpy as np
 import bpy
 from mathutils import Vector
 
-from . import effect_schema, light_reaction, materials, nodes
+from . import curve_routes, effect_schema, light_reaction, materials, nodes, ripples
 
 GEOMETRY_TYPES = {"MESH", "CURVE", "FONT"}
 SUPPORTED = GEOMETRY_TYPES | {"LIGHT"}
@@ -164,6 +164,7 @@ def apply(scene):
         nodes.set_input(mod, "Beats per Sweep", s.beats_per_sweep)
         nodes.set_input(mod, "Use Baked", s.fast_playback)
         nodes.set_input(mod, "Through", s.through)
+        write_ripple(s, mod)
         write_meter(ob, mod)
         for m in mats:
             materials.patch_material(m, wave=s.through)
@@ -330,6 +331,7 @@ def wave(scene, objs):
     lo = min(r[0] for r in ranges)
     span = max(r[1] for r in ranges) - lo
     span = span if span > 1e-6 else 1.0
+    routes = curve_routes.layout(scene, objs, dg)
     for ob, (a, b) in zip(objs, ranges):
         follows_curve = ob.type == "CURVE"
         # Each spline traverses its own full length; collection axes still place
@@ -338,7 +340,9 @@ def wave(scene, objs):
         if s.ripple_reverse:
             tmin, tmax = 1.0 - tmax, 1.0 - tmin
         mod = reaction(ob)
-        for name, value in (("Wave Curve", follows_curve), ("Wave Radial", radial), ("Wave Axis", tuple(axis.tolist())),
+        route_start, route_end, loop = routes.get(ob, (0., 1., False))
+        for name, value in (("Curve Start", route_start), ("Curve End", route_end), ("Pulse Loop", loop),
+                            ("Wave Curve", follows_curve), ("Wave Radial", radial), ("Wave Axis", tuple(axis.tolist())),
                             ("Wave Origin", tuple(centre.tolist())), ("Wave Lo", lo), ("Wave Span", span),
                             ("Wave Reverse", s.ripple_reverse), ("Tap Min", tmin), ("Tap Max", tmax)):
             nodes.set_input(mod, name, value)
@@ -463,6 +467,14 @@ def setup_playback(scene):
     scene.sync_mode = "AUDIO_SYNC"
 
 
+def write_ripple(s, mod):
+    for name, value in (("Pulse Style", ripples.STYLES[s.ripple_style]),
+                        ("Pulse Speed", s.ripple_speed), ("Pulse Width", s.ripple_width),
+                        ("Pulse Intensity", s.ripple_intensity), ("Pulse Dynamics", s.ripple_dynamics),
+                        ("Pulse Color", s.ripple_color_trails)):
+        nodes.set_input(mod, name, value)
+
+
 def sync(scene):
     """Push the scene-wide settings into every Noctune modifier. A sound whose file is
     missing is never pushed (it would crash Blender); modifiers keep the previous one."""
@@ -481,6 +493,7 @@ def sync(scene):
             nodes.set_input(mod, "Beats per Sweep", s.beats_per_sweep)
             nodes.set_input(mod, "Use Baked", s.fast_playback)
             nodes.set_input(mod, "Through", s.through)
+            write_ripple(s, mod)
     if push_sound:
         sync_timeline(scene)
         if sound_strip(scene):

@@ -1,9 +1,11 @@
 """The shared Noctune geometry node group and modifier input helpers."""
 import bpy
 
+from . import ripples
+
 GROUP_NAME = "Noctune AudioReact"
 TAG = "afterglow"
-VERSION = 9  # bump when the interface changes; get_group() migrates older groups
+VERSION = 10  # bump when the interface changes; get_group() migrates older groups
 SAMPLES = 8  # ponytail: fixed smoothing sample count; expose it if long tails get steppy
 BEAT_NODE = "Beat Length"
 TEMPO_TAGS = ("afterglow_tempo_path", "afterglow_tempo_start", "afterglow_tempo_size")  # set by tempo.bake
@@ -47,11 +49,28 @@ INPUTS = (
     ("Intensity", "NodeSocketFloat", 1.0),   # emission brightness multiplier (colour mix unaffected)
     ("Glow", "NodeSocketFloat", 0.0),        # idle glow: brightness never drops below this level
     ("Wave Curve", "NodeSocketBool", False),  # internal: follow native spline direction
-)
+    ("Pulse Style", "NodeSocketInt", 0),
+    ("Pulse Ready", "NodeSocketBool", False),
+    ("Pulse Speed", "NodeSocketFloat", 1.0),
+    ("Pulse Width", "NodeSocketFloat", .16),
+    ("Pulse Intensity", "NodeSocketFloat", 1.0),
+    ("Pulse Dynamics", "NodeSocketFloat", 1.0),
+    ("Pulse Color", "NodeSocketBool", False),
+    ("Pulse Loop", "NodeSocketBool", False),
+    ("Curve Start", "NodeSocketFloat", 0.0),
+    ("Curve End", "NodeSocketFloat", 1.0),
+    ("Pulse Phase", "NodeSocketFloat", 0.0),
+) + tuple(item for k in range(ripples.SLOTS) for item in (
+    (f"Pulse Birth {k}", "NodeSocketFloat", 0.0),
+    (f"Pulse Amplitude {k}", "NodeSocketFloat", 0.0),
+))
 METER_INPUTS = ("Meter", "Meter Axis", "Meter Invert")  # driven by the object's afterglow props
-BAKE_INPUTS = ("Baked Peak",) + tuple(f"Baked Tap {k}" for k in range(TAPS))
-WAVE_INPUTS = ("Wave Radial", "Wave Axis", "Wave Origin", "Wave Lo", "Wave Span", "Wave Reverse", "Wave Curve")
-SCENE_INPUTS = {"Sound", "Start Frame", "Ripple", "Beats per Sweep", "Use Baked", "Through", *WAVE_INPUTS}
+PULSE_INPUTS = ("Pulse Phase",) + tuple(name for k in range(ripples.SLOTS)
+                 for name in (f"Pulse Birth {k}", f"Pulse Amplitude {k}"))
+BAKE_INPUTS = ("Baked Peak",) + tuple(f"Baked Tap {k}" for k in range(TAPS)) + PULSE_INPUTS
+WAVE_INPUTS = ("Wave Radial", "Wave Axis", "Wave Origin", "Wave Lo", "Wave Span", "Wave Reverse", "Wave Curve", "Pulse Loop", "Curve Start", "Curve End")
+SCENE_INPUTS = {"Sound", "Start Frame", "Ripple", "Beats per Sweep", "Use Baked", "Through", *WAVE_INPUTS, "Pulse Style", "Pulse Ready", "Pulse Speed", "Pulse Width",
+                "Pulse Intensity", "Pulse Dynamics", "Pulse Color"}
 RIPPLE_PAIR = {"Gain": "Ripple Gain", "Threshold": "Ripple Threshold"}
 OBJECT_INPUTS = [name for name, _, _ in INPUTS
                  if name not in SCENE_INPUTS | {"Ripple Position", "Tap Min", "Tap Max", *BAKE_INPUTS, *METER_INPUTS}
@@ -136,7 +155,7 @@ def _build():
         s = it.new_socket(name, in_out="INPUT", socket_type=socket_type)
         if default is not None:
             s.default_value = default
-        if socket_type == "NodeSocketFloat" and name != "Wave Lo":
+        if socket_type == "NodeSocketFloat" and name not in {"Wave Lo", "Pulse Phase"}:
             s.min_value = 0.0
         if name in {"Ripple Position", "Tap Min", "Tap Max"}:
             s.max_value = 1.0
@@ -232,6 +251,21 @@ def _build():
     mode = op("MULTIPLY", on.outputs[0], op("ADD", spatial_mode,
               op("MULTIPLY", g["Wave Curve"], op("SUBTRACT", 3.0, spatial_mode))))
 
+    pulse_on = op("MULTIPLY", op("MULTIPLY", g["Ripple"], g["Pulse Ready"]),
+                  op("GREATER_THAN", g["Pulse Style"], 0))
+    pulse_on = op("MULTIPLY", pulse_on, on.outputs[0])
+    def choose_vector(factor, a, b):
+        switch = N.new("GeometryNodeSwitch")
+        switch.input_type = "VECTOR"
+        L.new(factor, switch.inputs["Switch"])
+        L.new(a, switch.inputs["False"])
+        L.new(b, switch.inputs["True"])
+        return switch.outputs[0]
+    pulse_mode = op("ADD", op("ADD", 10.0, g["Pulse Style"]), op("MULTIPLY", g["Pulse Loop"], 8.0))
+    base_vector = choose_vector(pulse_on, vec(bright(level), g["Use Colors"], mode), vec(gain, threshold, pulse_mode))
+    color_vector = choose_vector(pulse_on, mix.outputs[2],
+                     vec(op("MULTIPLY", g["Intensity"], g["Pulse Intensity"]),
+                         op("ADD", g["Use Colors"], op("MULTIPLY", g["Pulse Color"], 2)), g["Pulse Dynamics"]))
     realize = N.new("GeometryNodeRealizeInstances")
     L.new(g["Geometry"], realize.inputs[0])
     out = realize.outputs[0]
@@ -257,10 +291,10 @@ def _build():
     for name, data_type, value in (
         ("ar_meter", "FLOAT_VECTOR", vec(along_axis(box.outputs["Min"]), along_axis(box.outputs["Max"]), meter_mode)),
         ("ar_level", "FLOAT", level),                  # classic material layout reads these 3
-        ("ar_color", "FLOAT_COLOR", mix.outputs[2]),
+        ("ar_color", "FLOAT_COLOR", color_vector),
         ("ar_tint", "FLOAT", g["Use Colors"]),
         ("ar_gain", "FLOAT_VECTOR", vec(g["Intensity"], g["Glow"], 0.0)),  # classic layout's brightness
-        ("ar_base", "FLOAT_VECTOR", vec(bright(level), g["Use Colors"], mode)),  # wave layout's fallback
+        ("ar_base", "FLOAT_VECTOR", base_vector),  # wave layout's fallback
     ):
         store = N.new("GeometryNodeStoreNamedAttribute")
         store.data_type = data_type
@@ -311,13 +345,42 @@ def _build():
     L.new(g["Wave Curve"], coordinate.inputs["Switch"])
     L.new(wave_vec.outputs["Vector"], coordinate.inputs["False"])
     L.new(curve_vec, coordinate.inputs["True"])
+    # Compute world-space surface positions natively, including transformed meshes.
+    self_object = N.new("GeometryNodeSelfObject")
+    object_info = N.new("GeometryNodeObjectInfo")
+    object_info.transform_space = "ORIGINAL"
+    L.new(self_object.outputs[0], object_info.inputs["Object"])
+    world = N.new("FunctionNodeTransformPoint")
+    L.new(N.new("GeometryNodeInputPosition").outputs[0], world.inputs["Vector"])
+    L.new(object_info.outputs["Transform"], world.inputs["Transform"])
+    axis_distance = N.new("ShaderNodeVectorMath")
+    axis_distance.operation = "DOT_PRODUCT"
+    L.new(world.outputs[0], axis_distance.inputs[0])
+    L.new(g["Wave Axis"], axis_distance.inputs[1])
+    radial_distance = N.new("ShaderNodeVectorMath")
+    radial_distance.operation = "DISTANCE"
+    L.new(world.outputs[0], radial_distance.inputs[0])
+    L.new(g["Wave Origin"], radial_distance.inputs[1])
+    dist = op("ADD", axis_distance.outputs["Value"], op("MULTIPLY", g["Wave Radial"],
+              op("SUBTRACT", radial_distance.outputs["Value"], axis_distance.outputs["Value"])))
+    spatial = op("DIVIDE", op("SUBTRACT", dist, g["Wave Lo"]), g["Wave Span"])
+    routed = op("ADD", g["Curve Start"], op("MULTIPLY", factor.outputs[0], op("SUBTRACT", g["Curve End"], g["Curve Start"])))
+    position = op("ADD", spatial, op("MULTIPLY", g["Wave Curve"], op("SUBTRACT", routed, spatial)))
+    position = op("ADD", position, op("MULTIPLY", g["Wave Reverse"], op("SUBTRACT", 1, op("MULTIPLY", position, 2))))
+    pulse_vector = vec(position, op("MULTIPLY", g["Glow"], g["Intensity"]), g["Pulse Width"])
+    pulse_values = []
+    for k in range(ripples.SLOTS):
+        age = op("DIVIDE", op("MULTIPLY", op("SUBTRACT", g["Pulse Phase"], g[f"Pulse Birth {k}"]), g["Pulse Speed"]),
+                 op("MAXIMUM", g["Beats per Sweep"], .05))
+        pulse_values.extend((age, g[f"Pulse Amplitude {k}"]))
+    pulse_taps = [vec(*pulse_values[k:k+3]) for k in range(0, len(pulse_values), 3)]
     waved = out
     for name, value in (
-        ("ar_tap0", vec(lv[0], lv[1], lv[2])),
-        ("ar_tap1", vec(lv[3], lv[4], lv[5])),
-        ("ar_tap2", vec(lv[6], lv[7], lo)),
-        ("ar_tap3", vec(span, g["Tap Min"], g["Tap Max"])),
-        ("ar_wave", coordinate.outputs[0]),
+        ("ar_tap0", choose_vector(pulse_on, vec(lv[0], lv[1], lv[2]), pulse_taps[0])),
+        ("ar_tap1", choose_vector(pulse_on, vec(lv[3], lv[4], lv[5]), pulse_taps[1])),
+        ("ar_tap2", choose_vector(pulse_on, vec(lv[6], lv[7], lo), pulse_taps[2])),
+        ("ar_tap3", choose_vector(pulse_on, vec(span, g["Tap Min"], g["Tap Max"]), pulse_taps[3])),
+        ("ar_wave", choose_vector(pulse_on, coordinate.outputs[0], pulse_vector)),
         ("ar_color_a", g["Color A"]),
         ("ar_color_b", g["Color B"]),
     ):
@@ -335,7 +398,7 @@ def _build():
     corners.domain = "CORNER"
     corners.inputs["Name"].default_value = "ar_wave"
     L.new(waved, corners.inputs["Geometry"])
-    L.new(curve_vec, corners.inputs["Value"])
+    L.new(choose_vector(pulse_on, curve_vec, pulse_vector), corners.inputs["Value"])
     size = N.new("GeometryNodeAttributeDomainSize")
     size.component = "MESH"
     L.new(out, size.inputs["Geometry"])

@@ -1,9 +1,11 @@
 """Patch emission inputs to read Noctune attributes, and undo it exactly."""
 import bpy
 
+from . import ripple_shader
+
 TAG = "afterglow"
 LAYOUT_CLASSIC = 5  # Noctune Level group, 5 attributes (incl. Level Meter, Intensity/Glow); 1 was plain Attribute nodes
-LAYOUT_WAVE = 6     # Through Objects: 9 attributes, including native spline direction
+LAYOUT_WAVE = 7     # Through Objects: 9 attributes, including native spline direction
 WAVE_GROUP = "Noctune Wave"
 LEVEL_GROUP = "Noctune Level"
 METER_SOFT = 0.04  # Level Meter fill edge, as a fraction of the object's height
@@ -180,10 +182,13 @@ def _build_wave():
     for k, tap in enumerate(taps):  # hat weights = linear interpolation between neighbouring taps
         term = op("MULTIPLY", tap, op("MAXIMUM", op("SUBTRACT", 1.0, op("ABSOLUTE", op("SUBTRACT", u, float(k)))), 0.0))
         blend = term if blend is None else op("ADD", blend, term)
-    L.new(op("ADD", level, op("MULTIPLY", through, op("SUBTRACT", blend, level))), out.inputs["Level"])
+    legacy_level = op("ADD", level, op("MULTIPLY", through, op("SUBTRACT", blend, level)))
+    pulse_level, pulse_color, pulse_tint, pulse_active = ripple_shader.build(N, L, _shader_tools(N, L))
+    L.new(op("ADD", legacy_level, op("MULTIPLY", pulse_active, op("SUBTRACT", pulse_level, legacy_level))), out.inputs["Level"])
     wave_color = mix(blend, attr("ar_color_a", "Vector"), attr("ar_color_b", "Vector"))
-    L.new(mix(through, attr("ar_color", "Color"), wave_color), out.inputs["Color"])
-    L.new(tint, out.inputs["Tint"])
+    legacy_color = mix(through, attr("ar_color", "Color"), wave_color)
+    L.new(mix(pulse_active, legacy_color, pulse_color), out.inputs["Color"])
+    L.new(op("ADD", tint, op("MULTIPLY", pulse_active, op("SUBTRACT", pulse_tint, tint))), out.inputs["Tint"])
     for i, n in enumerate(N):  # ponytail: one row so the tree is at least untangled if opened
         n.location = (i * 180, 0)
     return ng

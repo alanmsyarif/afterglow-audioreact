@@ -788,10 +788,27 @@ def draw_advanced(layout, context):
     if body:
         body.enabled = not playing
         body.active = s.ripple
+        row = body.row(align=True)
+        row.prop(s, "ripple_style")
+        row.prop(s, "ripple_reverse", text="", icon="ARROW_LEFTRIGHT")
+        if s.ripple_style != "CLASSIC":
+            body.prop(s, "ripple_speed")
+            body.prop(s, "ripple_width")
+            body.prop(s, "ripple_intensity")
+        header, advanced = body.panel("AFTERGLOW_ripple_advanced", default_closed=True)
+        header.label(text="Advanced")
+        if not advanced:
+            return
+        body = advanced
         body.prop(s, "beats_per_sweep")
+        if s.ripple_style != "CLASSIC":
+            body.prop(s, "ripple_dynamics")
+            body.prop(s, "ripple_color_trails")
+            body.prop(s, "ripple_connect")
+            if s.ripple_connect:
+                body.prop(s, "ripple_join_distance")
         row = body.row(align=True)
         row.prop(s, "ripple_from", text="From")
-        row.prop(s, "ripple_reverse", text="", icon="ARROW_LEFTRIGHT")
         if s.ripple_from == "EMPTY":
             body.prop(s, "ripple_origin")
         body.prop(s, "through")

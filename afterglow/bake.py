@@ -6,7 +6,7 @@ import bpy
 import numpy as np
 from bpy_extras import anim_utils
 
-from . import core, nodes, tempo
+from . import core, nodes, ripples, tempo
 
 FFT, HOP, CHUNK = 4096, 256, 256  # FFT and Hann window match the node defaults
 TAIL_S = 2.0  # keep keying past the song end so decay/delay tails finish
@@ -49,7 +49,8 @@ def signature(mod, scene):
     s = scene.afterglow
     vals = [nodes.get_input(mod, n) for n in
             ("Low", "High", "Decay", "Delay", "Ripple", "Ripple Position", "Beats per Sweep", "Start Frame",
-             "Through", "Tap Min", "Tap Max")]
+             "Through", "Tap Min", "Tap Max", "Pulse Style", "Pulse Speed", "Pulse Width",
+             "Pulse Intensity", "Pulse Dynamics", "Pulse Color", "Pulse Loop", "Curve Start", "Curve End")]
     vals = [round(v, 5) if isinstance(v, float) else v for v in vals]
     fps = round(scene.render.fps / scene.render.fps_base, 4)  # keys are placed per frame
     return repr(vals + [os.path.normpath(bpy.path.abspath(s.sound.filepath, library=s.sound.library)) if s.sound else "", fps])
@@ -99,7 +100,7 @@ def _own_action(ob):
         ad.action_slot = slot
 
 
-def _write(ob, mod, frames, values, name="Baked Peak"):
+def _write(ob, mod, frames, values, name="Baked Peak", interpolation=None):
     sock = nodes._socket(mod, name)
     sock.value = float(values[0])
     sock.keyframe_insert("value", frame=float(frames[0]))
@@ -108,6 +109,9 @@ def _write(ob, mod, frames, values, name="Baked Peak"):
     co = np.empty(2 * len(frames), np.float32)
     co[0::2], co[1::2] = frames, values
     fc.keyframe_points.foreach_set("co", co)
+    if interpolation:
+        for point in fc.keyframe_points:
+            point.interpolation = interpolation
     fc.update()
 
 
@@ -193,19 +197,48 @@ def bake_all(scene, *, lights_only=False):
     # Key until every object's delayed, held tail has died, or extrapolation keeps it lit.
     tail = TAIL_S + max(nodes.get_input(m, "Delay") + 2 * nodes.get_input(m, "Decay")
                         + float(nodes.get_input(m, "Ripple")) * 1.0  # every position (taps too) is <= 1
-                        * nodes.get_input(m, "Beats per Sweep") * beat_max for m in mods)
+                        * nodes.get_input(m, "Beats per Sweep") * beat_max
+                        * (2.8 / max(nodes.get_input(m, "Pulse Speed"), .25)
+                           if nodes.get_input(m, "Pulse Style") else 1) for m in mods)
     end = s.start_frame + int(np.ceil((len(mono) / rate + tail) * fps))
     frames = np.arange(s.start_frame - 1, end + 1, dtype=np.float64)
     bands = sorted({_band_of(m) for m in mods})
     times, series = band_series(mono, rate, bands)
     beat = _beat_lengths(frames)
+    phase = ripples.phase_curve(frames, beat, fps, s.start_frame)
+    phase_times = (frames - s.start_frame) / fps
+    events = (ripples.detect(times, series[bands.index(nodes.KICK)], phase_times, phase)
+              if nodes.KICK in bands else [])
     for ob, m in zip(objs, mods):
         _own_action(ob)
         unkey(ob, m)
         amp = series[bands.index(_band_of(m))]
         decay = nodes.get_input(m, "Decay")
-        _write(ob, m, frames, held_peak(times, amp, _times(m, frames, fps, beat), decay))
-        if ob.type != "LIGHT" and nodes.get_input(m, "Through"):
+        use_pulses = bool(nodes.get_input(m, "Ripple") and nodes.get_input(m, "Pulse Style"))
+        nodes.set_input(m, "Pulse Ready", False)
+        if use_pulses:
+            source_times = phase_times - nodes.get_input(m, "Delay")
+            object_phase = np.interp(source_times, phase_times, phase)
+            raw = ripples.object_levels(events, source_times, object_phase,
+                nodes.get_input(m, "Ripple Position"), nodes.get_input(m, "Pulse Style"),
+                nodes.get_input(m, "Pulse Width"), nodes.get_input(m, "Pulse Dynamics"),
+                nodes.get_input(m, "Ripple Gain"), nodes.get_input(m, "Ripple Threshold"),
+                nodes.get_input(m, "Pulse Speed"), nodes.get_input(m, "Beats per Sweep"),
+                nodes.get_input(m, "Pulse Intensity"))
+            _write(ob, m, frames, raw, interpolation="LINEAR")
+            if ob.type != "LIGHT" and nodes.get_input(m, "Through"):
+                _write(ob, m, frames, object_phase, name="Pulse Phase", interpolation="LINEAR")
+                for slot in range(ripples.SLOTS):
+                    launches = events[slot::ripples.SLOTS]
+                    keyed_frames = np.array([frames[0]] + [s.start_frame + at*fps + nodes.get_input(m, "Delay")*fps
+                                                          for at, _, _ in launches])
+                    for field, index in (("Birth", 1), ("Amplitude", 2)):
+                        values = np.array([0.] + [event[index] for event in launches])
+                        _write(ob, m, keyed_frames, values, name=f"Pulse {field} {slot}", interpolation="CONSTANT")
+            nodes.set_input(m, "Pulse Ready", True)
+        else:
+            _write(ob, m, frames, held_peak(times, amp, _times(m, frames, fps, beat), decay))
+        if not use_pulses and ob.type != "LIGHT" and nodes.get_input(m, "Through"):
             tmin, tmax = nodes.get_input(m, "Tap Min"), nodes.get_input(m, "Tap Max")
             for k in range(nodes.TAPS):
                 pos = tmin + (tmax - tmin) * k / (nodes.TAPS - 1)
